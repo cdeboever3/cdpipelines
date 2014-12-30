@@ -316,35 +316,121 @@ def _process_fastqs(fastqs, temp_dir):
         temp_fastqs = os.path.join(temp_dir, os.path.split(fastqs)[1])
     return fastqs, temp_fastqs
 
-def ucsc_files():
-    #TODO: still need to work on this method
-    f.write('ln -s {} {}\n'.format(
-        os.path.join(alignment, 'Aligned.out.coord.sorted.bam'),
-        os.path.join(local_ucsc_bam_path, '{}.bam'.format(sample))))
-    f.write('ln -s {} {}\n'.format(
-        os.path.join(alignment, 'Aligned.out.coord.sorted.bam.bai'),
-        os.path.join(local_ucsc_bam_path, '{}.bam.bai'.format(sample))))
-    f.write('ln -s {} {}\n'.format(
-        os.path.join(alignment, 'plus.bw'),
-        os.path.join(local_ucsc_bigwig_path, '{}_plus.bw'.format(sample))))
-    f.write('ln -s {} {}\n'.format(
-        os.path.join(alignment, 'minus.bw'),
-        os.path.join(local_ucsc_bigwig_path, '{}_minus.bw'.format(sample))))
+def _make_softlink(fn, sample_name, link_dir):
+    """
+    Make softlink for file fn in link_dir. sample_name followed by an underscore
+    will be appended to the name of fn.
+
+    Parameters
+    ----------
+    fn : str
+        Full path to file to make link to.
+
+    sample_name : str
+        Sample name used for naming files.
+
+    link_dir : str
+        Path to directory where softlink should be made.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    name : str
+        File name for the softlink.
+
+    """
+    name = '{}_'.format(os.path.split(fn)[1])
+    lines = ('ln -s {} {}\n'.format(fn,
+                                    os.path.join(link_dir, fn)))
+    return lines, name
+
+
+def _genome_browser_files(tracklines_file, link_dir, web_path, coord_sorted_bam,
+                          bam_index, bigwig, sample_name, minus_bigwig=''):
+    """
+    Make files and softlinks for displaying results on UCSC genome browser.
+
+    Parameters
+    ----------
+    tracklines_file : str
+        Path to file for writing tracklines. These tracklines can be pasted into
+        the genome browser upload for custom data.
+
+    link_dir : str
+        Path to directory where softlink should be made.
+
+    web_path : str
+        URL that points to link_dir. For example, if we make a link to the file
+        s1_coord_sorted.bam in link_dir and web_path is http://site.com/files,
+        then http://site.com/files/s1_coord_sorted.bam should be available on
+        the web (although it should be password protected).
+
+    coord_sorted_bam : str
+        Path to coordinate sorted bam file.
+
+    bam_index : str
+        Path to index file for coordinate sorted bam file.
+
+    bigwig : str
+        Path to bigwig file. If bigwig_minus is provided, bigwig has the plus
+        strand coverage.
+
+    sample_name : str
+        Sample name used for naming files.
+
+    bigwig_minus : str
+        Path to bigwig file for minus strand. If bigwig_minus is not provided,
+        bigwig is assumed to have coverage for both plus and minus stand reads.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    # File with UCSC tracklines.
+    f = open(tracklines_files, 'w')
+    
+    # Bam file and index.
+    lines, bam_name = _make_softlink(coord_sorted_bam, sample_name, link_dir)
+    new_lines, index_name = _make_softlink(bam_index, sample_name, link_dir)
+    lines += new_lines
+    f,write(' '.join(['track', 'type=bam',
+                      'name="{}_bam"'.format(sample_name), 
+                      'description="RNAseq for {}"'.format(sample_name),
+                      'bigDataUrl={}/{}\n'.format(web_path, bam_name)]))
+    
+    # Bigwig file(s).
+    if bigwig_minus != '':
+        new_lines, plus_name = _make_softlink(bigwig, sample_name, link_dir)
+        lines += new_lines
+        new_lines, minus_name = _make_softlink(bigwig_minus, sample_name,
+                                               link_dir)
+        lines += new_lines
+        f.write(' '.join(['track', 
+                          'type=bigWig',
+                          'name="{}_plus_cov"'.format(sample_name),
+                          ('description="RNAseq plus strand coverage for '
+                           '{}"'.format(sample_name)),
+                          'bigDataUrl={}/{}\n'.format(web_path, plus_name)]))
+        f.write(' '.join(['track', 
+                          'type=bigWig', 
+                          'name="{}_minus_cov"'.format(sample_name),
+                          ('description="RNAseq minus strand coverage for '
+                           '{}"'.format(sample_name)),
+                          'bigDataUrl={}/{}\n'.format(web_path, minus_name)]))
+    else:
+        new_lines, bigwig_name = _make_softlink(bigwig, sample_name, link_dir)
+        lines += new_lines
+        f.write(' '.join(['track', 
+                          'type=bigWig',
+                          'name="{}_cov"'.format(sample_name),
+                          ('description="RNAseq coverage for '
+                           '{}"'.format(sample_name)),
+                          'bigDataUrl={}/{}\n'.format(web_path, bigwig_name)]))
     f.close()
-    # Write file with UCSC track lines
-    f = open(os.path.join(alignment, 'tracklines.txt'), 'w')
-    f.write(' '.join(['track', 'type=bigWig', 'name="{}_plus"'.format(sample),
-                      'description="Plus strand coverage for {}"'.format(sample),
-                      'bigDataUrl={}/{}_plus.bw\n'.format(web_ucsc_bigwig_path,
-                                                          sample)]))
-    f.write(' '.join(['track', 'type=bigWig', 'name="{}_minus"'.format(sample),
-                      'description="Minus strand coverage for {}"'.format(sample),
-                      'bigDataUrl={}/{}_minus.bw\n'.format(web_ucsc_bigwig_path,
-                                                           sample)]))
-    f.write(' '.join(['track', 'type=bam', 'name="{}_bam"'.format(sample),
-                      'description="Bam file for {}"'.format(sample),
-                      'bigDataUrl={}/{}.bam\n'.format(web_ucsc_bam_path,
-                                                      sample)]))
 
 def align_and_sort(
     r1_fastqs, 
