@@ -1,4 +1,4 @@
-pipelines
+Frazer Lab Pipelines
 =========
 
-Analysis pipelines.
+This repository holds various computational pipelines.
