@@ -347,8 +347,9 @@ def _make_softlink(fn, sample_name, link_dir):
     return lines, name
 
 
-def _genome_browser_files(tracklines_file, link_dir, web_path, coord_sorted_bam,
-                          bam_index, bigwig, sample_name, minus_bigwig=''):
+def _genome_browser_files(tracklines_file, link_dir, web_path_file,
+                          coord_sorted_bam, bam_index, bigwig, sample_name,
+                          bigwig_minus=''):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -361,11 +362,17 @@ def _genome_browser_files(tracklines_file, link_dir, web_path, coord_sorted_bam,
     link_dir : str
         Path to directory where softlink should be made.
 
-    web_path : str
-        URL that points to link_dir. For example, if we make a link to the file
-        s1_coord_sorted.bam in link_dir and web_path is http://site.com/files,
-        then http://site.com/files/s1_coord_sorted.bam should be available on
-        the web (although it should be password protected).
+    web_path_file : str
+        File whose first line is the URL that points to link_dir. For example,
+        if we make a link to the file s1_coord_sorted.bam in link_dir and
+        web_path_file has http://site.com/files on its first line, then
+        http://site.com/files/s1_coord_sorted.bam should be available on the
+        web. If the web directory is password protected (it probably should be),
+        then the URL should look like http://username:password@site.com/files.
+        This is a file so you don't have to make the username/password combo
+        public (although I'd recommend not using a sensitive password). You can
+        just put the web_path_file in a directory that isn't tracked by git, 
+        figshare, etc.
 
     coord_sorted_bam : str
         Path to coordinate sorted bam file.
@@ -390,14 +397,17 @@ def _genome_browser_files(tracklines_file, link_dir, web_path, coord_sorted_bam,
         Lines to be printed to shell/PBS script.
 
     """
+    with open(web_path_file) as wpf:
+        web_path = wpf.readline().strip()
+
     # File with UCSC tracklines.
-    f = open(tracklines_files, 'w')
+    f = open(tracklines_file, 'w')
     
     # Bam file and index.
     lines, bam_name = _make_softlink(coord_sorted_bam, sample_name, link_dir)
     new_lines, index_name = _make_softlink(bam_index, sample_name, link_dir)
     lines += new_lines
-    f,write(' '.join(['track', 'type=bam',
+    f.write(' '.join(['track', 'type=bam',
                       'name="{}_bam"'.format(sample_name), 
                       'description="RNAseq for {}"'.format(sample_name),
                       'bigDataUrl={}/{}\n'.format(web_path, bam_name)]))

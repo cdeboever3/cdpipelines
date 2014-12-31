@@ -137,6 +137,38 @@ class TestBigwigFiles:
                                          bedgraph_to_bigwig_path, bedtools_path,
                                          out_bigwig_minus=out_bigwig_minus)
 
+class TestGenomeBrowserFiles:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        tracklines_file = 'tracklines.txt'
+        link_dir = '.'
+        web_path_file = 'web_path_file.txt'
+        coord_sorted_bam = 'test.bam'
+        bam_index = 'test.bam.bai'
+        bigwig = 'test.bw'
+        sample_name = 's1'
+        lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
+                                                web_path_file, coord_sorted_bam,
+                                                bam_index, bigwig, sample_name,
+                                                bigwig_minus='')
+        os.remove(tracklines_file)
+
+    def test_run(self):
+        """Test to make sure the function at least runs for standed input"""
+        tracklines_file = 'tracklines.txt'
+        link_dir = '.'
+        web_path_file = 'web_path_file.txt'
+        coord_sorted_bam = 'test.bam'
+        bam_index = 'test.bam.bai'
+        bigwig = 'plus.bw'
+        sample_name = 's1'
+        bigwig_minus = 'minus.bw'
+        lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
+                                                web_path_file, coord_sorted_bam,
+                                                bam_index, bigwig, sample_name,
+                                                bigwig_minus=bigwig_minus)
+        os.remove(tracklines_file)
+
 class TestAlignAndSort:
     def test_run(self):
         """Test to make sure the function at least runs"""
@@ -148,7 +180,7 @@ class TestAlignAndSort:
         remove_dup=True, 
         strand_specific_cov=False, 
         shell=False
-        lines = ps.rnaseq.align_and_sort(
+        fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -158,7 +190,7 @@ class TestAlignAndSort:
             strand_specific_cov=False, 
             shell=False
         )
-        os.remove('s1_alignment.pbs')
+        os.remove(fn)
     
     def test_run_no_remove_dup(self):
         """Test to make sure the function at least runs"""
@@ -168,7 +200,7 @@ class TestAlignAndSort:
         sample_name = 's1'
         star_index = 'path/to/index'
         remove_dup = False,
-        lines = ps.rnaseq.align_and_sort(
+        fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -176,7 +208,7 @@ class TestAlignAndSort:
             star_index,
             remove_dup=remove_dup
         )
-        os.remove('s1_alignment.pbs')
+        os.remove(fn)
     
     def test_run_no_strand_specific_cov(self):
         """Test to make sure the function at least runs"""
@@ -186,7 +218,7 @@ class TestAlignAndSort:
         sample_name = 's1'
         star_index = 'path/to/index'
         strand_specific_cov = True,
-        lines = ps.rnaseq.align_and_sort(
+        fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -194,7 +226,7 @@ class TestAlignAndSort:
             star_index,
             strand_specific_cov=strand_specific_cov
         )
-        os.remove('s1_alignment.pbs')
+        os.remove(fn)
     
     def test_run_shell(self):
         """Test to make sure the function at least runs"""
@@ -204,7 +236,7 @@ class TestAlignAndSort:
         sample_name = 's1'
         star_index = 'path/to/index'
         shell = True 
-        lines = ps.rnaseq.align_and_sort(
+        fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -212,4 +244,4 @@ class TestAlignAndSort:
             star_index,
             shell=True
         )
-        os.remove('s1_alignment.pbs')
+        os.remove(fn)
