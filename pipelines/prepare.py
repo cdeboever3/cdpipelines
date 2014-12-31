@@ -120,9 +120,9 @@ def download_star(out_dir):
         Directory to save STAR to.
 
     """
-    req = urlopen('http://it-collab01.cshl.edu/shares/gingeraslab/www-data/'
-                  'dobin/STAR/STARreleases/Patches/STAR_2.3.1z15.tgz')
-    dest = os.path.join(out_dir, 'STAR_2.3.1z15.tgz')
+    req = urlopen('https://github.com/alexdobin/STAR/archive/'
+                  'STAR_2.4.0h.tar.gz')
+    dest = os.path.join(out_dir, 'STAR_2.4.0h.tar.gz')
     _download_and_untar(req, dest, out_dir)
 
 def make_star_index(out_dir, threads, genome, gtf, star_path='STARstatic'):
