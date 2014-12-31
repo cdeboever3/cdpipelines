@@ -10,35 +10,14 @@ import shutil
 import subprocess
 from urllib2 import urlopen
 
-def _download_and_unzip(req, dest, out_dir):
-    """
-    Download a zipped file/directory req into out_dir and decompress it in
-    out_dir.
-
-    Parameters
-    ----------
-    req : str
-        Zipped file.
-
-    dest : str
-        Full path to save zipped file to.
-
-    out_dir : str
-        Directory to save zipped file to and decompress to.
-
-    """
-    with open(dest, 'w') as d:
-        shutil.copyfileobj(req, d)
-    subprocess.check_call('tar -xf {} -C {}'.format(dest, out_dir), shell=True)
-
-def _download_and_untar(req, dest, out_dir):
+def _download_and_untar(url, dest, out_dir):
     """
     Download a tarball req into out_dir and decompress it in out_dir.
 
     Parameters
     ----------
-    req : str
-        Tarball to download.
+    url : str
+        URL to tarball to download.
 
     dest : str
         Full path to save tarball to.
@@ -47,6 +26,7 @@ def _download_and_untar(req, dest, out_dir):
         Directory to save tarball to and decompress to.
 
     """
+    req = urlopen(url)
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call('tar -xf {} -C {}'.format(dest, out_dir), shell=True)
@@ -61,12 +41,11 @@ def download_samtools(out_dir):
         Directory to save Samtools to.
 
     """
-    req = urlopen('http://sourceforge.net/projects/samtools/'
-                  'files/samtools/1.0/'
-                  'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2/download')
+    url = ('http://sourceforge.net/projects/samtools/files/samtools/1.0/'
+           'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2/download')
     dest = os.path.join(out_dir,
                         'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2')
-    _download_and_untar(req, dest, out_dir)
+    _download_and_untar(url, dest, out_dir)
     
 def download_hg19(out_dir, samtools_path):
     """
@@ -110,6 +89,24 @@ def download_hg19(out_dir, samtools_path):
         os.path.join(out_dir, 'hg19.fa')),
                           shell=True)
 
+def download_htsjdk(out_dir):
+    """
+    Download STAR aligner.
+
+    Parameters
+    ----------
+    out_dir : str
+        Directory to save STAR to.
+
+    """
+    url = 'https://github.com/samtools/htsjdk/tarball/master'
+    dest = os.path.join(out_dir, 'samtools-htsjdk-1.127-10-g18192d8.tar.gz')
+    _download_and_untar(url, dest, out_dir)
+    cwd = os.getcwd()
+    os.chdir(os.path.join(out_dir, 'samtools-htsjdk-18192d8'))
+    subprocess.check_call(['ant', 'htsjdk-jar'])
+    os.chdir(cwd)
+
 def download_star(out_dir):
     """
     Download STAR aligner.
@@ -120,10 +117,9 @@ def download_star(out_dir):
         Directory to save STAR to.
 
     """
-    req = urlopen('https://github.com/alexdobin/STAR/archive/'
-                  'STAR_2.4.0h.tar.gz')
+    url = 'https://github.com/alexdobin/STAR/archive/STAR_2.4.0h.tar.gz'
     dest = os.path.join(out_dir, 'STAR_2.4.0h.tar.gz')
-    _download_and_untar(req, dest, out_dir)
+    _download_and_untar(url, dest, out_dir)
 
 def make_star_index(out_dir, threads, genome, gtf, star_path='STARstatic'):
     """
@@ -170,12 +166,15 @@ def download_picard(out_dir):
         Directory to save Picard tools to.
 
     """
-    req = urlopen('http://sourceforge.net/projects/picard/files/picard-tools/'
-                  '1.118/picard-tools-1.118.zip/download')
-    dest = os.path.join(out_dir, 'picard-tools-1.118.zip')
-    with open(dest, 'w') as d:
-        shutil.copyfileobj(req, d)
-    subprocess.check_call(['unzip', '-d', out_dir, dest])
+    url = 'https://github.com/broadinstitute/picard/tarball/master'
+    dest = os.path.join(out_dir,
+                        'broadinstitute-picard-1.127-9-g6fd825a.tar.gz')
+    _download_and_untar(url, dest, out_dir)
+    cwd = os.getcwd()
+    os.chdir(os.path.join(out_dir, 'broadinstitute-picard-6fd825a'))
+    subprocess.check_call('ant -lib lib/ant clone-htsjdk package-commands',
+                          shell=True)
+    os.chdir(cwd)
 
 def download_bedtools(out_dir): 
     """
@@ -187,10 +186,10 @@ def download_bedtools(out_dir):
         Directory to save Bedtools to.
 
     """
-    req = urlopen('https://github.com/arq5x/bedtools2/releases/'
-                  'download/v2.20.1/bedtools-2.20.1.tar.gz')
+    url = ('https://github.com/arq5x/bedtools2/releases/'
+           'download/v2.20.1/bedtools-2.20.1.tar.gz')
     dest = os.path.join(out_dir, 'bedtools-2.20.1.tar.gz')
-    _download_and_untar(req, dest, out_dir)
+    _download_and_untar(url, dest, out_dir)
     cwd = os.getcwd()
     os.chdir(os.path.join(out_dir, 'bedtools2-2.20.1'))
     subprocess.check_call('make')
@@ -207,9 +206,9 @@ def download_r(out_dir):
 
     """
     rbase = 'R-3.1.1'
-    req = urlopen('http://cran.stat.ucla.edu/src/base/R-3/R-3.1.1.tar.gz')
+    url = 'http://cran.stat.ucla.edu/src/base/R-3/R-3.1.1.tar.gz'
     dest = os.path.join(out_dir, '{}.tar.gz'.format(rbase))
-    _download_and_untar(req, dest, out_dir)
+    _download_and_untar(url, dest, out_dir)
     cwd = os.getcwd()
     os.chdir(out_dir)
     shutil.move(rbase, '{}-source'.format(rbase))
