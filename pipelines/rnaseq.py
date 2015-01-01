@@ -406,10 +406,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     # File with UCSC tracklines.
     if os.path.exists(tracklines_file):
         with open(tracklines_file) as f:
-            lines = f.read()
+            tf_lines = f.read()
     else:
-        lines = ''
-    tf = open(tracklines_file, 'w')
+        tf_lines = ''
     
     # Bam file and index.
     new_lines, bam_name = _make_softlink(coord_sorted_bam, sample_name,
@@ -417,9 +416,10 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += new_lines
     new_lines, index_name = _make_softlink(bam_index, sample_name, link_dir)
     lines += new_lines
-    tf.write(' '.join(['track', 'type=bam', 'name="{}_bam"'.format(sample_name),
-                       'description="RNAseq for {}"'.format(sample_name),
-                       'bigDataUrl={}/{}\n'.format(web_path, bam_name)]))
+    tf_lines += ' '.join(['track', 'type=bam',
+                          'name="{}_bam"'.format(sample_name),
+                          'description="RNAseq for {}"'.format(sample_name),
+                          'bigDataUrl={}/{}\n'.format(web_path, bam_name)])
     
     # Bigwig file(s).
     if bigwig_minus != '':
@@ -428,25 +428,31 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         new_lines, minus_name = _make_softlink(bigwig_minus, sample_name,
                                                link_dir)
         lines += new_lines
-        tf.write(' '.join(['track', 'type=bigWig',
-                           'name="{}_plus_cov"'.format(sample_name),
-                           ('description="RNAseq plus strand coverage for '
-                            '{}"'.format(sample_name)),
-                           'bigDataUrl={}/{}\n'.format(web_path, plus_name)]))
-        tf.write(' '.join(['track', 'type=bigWig',
-                           'name="{}_minus_cov"'.format(sample_name),
-                           ('description="RNAseq minus strand coverage for '
-                            '{}"'.format(sample_name)),
-                           'bigDataUrl={}/{}\n'.format(web_path, minus_name)]))
+        tf_lines += ' '.join(['track', 'type=bigWig',
+                              'name="{}_plus_cov"'.format(sample_name),
+                              ('description="RNAseq plus strand coverage for '
+                               '{}"'.format(sample_name)),
+                              'bigDataUrl={}/{}\n'.format(web_path,
+                                                          plus_name)])
+        tf_lines += ' '.join(['track', 'type=bigWig',
+                              'name="{}_minus_cov"'.format(sample_name),
+                              ('description="RNAseq minus strand coverage for '
+                               '{}"'.format(sample_name)),
+                              'bigDataUrl={}/{}\n'.format(web_path,
+                                                          minus_name)])
     else:
         new_lines, bigwig_name = _make_softlink(bigwig, sample_name, link_dir)
         lines += new_lines
-        tf.write(' '.join(['track', 'type=bigWig',
-                           'name="{}_cov"'.format(sample_name),
-                           ('description="RNAseq coverage for '
-                            '{}"'.format(sample_name)),
-                           'bigDataUrl={}/{}\n'.format(web_path, bigwig_name)]))
-    tf.close()
+        tf_lines += ' '.join(['track', 'type=bigWig',
+                              'name="{}_cov"'.format(sample_name),
+                              ('description="RNAseq coverage for '
+                               '{}"'.format(sample_name)),
+                              'bigDataUrl={}/{}\n'.format(web_path,
+                                                          bigwig_name)])
+    
+    with open(tracklines_file, 'w') as tf:
+        tf.write(tf_lines)
+    
     lines += '\n'
     return lines
 
@@ -673,7 +679,7 @@ def align_and_sort(
     f.write('rm \n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if temp_dir != out_dir:
-        f.write('rm -r \\{}\n'.format(temp_dir))
+        f.write('rm -r {}\n'.format(temp_dir))
     f.close()
 
     return fn
