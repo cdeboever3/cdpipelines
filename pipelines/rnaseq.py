@@ -343,7 +343,10 @@ def _make_softlink(fn, sample_name, link_dir):
         File name for the softlink.
 
     """
-    name = '{}_'.format(os.path.split(fn)[1])
+    if sample_name not in os.path.split(fn)[1]:
+        name = '{}_{}'.format(sample_name, os.path.split(fn)[1])
+    else:
+        name = os.path.split(fn)[1]
     lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name))
     return lines, name
 
