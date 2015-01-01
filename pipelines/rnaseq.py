@@ -182,8 +182,8 @@ def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
 def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                         bedtools_path):
     bedtools_genome_path = os.path.join(
-        os.path.split(os.path.split(bedtools_path)[0])[0],
-        '/genomes/human.hg19.genome')
+        os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+        'human.hg19.genome')
     lines =  ' '.join(['{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
                        '{}'.format(bedtools_genome_path),
                        '{} &\n'.format(bigwig)])
@@ -263,16 +263,18 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
         Lines to be printed to shell/PBS script.
 
     """
+    lines = ''
     if out_bigwig_minus != '':
-        lines = _coverage_bedgraph(in_bam, 'plus.bg', bedtools_path,
-                                   sample_name, strand='+')
-        lines = _coverage_bedgraph(in_bam, 'minus.bg', bedtools_path,
-                                   sample_name, strand='-')
+        lines += _coverage_bedgraph(in_bam, 'plus.bg', bedtools_path,
+                                    sample_name, strand='+')
+        lines += _coverage_bedgraph(in_bam, 'minus.bg', bedtools_path,
+                                    sample_name, strand='-')
         lines += ('wait\n\n')
         lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig,
                                       bedgraph_to_bigwig_path, bedtools_path))
         lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus,
                                       bedgraph_to_bigwig_path, bedtools_path))
+        lines += ('wait\n\n')
         lines += ('rm plus.bg minus.bg\n\n')
     
     else:
@@ -567,8 +569,8 @@ def align_and_sort(
     else: 
         pbs = True
 
-    temp_dir = os.path.join(temp_dir, '{}_align'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_align'.format(sample_name))
+    temp_dir = os.path.join(temp_dir, '{}_alignment'.format(sample_name))
+    out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
 
     # I'm going to define some file names used later.
     r1_fastqs, temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
