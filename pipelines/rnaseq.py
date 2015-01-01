@@ -75,7 +75,7 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
     lines.append('awk \'{printf "@%s\\n%s\\n+\\n%s\\n",$1,$5,$2 | '
                  '"gzip -c > ' + r1_nodup + 
                  '"; printf "@%s\\n%s\\n+\\n%s\\n",$3,$6,$4 | "gzip -c > ' + 
-                  r2_nodup + '"}\'\n')
+                  r2_nodup + '"}\'\n\n')
     return ''.join(lines)
 
 def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
@@ -150,7 +150,7 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory, temp_dir):
                           '\tVALIDATION_STRINGENCY=SILENT',
                           '\tI={}'.format(in_bam),
                           '\tO={}'.format(out_bam),
-                          '\tSO=coordinate\n']))
+                          '\tSO=coordinate\n\n']))
     return line
 
 def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
@@ -449,6 +449,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                            '{}"'.format(sample_name)),
                           'bigDataUrl={}/{}\n'.format(web_path, bigwig_name)]))
     f.close()
+    lines += '\n'
     return lines
 
 def align_and_sort(
@@ -566,6 +567,9 @@ def align_and_sort(
     else: 
         pbs = True
 
+    temp_dir = os.path.join(temp_dir, '{}_align'.format(sample_name))
+    out_dir = os.path.join(out_dir, '{}_align'.format(sample_name))
+
     # I'm going to define some file names used later.
     r1_fastqs, temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
     r2_fastqs, temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
@@ -665,7 +669,7 @@ def align_and_sort(
     f.write('wait\n\n')
 
     if temp_dir != out_dir:
-        f.write('rm -r {}\n\n'.format(temp_dir))
+        f.write('rm -r {}\n'.format(temp_dir))
     f.close()
 
     return fn
