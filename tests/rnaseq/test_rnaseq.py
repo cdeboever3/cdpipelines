@@ -56,11 +56,13 @@ class TestPicardCoordSort:
         """Test to make sure the function at least runs"""
         in_bam = 'test.bam'
         out_bam = 'test.sorted.bam'
+        bam_index = 'test.sorted.bam.bai'
         picard_path = 'picard'
         picard_memory = '58G'
         temp_dir = 'temp_dir'
-        lines = ps.rnaseq._picard_coord_sort(in_bam, out_bam, picard_path,
-                                              picard_memory, temp_dir)
+        lines = ps.rnaseq._picard_coord_sort(in_bam, out_bam, bam_index,
+                                             picard_path, picard_memory,
+                                             temp_dir)
 
 class TestPicardIndex:
     def test_run(self):
@@ -147,10 +149,11 @@ class TestGenomeBrowserFiles:
         bam_index = 'test.bam.bai'
         bigwig = 'test.bw'
         sample_name = 's1'
+        out_dir = '.'
         lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
                                                 web_path_file, coord_sorted_bam,
                                                 bam_index, bigwig, sample_name,
-                                                bigwig_minus='')
+                                                out_dir, bigwig_minus='')
         os.remove(tracklines_file)
 
     def test_run(self):
@@ -163,10 +166,13 @@ class TestGenomeBrowserFiles:
         bigwig = 'plus.bw'
         sample_name = 's1'
         bigwig_minus = 'minus.bw'
+        out_dir = '.'
         lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
                                                 web_path_file, coord_sorted_bam,
                                                 bam_index, bigwig, sample_name,
+                                                out_dir,
                                                 bigwig_minus=bigwig_minus)
+        out_dir = '.'
         os.remove(tracklines_file)
 
 class TestAlignAndSort:

@@ -160,7 +160,7 @@ def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
     index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
     lines += 'mv {} {}\n\n'.format(index, bam_index)
 
-    return line
+    return lines
 
 def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
     """
