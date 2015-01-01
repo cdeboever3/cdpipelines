@@ -344,8 +344,7 @@ def _make_softlink(fn, sample_name, link_dir):
 
     """
     name = '{}_'.format(os.path.split(fn)[1])
-    lines = ('ln -s {} {}\n'.format(fn,
-                                    os.path.join(link_dir, fn)))
+    lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name)))
     return lines, name
 
 
@@ -413,11 +412,14 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         tf_lines = ''
     
     # Bam file and index.
-    new_lines, bam_name = _make_softlink(coord_sorted_bam, sample_name,
-                                         link_dir)
+    fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
+    new_lines, bam_name = _make_softlink(fn, sample_name, link_dir)
     lines += new_lines
-    new_lines, index_name = _make_softlink(bam_index, sample_name, link_dir)
+
+    fn = os.path.join(out_dir, os.path.split(bam_index)[1])
+    new_lines, index_name = _make_softlink(fn, sample_name, link_dir)
     lines += new_lines
+
     tf_lines += ' '.join(['track', 'type=bam',
                           'name="{}_bam"'.format(sample_name),
                           'description="RNAseq for {}"'.format(sample_name),
@@ -425,11 +427,14 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     
     # Bigwig file(s).
     if bigwig_minus != '':
-        new_lines, plus_name = _make_softlink(bigwig, sample_name, link_dir)
+        fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+        new_lines, plus_name = _make_softlink(fn, sample_name, link_dir)
         lines += new_lines
-        new_lines, minus_name = _make_softlink(bigwig_minus, sample_name,
-                                               link_dir)
+        
+        fn = os.path.join(out_dir, os.path.split(bigwig_minus)[1])
+        new_lines, minus_name = _make_softlink(fn, sample_name, link_dir)
         lines += new_lines
+
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_plus_cov"'.format(sample_name),
                               ('description="RNAseq plus strand coverage for '
@@ -443,8 +448,10 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                               'bigDataUrl={}/{}\n'.format(web_path,
                                                           minus_name)])
     else:
-        new_lines, bigwig_name = _make_softlink(bigwig, sample_name, link_dir)
+        fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+        new_lines, bigwig_name = _make_softlink(fn, sample_name, link_dir)
         lines += new_lines
+
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_cov"'.format(sample_name),
                               ('description="RNAseq coverage for '
