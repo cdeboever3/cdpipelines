@@ -350,7 +350,7 @@ def _make_softlink(fn, sample_name, link_dir):
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, sample_name,
-                          bigwig_minus=''):
+                          out_dir, bigwig_minus=''):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -673,11 +673,11 @@ def align_and_sort(
     if strand_specific:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       coord_sorted_bam, bam_index,
-                                      out_bigwig_plus, sample_name,
+                                      out_bigwig_plus, sample_name, out_dir,
                                       bigwig_minus=out_bigwig_minus)
     else:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      coord_sorted_bam, bam_index,
+                                      coord_sorted_bam, bam_index, out_dir,
                                       out_bigwig, sample_name)
     f.write(lines)
     f.write('wait\n\n')
