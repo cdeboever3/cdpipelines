@@ -344,7 +344,7 @@ def _make_softlink(fn, sample_name, link_dir):
 
     """
     name = '{}_'.format(os.path.split(fn)[1])
-    lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name)))
+    lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name))
     return lines, name
 
 
