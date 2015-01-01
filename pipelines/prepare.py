@@ -293,7 +293,7 @@ def download_r(out_dir):
 # 
 # get_ipython().run_cell_magic(u'R', u'', u'\nsource("http://bioconductor.org/biocLite.R")\nbiocLite(ask=FALSE)\nbiocLite("DEXSeq", ask=FALSE)\nbiocLite("Gviz", ask=FALSE)\nbiocLite("BiocParallel", ask=FALSE)')
 
-def download_install_rpy2(r_path):
+def download_install_rpy2(r_path, out_dir):
     """
     Download and install rpy2. R must be installed and the LDFLAGS and
     LD_LIBRARY_PATH must be set. If they are not set, you can run the method to
