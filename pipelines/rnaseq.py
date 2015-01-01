@@ -595,6 +595,7 @@ def align_and_sort(
         files_to_copy.append(out_bigwig_minus)
     else:
         out_bigwig = os.path.join(temp_dir, '{}.bw'.format(sample_name))
+        files_to_copy.append(out_bigwig)
 
     try:
         os.makedirs(out_dir)
@@ -667,7 +668,7 @@ def align_and_sort(
     f.write('wait\n\n')
 
     f.write('rsync -avz {} {}'.format(' '.join(files_to_copy), out_dir))
-    f.write('rm {}'.format(' '.join(files_to_delete)))
+    f.write('rm {}'.format(' '.join(files_to_remove)))
 
     if temp_dir != out_dir:
         f.write('rm -r {}\n'.format(temp_dir))
