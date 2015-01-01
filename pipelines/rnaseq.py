@@ -59,20 +59,20 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
     """
     lines = []
     lines.append('paste \\\n')
-    lines.append('<(zcat {} | '.format(r1_fastqs) + 
-                 'awk \'0==(NR+3)%4{ORS=" "; split($0,a," "); ' + 
+    lines.append('\t<(zcat {} | \\\n'.format(r1_fastqs) + 
+                 '\t\tawk \'0==(NR+3)%4{ORS=" "; split($0,a," "); ' + 
                  'print substr(a[1],2)}0==(NR+2)%4{print} (NR!=1 && 0==NR%4)' + 
                  '{ORS="\\n";print}\') \\\n')
-    lines.append('<(zcat *_R2_* | '.format(r2_fastqs) + 
-                 'awk \'0==(NR+3)%4{ORS=" "; split($0,a," "); ' + 
+    lines.append('\t<(zcat {} | \\\n'.format(r2_fastqs) + 
+                 '\t\tawk \'0==(NR+3)%4{ORS=" "; split($0,a," "); ' + 
                  'print substr(a[1],2)}0==(NR+2)%4{print} (NR!=1 && 0==NR%4)' + 
                  '{ORS="\\n";print}\') | \\\n')
-    lines.append('awk \'{if ($2 < $5) printf "%s %s %s %s %s %s\\n",'
+    lines.append('\tawk \'{if ($2 < $5) printf "%s %s %s %s %s %s\\n",'
                  '$1,$3,$4,$6,$2,$5; else printf "%s %s %s %s %s %s\\n",'
                  '$1,$6,$4,$3,$5,$2}\' | \\\n')
-    lines.append('sort -k 5,5 -k 6,6 -T {0} -S 30G --parallel=8 | '
+    lines.append('\tsort -k 5,5 -k 6,6 -T {0} -S 30G --parallel=8 | '
                  'uniq -f 4 | \\\n'.format(temp_dir))
-    lines.append('awk \'{printf "@%s\\n%s\\n+\\n%s\\n",$1,$5,$2 | '
+    lines.append('\tawk \'{printf "@%s\\n%s\\n+\\n%s\\n",$1,$5,$2 | '
                  '"gzip -c > ' + r1_nodup + 
                  '"; printf "@%s\\n%s\\n+\\n%s\\n",$3,$6,$4 | "gzip -c > ' + 
                   r2_nodup + '"}\'\n\n')
