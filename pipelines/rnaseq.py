@@ -149,11 +149,13 @@ def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
     """
     lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(temp_dir), '\t-jar {}
-                           SortSam'.format(picard_path),
+                           '\t-Djava.io.tmpdir={}'.format(temp_dir), 
+                           '\t-jar {} SortSam'.format(picard_path),
                            '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tCREATE_INDEX=TRUE', '\tCREATE_MD5_FILE=TRUE',
-                           '\tI={}'.format(in_bam), '\tO={}'.format(out_bam),
+                           '\tCREATE_INDEX=TRUE', 
+                           '\tCREATE_MD5_FILE=TRUE',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out_bam),
                            '\tSO=coordinate\n']))
     index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
     lines += 'mv {} {}\n\n'.format(index, bam_index)
