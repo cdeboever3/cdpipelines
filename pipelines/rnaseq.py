@@ -706,15 +706,114 @@ def align_and_sort(
 
     return fn
 
-def _dexseq_count(bam, sample_name, samtools_path='.'):
-    subprocess.check_call(
+def _dexseq_count(bam, counts_file, dexseq_annotation, sample_name, paired=True,
+                  stranded=False, samtools_path='.'):
+    """
+    Count reads overlapping exonic bins for DEXSeq.
+
+    Parameters
+    ----------
+    bam : str
+        Path to coordinate sorted bam file to count reads for.
+
+    counts_file : str
+        File to write bin counts to.
+
+    dexseq_annotation : str
+        Path to DEXSeq exonic bins GFF file.
+
+    sample_name : str
+        Sample name used for naming files.
+
+    paired : boolean
+        True if the data is paired-end. False otherwise.
+
+    stranded : boolean
+        True if the data is strand-specific. False otherwise.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    name : str
+        File name for the softlink.
+
+    """
+    import readline
+    import rpy2.robjects as robjects
+    robjects.r('library(DEXSeq)')
+    scripts = robjects.r('system.file("python_scripts", package="DEXSeq")')
+    g = scripts.items()
+    scripts_path = g.next()[1]
+    script = os.path.join(scripts_path, 'dexseq_count.py')
+    if paired:
+        p = 'yes'
+    else:
+        p = 'no'
+    if stranded:
+        s = 'yes'
+    else:
+        s = 'no'
+    lines = (
         '{} view -h -f 2 {} | '.format(samtools_path, bam) +
-        'cut -f1-17,20- | ' + 
-        'python {} '.format(dexseq_count) + 
-        '-p yes -s no -a 0 -r pos -f sam ' + 
-        '{} - '.format(ppy.gencode_dexseq) + 
-        '{}_exon_counts.tsv '.format(os.path.join(out_dir,
-                                                  sample_name)) + 
-        '2> {}_exon_counts.err'.format(os.path.join(out_dir,
-                                                    sample_name)),
-                          shell=True)
+        'cut -f1-17,20- | python {} '.format(script) + 
+        '-p {} -s {} -a 0 -r pos -f sam '.format(p, s) + 
+        '{} - {} &'.format(dexseq_annotation, counts_file)
+    )
+    return lines
+
+def _htseq_count(bam, counts_file, stats_file, gtf, sample_name, stranded=False,
+                 samtools_path='.'):
+    """
+    Count reads overlapping genes for use with DESeq etc.
+
+    Parameters
+    ----------
+    bam : str
+        Path to coordinate sorted bam file to count reads for.
+
+    counts_file : str
+        File to write counts to.
+
+    stats_file : str
+        File to write counting stats to.
+
+    gtf : str
+        Path to GTF file to count against. Optimized for use with Gencode GTF.
+
+    sample_name : str
+        Sample name used for naming files.
+
+    stranded : boolean
+        True if the data is strand-specific. False otherwise.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    name : str
+        File name for the softlink.
+
+    """
+    import HTSeq
+    if paired:
+        p = 'yes'
+    else:
+        p = 'no'
+    if stranded:
+        s = 'yes'
+    else:
+        s = 'no'
+    script = os.path.join(HTSeq.__path__, 'scripts', 'count.py')
+    lines = ('python {} -f bam -r pos -s {} '.format(script, stranded) + 
+             '-a 0 -t exon -i gene_id -m union -q ' + 
+             '{} {} > temp_counts.tsv\n'.format(bam, gtf))
+    lines += 'tail -n 5 TJK0253_temp_out.tsv > {}\n'.format(stats_file)
+    lines += 'lines=$(wc -l <temp_out.tsv)\n'
+    lines += 'wanted=`expr $lines - 5`\n'
+    lines += 'head -n $wanted temp_out.tsv > {}\n'.format(counts_file)
+    lines += 'rm temp_out.tsv\n\n'
+
+    return lines
