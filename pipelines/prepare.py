@@ -368,3 +368,19 @@ def download_bedGraphToBigWig(out_dir):
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
+
+def install_bioconductor_dependencies():
+    """
+    Installs bioconductor and some bioconductor packages into R using rpy2.
+    Packages installed are currently DESeq2 and DEXSeq.
+
+    """
+    try:
+        import rpy2.robjects as robjects
+    except ImportError:
+        sys.stderr.write('rpy2 not installed.\n')
+        sys.exit(1)
+    robjects.r('source("http://bioconductor.org/biocLite.R")')
+    robjects.r('biocLite(ask=FALSE)')
+    robjects.r('biocLite("DESeq2")')
+    robjects.r('biocLite("DEXSeq", ask=FALSE)')
