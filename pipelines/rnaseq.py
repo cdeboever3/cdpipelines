@@ -668,8 +668,8 @@ def align_and_sort(
     # Index coordinate sorted bam file.
     # lines = _picard_index(coord_sorted_bam, bam_index, picard_memory,
     #                       picard_path, temp_dir)
-    f.write(lines)
-    f.write('wait\n\n')
+    # f.write(lines)
+    # f.write('wait\n\n')
 
     # Make bigwig files for displaying coverage.
     if strand_specific:
