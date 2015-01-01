@@ -130,7 +130,8 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                           '\t--quantMode TranscriptomeSAM']) + '\n\n') 
     return line
 
-def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory, temp_dir):
+def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
+                       temp_dir):
     """
     Coordinate sort using Picard Tools.
 
@@ -142,15 +143,23 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory, temp_dir):
     out_bam : str
         Path to output bam file.
 
+    bam_index : str
+        Path to index file for input bam file.
+
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
                           '\t-Djava.io.tmpdir={}'.format(temp_dir),
                           '\t-jar {} SortSam'.format(picard_path),
                           '\tVALIDATION_STRINGENCY=SILENT',
+                          '\tCREATE_INDEX=TRUE',
+                          '\tCREATE_MD5_FILE=TRUE',
                           '\tI={}'.format(in_bam),
                           '\tO={}'.format(out_bam),
-                          '\tSO=coordinate\n\n']))
+                          '\tSO=coordinate\n']))
+    index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
+    line += 'mv {} {}'.format(index, bam_index)
+
     return line
 
 def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
@@ -598,7 +607,8 @@ def align_and_sort(
     # Files to copy to output directory.
     files_to_copy = [coord_sorted_bam, bam_index, 'Log.out', 'Log.final.out',
                      'Log.progress.out', 'SJ.out.tab',
-                     'Aligned.toTranscriptome.out.bam']
+                     'Aligned.toTranscriptome.out.bam',
+                     'Aligned.out.coord.sorted.bam.md5']
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -651,13 +661,13 @@ def align_and_sort(
         f.write('wait\n\n')
 
     # Coordinate sort bam file.
-    lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                               picard_memory, temp_dir)
+    lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, bam_index,
+                               picard_path, picard_memory, temp_dir)
     f.write(lines)
     f.write('wait\n\n')
     # Index coordinate sorted bam file.
-    lines = _picard_index(coord_sorted_bam, bam_index, picard_memory,
-                          picard_path, temp_dir)
+    # lines = _picard_index(coord_sorted_bam, bam_index, picard_memory,
+    #                       picard_path, temp_dir)
     f.write(lines)
     f.write('wait\n\n')
 
