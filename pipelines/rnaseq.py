@@ -705,3 +705,16 @@ def align_and_sort(
     f.close()
 
     return fn
+
+def _dexseq_count(bam, sample_name, samtools_path='.'):
+    subprocess.check_call(
+        '{} view -h -f 2 {} | '.format(samtools_path, bam) +
+        'cut -f1-17,20- | ' + 
+        'python {} '.format(dexseq_count) + 
+        '-p yes -s no -a 0 -r pos -f sam ' + 
+        '{} - '.format(ppy.gencode_dexseq) + 
+        '{}_exon_counts.tsv '.format(os.path.join(out_dir,
+                                                  sample_name)) + 
+        '2> {}_exon_counts.err'.format(os.path.join(out_dir,
+                                                    sample_name)),
+                          shell=True)

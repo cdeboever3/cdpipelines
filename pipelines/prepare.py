@@ -8,6 +8,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from urllib2 import urlopen
 
 def _download_and_untar(url, dest, out_dir):
@@ -227,21 +228,7 @@ def download_r(out_dir):
                           shell=True)
     os.chdir(cwd)
 
-# # # rpy2
-# # 
-# # `rpy2` has to be compiled against the version of 
-# # R we've installed here. Note that you have to set 
-# # ld flags and library paths for installation. I do 
-# # this with the following:
-# # 
-# #     spath = os.getcwd()
-# #     subprocess.check_call('export LDFLAGS="-Wl,-rpath,' + 
-# #                           '{}/R-3.1.1/lib64/R/lib"'.format(spath),
-# #                           shell=True)
-# #     subprocess.check_call('export LD_LIBRARY_PATH="' + 
-# #                           '{}/R-3.1.1/lib64/R/lib:$LD_LIBRARY_PATH"'.format(spath),
-# #                           shell=True)
-# #                           
+                          
 # # I execute the following python file when starting
 # # the notebook server to set the library path:
 # # 
@@ -305,6 +292,45 @@ def download_r(out_dir):
 # # In[15]:
 # 
 # get_ipython().run_cell_magic(u'R', u'', u'\nsource("http://bioconductor.org/biocLite.R")\nbiocLite(ask=FALSE)\nbiocLite("DEXSeq", ask=FALSE)\nbiocLite("Gviz", ask=FALSE)\nbiocLite("BiocParallel", ask=FALSE)')
+
+def download_install_rpy2(r_path):
+    """
+    Download and install rpy2. R must be installed and the LDFLAGS and
+    LD_LIBRARY_PATH must be set. If they are not set, you can run the method to
+    get instructions on how to set them.
+
+    Parameters
+    ----------
+    r_path : str
+        Path to R executable. The R shared library will be inferred based on
+        this.
+
+    """
+    cwd = os.getcwd()
+    # Path to R shared library.
+    s_path = os.path.join(os.path.split(os.path.split(r_path)[0])[0], 'lib64',
+                         'R', 'lib')
+    lines = ('rpy2 has to be compiled against the version of R you\'ve \n'
+             'installed here. Note that you have to set ld flags and library\n'
+             'paths for installation. If you haven\'t already, paste the\n'
+             'following at the command line:\n\n')
+    sys.stdout.write(lines)
+    command = 'export LDFLAGS="-Wl,-rpath,{}"\n'.format(s_path)
+    sys.stdout.write(command)
+    command = 'export LD_LIBRARY_PATH="{}:$LD_LIBRARY_PATH"\n\n'.format(s_path)
+    sys.stdout.write(command)
+    raw_input('If these environment variables are set correctly, press any\n'
+              'key to continue. Otherwise, exit and set them, then rerun.\n\n')
+
+    url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.4.2.tar.gz')
+    dest = os.path.join(out_dir, 'rpy2-2.4.2.tar.gz')
+    _download_and_untar(url, dest, out_dir)
+    os.chdir(os.path.join(out_dir, 'rpy2-2.4.2'))
+    r_home = os.path.split(os.path.split(r_path)[0])[0]
+    subprocess.check_call('python setup.py build --r-home ' + 
+                          '{} install >& '.format(r_home) + 
+                          'rpy2_install_log.txt', shell=True)
+    os.chdir(cwd)
 
 def download_gencode_gtf(out_dir):
     """
