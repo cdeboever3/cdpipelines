@@ -376,11 +376,15 @@ def install_bioconductor_dependencies():
 
     """
     try:
+        # Have to import readline due to some weirdness with installing rpy2 in
+        # a conda environment etc.
+        # See https://github.com/ContinuumIO/anaconda-issues/issues/152.
+        import readline
         import rpy2.robjects as robjects
     except ImportError:
         sys.stderr.write('rpy2 not installed.\n')
         sys.exit(1)
     robjects.r('source("http://bioconductor.org/biocLite.R")')
     robjects.r('biocLite(ask=FALSE)')
-    robjects.r('biocLite("DESeq2")')
+    robjects.r('biocLite("DESeq2", ask=FALSE)')
     robjects.r('biocLite("DEXSeq", ask=FALSE)')
