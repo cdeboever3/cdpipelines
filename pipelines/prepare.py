@@ -320,7 +320,7 @@ def download_gencode_gtf(out_dir):
            'gencode.v19.annotation.gtf.gz')
     dest = os.path.join(out_dir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
     try:
-        os.makedirs(os.path.split(dest[0]))
+        os.makedirs(os.path.split(dest)[0])
     except OSError:
         pass
     req = urlopen(src)
