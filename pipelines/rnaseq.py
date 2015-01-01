@@ -145,8 +145,8 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory, temp_dir):
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                          '\t-Djava.io.tmpdir={} -jar'.format(temp_dir),
-                          '\t{}/SortSam.jar'.format(picard_path),
+                          '\t-Djava.io.tmpdir={}'.format(temp_dir),
+                          '\t-jar {} SortSam'.format(picard_path),
                           '\tVALIDATION_STRINGENCY=SILENT',
                           '\tI={}'.format(in_bam),
                           '\tO={}'.format(out_bam),
@@ -173,8 +173,8 @@ def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                          '\t-Djava.io.tmpdir={} -jar'.format(temp_dir),
-                          '\t{}/BuildBamIndex.jar'.format(picard_path),
+                          '\t-Djava.io.tmpdir={}'.format(temp_dir),
+                          '\t-jar {} BuildBamIndex'.format(picard_path),
                           '\tI={}'.format(in_bam),
                           '\tO={}\n\n'.format(index)]))
     return line
@@ -356,8 +356,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     Parameters
     ----------
     tracklines_file : str
-        Path to file for writing tracklines. These tracklines can be pasted into
-        the genome browser upload for custom data.
+        Path to file for writing tracklines. The tracklines will be added to the
+        file; the contents of the file will not be overwritten. These tracklines
+        can be pasted into the genome browser upload for custom data.
 
     link_dir : str
         Path to directory where softlink should be made.
@@ -401,10 +402,17 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         web_path = wpf.readline().strip()
 
     # File with UCSC tracklines.
+    if os.path.exists(tracklines_file):
+        with open(tracklines_file) as f:
+            lines = f.read()
+    else:
+        lines = ''
     f = open(tracklines_file, 'w')
     
     # Bam file and index.
-    lines, bam_name = _make_softlink(coord_sorted_bam, sample_name, link_dir)
+    new_lines, bam_name = _make_softlink(coord_sorted_bam, sample_name,
+                                         link_dir)
+    lines += new_lines
     new_lines, index_name = _make_softlink(bam_index, sample_name, link_dir)
     lines += new_lines
     f.write(' '.join(['track', 'type=bam',
@@ -441,6 +449,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                            '{}"'.format(sample_name)),
                           'bigDataUrl={}/{}\n'.format(web_path, bigwig_name)]))
     f.close()
+    return lines
 
 def align_and_sort(
     r1_fastqs, 
@@ -448,6 +457,9 @@ def align_and_sort(
     out_dir, 
     sample_name, 
     star_index,
+    tracklines_file,
+    link_dir,
+    web_path_file,
     rgpl='ILLUMINA',
     rgpu='',
     star_path='',
@@ -458,7 +470,7 @@ def align_and_sort(
     threads=32, 
     picard_memory=58, 
     remove_dup=True, 
-    strand_specific_cov=False, 
+    strand_specific=False, 
     shell=False
 ):
     """
@@ -483,6 +495,26 @@ def align_and_sort(
 
     star_index : str
         Path to STAR index.
+
+    tracklines_file : str
+        Path to file for writing tracklines. The tracklines will be added to the
+        file; the contents of the file will not be overwritten. These tracklines
+        can be pasted into the genome browser upload for custom data.
+
+    link_dir : str
+        Path to directory where softlinks for genome browser should be made.
+
+    web_path_file : str
+        File whose first line is the URL that points to link_dir. For example,
+        if we make a link to the file s1_coord_sorted.bam in link_dir and
+        web_path_file has http://site.com/files on its first line, then
+        http://site.com/files/s1_coord_sorted.bam should be available on the
+        web. If the web directory is password protected (it probably should be),
+        then the URL should look like http://username:password@site.com/files.
+        This is a file so you don't have to make the username/password combo
+        public (although I'd recommend not using a sensitive password). You can
+        just put the web_path_file in a directory that isn't tracked by git, 
+        figshare, etc.
 
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
@@ -515,7 +547,7 @@ def align_and_sort(
     remove_dup : boolean
         Whether to remove duplicate reads prior to alignment.
 
-    strand_specific_cov : boolean
+    strand_specific : boolean
         If true, make strand specific bigwig files. 
 
     shell : boolean
@@ -552,7 +584,7 @@ def align_and_sort(
     # same.
     files_to_remove = [temp_r1_fastqs, temp_r2_fastqs, r1_nodup, r2_nodup]
 
-    if strand_specific_cov:
+    if strand_specific:
         out_bigwig_plus = os.path.join(temp_dir,
                                        '{}_plus.bw'.format(sample_name))
         out_bigwig_minus = os.path.join(temp_dir,
@@ -609,13 +641,26 @@ def align_and_sort(
     f.write('wait\n\n')
 
     # Make bigwig files for displaying coverage.
-    if strand_specific_cov:
+    if strand_specific:
         lines = _bigwig_files(coord_sorted_bam, out_bigwig_plus, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path,
                               out_bigwig_minus=out_bigwig_minus)
     else:
         lines = _bigwig_files(coord_sorted_bam, out_bigwig, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    # Make softlinks and tracklines for genome browser.
+    if strand_specific:
+        lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
+                                      coord_sorted_bam, bam_index,
+                                      out_bigwig_plus, sample_name,
+                                      bigwig_minus=out_bigwig_minus)
+    else:
+        lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
+                                      coord_sorted_bam, bam_index,
+                                      out_bigwig, sample_name)
     f.write(lines)
     f.write('wait\n\n')
 
