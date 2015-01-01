@@ -315,7 +315,7 @@ def download_install_rpy2(r_path, out_dir):
              'paths for installation. If you haven\'t already, paste the\n'
              'following at the command line:\n\n')
     sys.stdout.write(lines)
-    command = 'export PATH={}:$PATH\n'.format(os.path.split(r_path)[0])
+    command = 'export PATH="{}:$PATH"\n'.format(os.path.split(r_path)[0])
     sys.stdout.write(command)
     command = 'export LDFLAGS="-Wl,-rpath,{}"\n'.format(s_path)
     sys.stdout.write(command)
