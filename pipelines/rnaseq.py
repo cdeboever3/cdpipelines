@@ -274,7 +274,7 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
                                       bedgraph_to_bigwig_path, bedtools_path))
         lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus,
                                       bedgraph_to_bigwig_path, bedtools_path))
-        lines += ('wait\n\n')
+        lines += ('\nwait\n\n')
         lines += ('rm plus.bg minus.bg\n\n')
     
     else:
@@ -612,7 +612,7 @@ def align_and_sort(
         out = os.path.join(out_dir, '{}_alignment.out'.format(sample_name))
         err = os.path.join(out_dir, '{}_alignment.err'.format(sample_name))
         job_name = '{}_align'.format(sample_name)
-        _pbs_header(out, err, job_name, threads)
+        f.write(_pbs_header(out, err, job_name, threads))
 
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
