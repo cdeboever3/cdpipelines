@@ -678,7 +678,7 @@ def align_and_sort(
     f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
         ' \\\n\t'.join(files_to_copy),
         out_dir))
-    f.write('rm \n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if temp_dir != out_dir:
         f.write('rm -r {}\n'.format(temp_dir))
