@@ -400,6 +400,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         Lines to be printed to shell/PBS script.
 
     """
+    lines = ''
+
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
 
