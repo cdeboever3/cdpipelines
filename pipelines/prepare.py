@@ -322,8 +322,11 @@ def download_install_rpy2(r_path, out_dir):
     command = 'export LD_LIBRARY_PATH="{}:$LD_LIBRARY_PATH"\n\n'.format(s_path)
     sys.stdout.write(command)
     raw_input('If these environment variables are set correctly, press any\n'
-              'key to continue. Otherwise, exit and set them, then rerun.\n\n')
-    sys.stdout.write('Downloading and install rpy2.')
+              'key to continue. Otherwise, exit and set them, then rerun.\n'
+              'You need to set the PATH and LD_LIBRARY_PATH for each bash\n'
+              'environment you want to use rpy2 in.\n\n')
+    sys.stdout.write('Downloading and install rpy2.\n\n')
+    sys.stdout.flush()
 
     url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.4.2.tar.gz')
     dest = os.path.join(out_dir, 'rpy2-2.4.2.tar.gz')
