@@ -813,8 +813,9 @@ def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
 
     return lines
 
-def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf, 
-               paired=True, stranded=False, samtools_path='.', shell=False):
+def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
+               conda_env='', rpy2_file='', paired=True, stranded=False,
+               samtools_path='.', shell=False):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
     and exonic bins for DEXSeq.
@@ -838,6 +839,12 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
 
     gtf : str
         Path to GTF file to count against. Optimized for use with Gencode GTF.
+
+    conda_env : str
+        If provided, load conda environment with this name.
+
+    rpy2_file : str
+        If provided, this file will be sourced to set the environment for rpy2.
 
     paired : boolean
         True if the data is paired-end. False otherwise.
@@ -894,6 +901,11 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
     f.write('rsync -avz {} .\n\n'.format(bam))
+
+    if conda_env != '':
+        f.write('source activate {}\n\n'.format(conda_env))
+    if rpy2_file != '':
+        f.write('source {}\n\n'.format(rpy2_file))
 
     lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
                           paired=True, stranded=stranded,
