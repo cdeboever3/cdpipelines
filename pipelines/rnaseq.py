@@ -631,7 +631,11 @@ def align_and_sort(
     except OSError:
         pass
 
-    fn = os.path.join(out_dir, '{}_alignment.pbs'.format(sample_name))
+    if shell:
+        fn = os.path.join(out_dir, '{}_alignment.sh'.format(sample_name))
+    else:
+        fn = os.path.join(out_dir, '{}_alignment.pbs'.format(sample_name))
+
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
@@ -810,7 +814,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
     return lines
 
 def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf, 
-               paired=True, stranded=False, samtools_path='.'):
+               paired=True, stranded=False, samtools_path='.', shell=False):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
     and exonic bins for DEXSeq.
@@ -840,6 +844,9 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
 
     stranded : boolean
         True if the data is strand-specific. False otherwise.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
 
     """
     threads = 6
@@ -871,7 +878,11 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     except OSError:
         pass
 
-    fn = os.path.join(out_dir, '{}_counts.pbs'.format(sample_name))
+    if shell:
+        fn = os.path.join(out_dir, '{}_counts.sh'.format(sample_name))
+    else:
+        fn = os.path.join(out_dir, '{}_counts.pbs'.format(sample_name))
+
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
