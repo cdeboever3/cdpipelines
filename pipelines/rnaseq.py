@@ -761,7 +761,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
         '{} view -h -f 2 {} | '.format(samtools_path, bam) +
         'cut -f1-17,20- | python {} '.format(script) + 
         '-p {} -s {} -a 0 -r pos -f sam '.format(p, s) + 
-        '{} - {} &'.format(dexseq_annotation, counts_file)
+        '{} - {} &\n\n'.format(dexseq_annotation, counts_file)
     )
     return lines
 
