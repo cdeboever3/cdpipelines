@@ -810,8 +810,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
     return lines
 
 def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf, 
-               paired=True, stranded=False, samtools_path='.',
-               strand_specific=False):
+               paired=True, stranded=False, samtools_path='.'):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
     and exonic bins for DEXSeq.
@@ -842,11 +841,8 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     stranded : boolean
         True if the data is strand-specific. False otherwise.
 
-    strand_specific : boolean
-        True if data is strand specific, false otherwise.
-
     """
-    assert threads >= 3
+    threads = 6
 
     if shell:
         pbs = False
@@ -889,11 +885,11 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     f.write('rsync -avz {} .\n\n'.format(bam))
 
     lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
-                          paired=True, stranded=strand_specific,
+                          paired=True, stranded=stranded,
                           samtools_path=samtools_path)
     f.write(lines)
     lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
-                         stranded=strand_specific, samtools_path=samtools_path)
+                         stranded=stranded, samtools_path=samtools_path)
     f.write(lines)
     lines += ('wait\n\n')
     
