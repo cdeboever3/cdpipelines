@@ -744,7 +744,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     """
     import readline
     import rpy2.robjects as robjects
-    robjects.r('library(DEXSeq)')
+    robjects.r('suppressPackageStartupMessages(library(DEXSeq))')
     scripts = robjects.r('system.file("python_scripts", package="DEXSeq")')
     g = scripts.items()
     scripts_path = g.next()[1]
