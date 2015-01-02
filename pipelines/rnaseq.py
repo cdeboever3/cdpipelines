@@ -804,7 +804,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
     script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
     lines = ('python {} -f bam -r pos -s {} '.format(script, s) + 
              '-a 0 -t exon -i gene_id -m union ' + 
-             '{} {} > temp_counts.tsv\n'.format(bam, gtf))
+             '{} {} > temp_out.tsv\n'.format(bam, gtf))
     lines += 'tail -n 5 temp_out.tsv > {}\n'.format(stats_file)
     lines += 'lines=$(wc -l <temp_out.tsv)\n'
     lines += 'wanted=`expr $lines - 5`\n'
