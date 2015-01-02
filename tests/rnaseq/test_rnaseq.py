@@ -279,3 +279,47 @@ class TestAlignAndSort:
         )
         os.remove(fn)
         os.remove(tracklines_file)
+
+# class TestDexseqCount:
+#     def test_run(self):
+#         """Test to make sure the function at least runs"""
+#         bam = 'test.bam'
+#         counts_file = 'counts.tsv'
+#         dexseq_annotation = 'annot.gtf'
+#         samtools_path = 'path/to/samtools'
+#         lines = ps.rnaseq._dexseq_count(bam, counts_file, dexseq_annotation,
+#                                         samtools_path=samtools_path)
+# 
+#     def test_run_stranded(self):
+#         """Test to make sure the function at least runs"""
+#         bam = 'test.bam'
+#         counts_file = 'counts.tsv'
+#         dexseq_annotation = 'annot.gtf'
+#         stranded = True
+#         samtools_path = 'path/to/samtools'
+#         lines = ps.rnaseq._dexseq_count(bam, counts_file, dexseq_annotation,
+#                                         stranded=stranded,
+#                                         samtools_path=samtools_path)
+
+class TestHtseqCount:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        bam = 'test.bam'
+        counts_file = 'counts.tsv'
+        stats_file = 'stats.tsv'
+        gtf = 'annot.gtf'
+        samtools_path = 'path/to/samtools'
+        lines = ps.rnaseq._htseq_count(bam, counts_file, stats_file, gtf,
+                                       samtools_path=samtools_path)
+
+    def test_run_stranded(self):
+        """Test to make sure the function at least runs"""
+        bam = 'test.bam'
+        counts_file = 'counts.tsv'
+        stats_file = 'stats.tsv'
+        gtf = 'annot.gtf'
+        stranded = True
+        samtools_path = 'path/to/samtools'
+        lines = ps.rnaseq._htseq_count(bam, counts_file, stats_file, gtf,
+                                       stranded=stranded,
+                                       samtools_path=samtools_path)

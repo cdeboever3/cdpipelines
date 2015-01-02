@@ -499,6 +499,7 @@ def align_and_sort(
     strand_specific=False, 
     shell=False
 ):
+    #TODO: The default values for the software paths don't make any sense.
     """
     Make a PBS or shell script for aligning RNA-seq reads with STAR. The
     defaults are set for use on the Frazer lab's PBS scheduler on FLC.
@@ -706,7 +707,7 @@ def align_and_sort(
 
     return fn
 
-def _dexseq_count(bam, counts_file, dexseq_annotation, sample_name, paired=True,
+def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
                   stranded=False, samtools_path='.'):
     """
     Count reads overlapping exonic bins for DEXSeq.
@@ -721,9 +722,6 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, sample_name, paired=True,
 
     dexseq_annotation : str
         Path to DEXSeq exonic bins GFF file.
-
-    sample_name : str
-        Sample name used for naming files.
 
     paired : boolean
         True if the data is paired-end. False otherwise.
@@ -763,7 +761,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, sample_name, paired=True,
     )
     return lines
 
-def _htseq_count(bam, counts_file, stats_file, gtf, sample_name, stranded=False,
+def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
                  samtools_path='.'):
     """
     Count reads overlapping genes for use with DESeq etc.
@@ -782,9 +780,6 @@ def _htseq_count(bam, counts_file, stats_file, gtf, sample_name, stranded=False,
     gtf : str
         Path to GTF file to count against. Optimized for use with Gencode GTF.
 
-    sample_name : str
-        Sample name used for naming files.
-
     stranded : boolean
         True if the data is strand-specific. False otherwise.
 
@@ -798,15 +793,11 @@ def _htseq_count(bam, counts_file, stats_file, gtf, sample_name, stranded=False,
 
     """
     import HTSeq
-    if paired:
-        p = 'yes'
-    else:
-        p = 'no'
     if stranded:
         s = 'yes'
     else:
         s = 'no'
-    script = os.path.join(HTSeq.__path__, 'scripts', 'count.py')
+    script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
     lines = ('python {} -f bam -r pos -s {} '.format(script, stranded) + 
              '-a 0 -t exon -i gene_id -m union -q ' + 
              '{} {} > temp_counts.tsv\n'.format(bam, gtf))
@@ -817,3 +808,104 @@ def _htseq_count(bam, counts_file, stats_file, gtf, sample_name, stranded=False,
     lines += 'rm temp_out.tsv\n\n'
 
     return lines
+
+def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf, 
+               paired=True, stranded=False, samtools_path='.',
+               strand_specific=False):
+    """
+    Make a PBS or shell script for counting reads that overlap genes for DESeq2
+    and exonic bins for DEXSeq.
+
+    Parameters
+    ----------
+    bam : str
+        Coordinate sorted bam file (genomic coordinates).
+
+    out_dir : str
+        Directory to store PBS/shell file and aligment results.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    temp_dir : str
+        Directory to store temporary files.
+
+    dexseq_annotation : str
+        Path to DEXSeq exonic bins GFF file.
+
+    gtf : str
+        Path to GTF file to count against. Optimized for use with Gencode GTF.
+
+    paired : boolean
+        True if the data is paired-end. False otherwise.
+
+    stranded : boolean
+        True if the data is strand-specific. False otherwise.
+
+    strand_specific : boolean
+        True if data is strand specific, false otherwise.
+
+    """
+    assert threads >= 3
+
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    temp_dir = os.path.join(temp_dir, '{}_counts'.format(sample_name))
+    out_dir = os.path.join(out_dir, '{}_counts'.format(sample_name))
+
+    # I'm going to define some file names used later.
+    temp_bam = os.path.join(temp_dir, os.path.split(bam)[1])
+    dexseq_counts = os.path.join(out_dir, 'dexseq_counts.tsv')
+    gene_counts = os.path.join(out_dir, 'gene_counts.tsv')
+    gene_count_stats = os.path.join(out_dir, 'gene_count_stats.tsv')
+    
+    # Files to copy to output directory.
+    files_to_copy = []
+    
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+
+    try:
+        os.makedirs(out_dir)
+    except OSError:
+        pass
+
+    fn = os.path.join(out_dir, '{}_counts.pbs'.format(sample_name))
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(out_dir, '{}_counts.out'.format(sample_name))
+        err = os.path.join(out_dir, '{}_.err'.format(sample_name))
+        job_name = '{}_counts'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+
+    f.write('mkdir -p {}\n'.format(temp_dir))
+    f.write('cd {}\n'.format(temp_dir))
+    f.write('rsync -avz {} .\n\n'.format(bam))
+
+    lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
+                          paired=True, stranded=strand_specific,
+                          samtools_path=samtools_path)
+    f.write(lines)
+    lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
+                         stranded=strand_specific, samtools_path=samtools_path)
+    f.write(lines)
+    lines += ('wait\n\n')
+    
+    if len(files_to_copy) > 0:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy),
+            out_dir))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if temp_dir != out_dir:
+        f.write('rm -r {}\n'.format(temp_dir))
+    f.close()
+
+    return fn
