@@ -887,7 +887,7 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     f.write('#!/bin/bash\n\n')
     if pbs:
         out = os.path.join(out_dir, '{}_counts.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_.err'.format(sample_name))
+        err = os.path.join(out_dir, '{}_counts.err'.format(sample_name))
         job_name = '{}_counts'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
 
