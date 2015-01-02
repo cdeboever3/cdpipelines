@@ -914,7 +914,7 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
                          stranded=stranded, samtools_path=samtools_path)
     f.write(lines)
-    lines += ('wait\n\n')
+    f.write('wait\n\n')
     
     if len(files_to_copy) > 0:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
