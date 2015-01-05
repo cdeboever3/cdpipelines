@@ -310,7 +310,7 @@ class TestHtseqCount:
         gtf = 'annot.gtf'
         samtools_path = 'path/to/samtools'
         lines = ps.rnaseq._htseq_count(bam, counts_file, stats_file, gtf,
-                                       samtools_path=samtools_path)
+                                       samtools_path)
 
     def test_run_stranded(self):
         """Test to make sure the function at least runs"""
@@ -321,5 +321,5 @@ class TestHtseqCount:
         stranded = True
         samtools_path = 'path/to/samtools'
         lines = ps.rnaseq._htseq_count(bam, counts_file, stats_file, gtf,
-                                       stranded=stranded,
-                                       samtools_path=samtools_path)
+                                       samtools_path, stranded=stranded)
+                                       

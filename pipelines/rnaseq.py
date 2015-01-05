@@ -486,12 +486,12 @@ def align_and_sort(
     tracklines_file,
     link_dir,
     web_path_file,
+    star_path,
+    picard_path,
+    bedtools_path,
+    bedgraph_to_bigwig_path,
     rgpl='ILLUMINA',
     rgpu='',
-    star_path='',
-    picard_path='',
-    bedtools_path='',
-    bedgraph_to_bigwig_path='',
     temp_dir='/scratch', 
     threads=32, 
     picard_memory=58, 
@@ -499,7 +499,6 @@ def align_and_sort(
     strand_specific=False, 
     shell=False
 ):
-    #TODO: The default values for the software paths don't make any sense.
     """
     Make a PBS or shell script for aligning RNA-seq reads with STAR. The
     defaults are set for use on the Frazer lab's PBS scheduler on FLC.
@@ -543,23 +542,23 @@ def align_and_sort(
         just put the web_path_file in a directory that isn't tracked by git, 
         figshare, etc.
 
+    star_path : str
+        Path to STAR aligner.
+
+    picard_path : str
+        Path to Picard tools.
+
+    bedtools_path : str
+        Path to bedtools.
+
+    bedgraph_to_bigwig_path : str
+        Path bedGraphToBigWig executable.
+
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
 
     rgpu : str
         Read Group platform unit (eg. run barcode). 
-
-    star_path : str
-        Path to STAR aligner. If not provided, assumed to be in your path.
-
-    picard_path : str
-        Path to Picard tools. If not provided, assumed to be in your path.
-
-    bedtools_path : str
-        Path to bedtools. If not provided, assumed to be in your path.
-
-    bedgraph_to_bigwig_path : str
-        Path bedGraphToBigWig executable.
 
     temp_dir : str
         Directory to store files as STAR runs.
@@ -765,8 +764,8 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     )
     return lines
 
-def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
-                 samtools_path='.'):
+def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
+                 stranded=False):
     """
     Count reads overlapping genes for use with DESeq etc.
 
@@ -814,8 +813,8 @@ def _htseq_count(bam, counts_file, stats_file, gtf, stranded=False,
     return lines
 
 def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
-               conda_env='', rpy2_file='', paired=True, stranded=False,
-               samtools_path='.', shell=False):
+               samtools_path, conda_env='', rpy2_file='', paired=True,
+               stranded=False, shell=False):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
     and exonic bins for DEXSeq.
