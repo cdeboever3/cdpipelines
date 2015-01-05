@@ -9,17 +9,31 @@ Many of the pipeline dependencies can be obtained using the `prepare` submodule
 (see below). Additionally, a working Python environment is needed along with
 some of the common scientific python packages. I recommend using [Anaconda
 python](https://store.continuum.io/cshop/anaconda/) since it includes most of
-the needed packages. If you are using Anaconda, I'd recommend making a new
-environment. Besides the default Anaconda packages, you will need the following
-(available through `pip`):
+the needed packages. If you are using Anaconda, I'd recommend making new
+environments for different projects. Besides the default Anaconda packages, you
+will need the following (available through `pip`):
 
 * HTSeq
-* pysam (you can this through conda but currently it's an old version)
+* pysam (this is available through conda but currently it's an old version so
+  you have to get it using `pip`)
 
 ## Prepare
 
 The prepare module contains functions for downloading various software and
-reference files needed for the different pipelines. Some dependencies 
+reference files needed for the different pipelines. 
+
+### `rpy2`
+
+Installing `rpy2` can be tricky. Different versions of `R` and `rpy2` don't work
+well together, so it's recommended to make a local installation of `R` using the
+`prepare` submodule and compile `rpy2` against this installation. You can
+install `R` using `prepare.download_r` and install `rpy2` using
+`prepare.download_install_rpy2`. `prepare.download_install_rpy2` will prompt you
+to set your PATH, LDFLAGS, and LD_LIBRARY_PATH to correctly install `rpy2`.
+After installing `rpy2`, you need to set your PATH and LD_LIBRARY_PATH using
+these commands for every bash session where you want to use this `rpy2`. I'd
+recommend putting the commands in a file that you source every time you load
+the project's Anaconda environment.
 
 ## RNA-seq
 
