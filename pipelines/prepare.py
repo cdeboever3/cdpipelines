@@ -315,7 +315,7 @@ def download_install_rpy2(r_path, out_dir):
     # Path to R shared library.
     s_path = os.path.join(os.path.split(os.path.split(r_path)[0])[0], 'lib64',
                          'R', 'lib')
-    lines = ('rpy2 has to be compiled against the version of R you\'ve \n'
+    lines = ('\n\n\nrpy3 has to be compiled against the version of R you\'ve \n'
              'installed here. Note that you have to set ld flags and library\n'
              'paths for installation. If you haven\'t already, paste the\n'
              'following at the command line:\n\n')
@@ -330,7 +330,7 @@ def download_install_rpy2(r_path, out_dir):
               'key to continue. Otherwise, exit and set them, then rerun.\n'
               'You need to set the PATH and LD_LIBRARY_PATH for each bash\n'
               'environment you want to use rpy2 in.\n\n')
-    sys.stdout.write('Downloading and install rpy2.\n\n')
+    sys.stdout.write('Downloading and installing rpy2.\n\n')
     sys.stdout.flush()
 
     url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.4.2.tar.gz')
