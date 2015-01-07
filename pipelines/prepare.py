@@ -199,7 +199,7 @@ def download_bedtools(out_dir):
               os.path.join(out_dir, 'bedtools2-2.20.1', 'bin') + 
               '\nto your path when using this environment so\n'
               'pybedtools uses the correct bedtools installation.\n'
-              'Press any key to continue.\n\n\n'
+              'Press any key to continue.\n\n\n')
 
 def download_r(out_dir):
     """
