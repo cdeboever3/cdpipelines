@@ -172,7 +172,7 @@ def download_picard(out_dir):
                         'broadinstitute-picard-1.127-9-g6fd825a.tar.gz')
     _download_and_untar(url, dest, out_dir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(out_dir, 'broadinstitute-picard-6fd825a'))
+    os.chdir(os.path.join(out_dir, 'broadinstitute-picard-1.127-9-g6fd825a'))
     subprocess.check_call('ant -lib lib/ant clone-htsjdk package-commands',
                           shell=True)
     os.chdir(cwd)
