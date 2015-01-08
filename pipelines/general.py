@@ -1,5 +1,67 @@
 import os
 
+def _process_fastqs(fastqs, temp_dir):
+    """
+    Create list of temporary fastq paths.
+
+    Parameters
+    ----------
+    fastqs : list or str
+        Either a list of paths to gzipped fastq files or path to a single
+        gzipped fastq file.
+
+    temp_dir : str
+        Path to temporary directory where fastq files will be copied to.
+
+    Returns
+    -------
+    fastqs : str
+        Paths to original fastq files (concatenated with a space if multiple,
+        e.g. 'path/fq1.fastq path/fq2.fastq').
+
+    temp_fastqs : str
+        Paths to temporary fastq files (concatenated with a space if multiple,
+        e.g. 'tempdir/fq1.fastq tempdir/fq2.fastq').
+
+    """
+    if type(fastqs) == list:
+        fns = [os.path.split(x)[1] for x in fastqs]
+        temp_fastqs = [os.path.join(temp_dir, x) for x in fns]
+        fastqs = ' '.join(fastqs)
+    elif type(fastqs) == str:
+        temp_fastqs = os.path.join(temp_dir, os.path.split(fastqs)[1])
+    return fastqs, temp_fastqs
+
+def _fastqc(fastqs, threads, out_dir, fastqc_path):
+    """
+    Run FastQC
+
+    Parameters
+    ----------
+    fastqs : str or list
+        Path to fastq file or list of paths to fastq files.
+
+    threads : int
+        Number of threads to run FastQC with.
+
+    out_dir : str
+        Path to directory to store FastQC results to.
+
+    fastqc_path : str
+        Path to FastQC.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    if type(fastqs) == list:
+        ' '.join(fastqs)
+    lines = ('{} --outdir {} --nogroup\n'.format(fastqc_path, out_dir) + 
+             '\t--threads {} {}\n\n'.format(threads, fastqs))
+    return lines
+
 def _make_softlink(fn, sample_name, link_dir):
     """
     Make softlink for file fn in link_dir. sample_name followed by an underscore

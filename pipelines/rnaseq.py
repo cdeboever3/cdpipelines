@@ -2,6 +2,7 @@ import os
 
 from general import _make_softlink
 from general import _pbs_header
+from general import _process_fastqs
 
 def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
                                  temp_dir):
@@ -247,38 +248,6 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
         lines += ('rm both.bg\n\n')
     return lines
     
-def _process_fastqs(fastqs, temp_dir):
-    """
-    Create list of temporary fastq paths.
-
-    Parameters
-    ----------
-    fastqs : list or str
-        Either a list of paths to gzipped fastq files or path to a single
-        gzipped fastq file.
-
-    temp_dir : str
-        Path to temporary directory where fastq files will be copied to.
-
-    Returns
-    -------
-    fastqs : str
-        Paths to original fastq files (concatenated with a space if multiple,
-        e.g. 'path/fq1.fastq path/fq2.fastq').
-
-    temp_fastqs : str
-        Paths to temporary fastq files (concatenated with a space if multiple,
-        e.g. 'tempdir/fq1.fastq tempdir/fq2.fastq').
-
-    """
-    if type(fastqs) == list:
-        fns = [os.path.split(x)[1] for x in fastqs]
-        temp_fastqs = [os.path.join(temp_dir, x) for x in fns]
-        fastqs = ' '.join(fastqs)
-    elif type(fastqs) == str:
-        temp_fastqs = os.path.join(temp_dir, os.path.split(fastqs)[1])
-    return fastqs, temp_fastqs
-
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, sample_name,
                           out_dir, bigwig_minus=''):

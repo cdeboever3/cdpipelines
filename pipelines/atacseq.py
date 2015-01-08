@@ -1,5 +1,6 @@
 import os
 
+from general import _fastqc
 from general import _make_softlink
 from general import _pbs_header
 from general import _picard_index
@@ -196,6 +197,7 @@ def align_and_sort(
     picard_path,
     bedtools_path,
     bedgraph_to_bigwig_path,
+    fastqc_path,
     rgpl='ILLUMINA',
     rgpu='',
     temp_dir='/scratch', 
@@ -258,6 +260,9 @@ def align_and_sort(
     bedgraph_to_bigwig_path : str
         Path bedGraphToBigWig executable.
 
+    fastqc_path : str
+        Path to FastQC executable.
+
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
 
@@ -296,6 +301,8 @@ def align_and_sort(
     # I'm going to define some file names used later.
     r1_fastqs, temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
     r2_fastqs, temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
+    combined_r1 = os.path.join(temp_dir, 'combined_R1.fastq.gz')
+    combined_r2 = os.path.join(temp_dir, 'combined_R2.fastq.gz')
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
     no_dup_bam = os.path.join(temp_dir, 'no_dup.bam')
@@ -310,7 +317,7 @@ def align_and_sort(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [temp_r1_fastqs, temp_r2_fastqs]
+    files_to_remove = [combined_r1, combined_r2]
 
     try:
         os.makedirs(out_dir)
@@ -333,6 +340,22 @@ def align_and_sort(
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
     f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
+    
+    # Combine fastq files and run FastQC.
+    f.write('cat {} > {} &\n'.format(temp_r1_fastqs, combined_r1))
+    f.write('cat {} > {}\n\n'.format(temp_r2_fastqs, combined_r2))
+    f.write('wait\n\n')
+    f.write('rm {} {}\n\n'.format(temp_r1_fastqs, temp_r2_fastqs))
+    f.write('wait\n\n')
+    lines = _fastqc([combined_r1, combined_r2], threads, out_dir, fastqc_path)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    # Align with STAR.
+    lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
+                        rgpu, star_index, star_path, threads)
+    f.write(lines)
+    f.write('wait\n\n')
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam, bam_index,
