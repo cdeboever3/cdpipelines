@@ -5,6 +5,7 @@ from general import _make_softlink
 from general import _pbs_header
 from general import _picard_index
 from general import _picard_remove_duplicates
+from general import _process_fastqs
 
 def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                 threads):
