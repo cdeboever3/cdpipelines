@@ -102,7 +102,7 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
         lines = _coverage_bedgraph(in_bam, 'both.bg', bedtools_path,
                                    sample_name)
         lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig_minus,
+        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig,
                                       bedgraph_to_bigwig_path, bedtools_path))
         lines += ('wait\n\n')
         lines += ('rm both.bg\n\n')
