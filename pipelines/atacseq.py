@@ -342,8 +342,8 @@ def align_and_sort(
     f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
     
     # Combine fastq files and run FastQC.
-    f.write('cat {} > {} &\n'.format(temp_r1_fastqs, combined_r1))
-    f.write('cat {} > {}\n\n'.format(temp_r2_fastqs, combined_r2))
+    f.write('cat {} \n\t> {} &\n'.format(' '.join(temp_r1_fastqs), combined_r1))
+    f.write('cat {} \n\t> {}\n\n'.format(' '.join(temp_r2_fastqs), combined_r2))
     f.write('wait\n\n')
     f.write('rm {} {}\n\n'.format(temp_r1_fastqs, temp_r2_fastqs))
     f.write('wait\n\n')

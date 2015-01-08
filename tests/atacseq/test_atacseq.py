@@ -39,5 +39,5 @@ class TestAlignAndSort:
             samtools_path,
             shell=False
         )
-        # os.remove(fn)
+        os.remove(fn)
         os.remove(tracklines_file)
