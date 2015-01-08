@@ -473,8 +473,8 @@ def align_and_sort(
                                       bigwig_minus=out_bigwig_minus)
     else:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      coord_sorted_bam, bam_index, out_dir,
-                                      out_bigwig, sample_name)
+                                      coord_sorted_bam, bam_index, out_bigwig,
+                                      sample_name, out_dir)
     f.write(lines)
     f.write('wait\n\n')
 

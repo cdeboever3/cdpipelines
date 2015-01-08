@@ -385,8 +385,8 @@ def align_and_sort(
 
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                  no_dup_bam, bam_index, out_dir,
-                                  out_bigwig, sample_name)
+                                  no_dup_bam, bam_index, out_bigwig,
+                                  sample_name, out_dir)
     f.write(lines)
     f.write('wait\n\n')
 
