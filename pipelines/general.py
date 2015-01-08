@@ -153,7 +153,7 @@ def _process_fastqs(fastqs, temp_dir):
     """
     if type(fastqs) == list:
         fns = [os.path.split(x)[1] for x in fastqs]
-        temp_fastqs = [os.path.join(temp_dir, x) for x in fns]
+        temp_fastqs = sorted([os.path.join(temp_dir, x) for x in fns])
     elif type(fastqs) == str:
         temp_fastqs = [os.path.join(temp_dir, os.path.split(fastqs)[1])]
     return temp_fastqs
