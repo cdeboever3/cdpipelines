@@ -352,7 +352,7 @@ def align_and_sort(
     f.write('wait\n\n')
 
     # Coordinate sort bam file.
-    lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam, bam_index,
+    lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
                                        picard_path, picard_memory, temp_dir)
     f.write(lines)
     f.write('wait\n\n')
