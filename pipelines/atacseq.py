@@ -307,7 +307,7 @@ def align_and_sort(
     bam_index = os.path.join(temp_dir, 'atac_no_dup.bam.bai')
     out_bigwig = os.path.join(temp_dir, '{}.bw'.format(sample_name))
     
-    dup_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
+    duplicate_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
     
     # Files to copy to output directory.
     files_to_copy = [no_dup_bam, bam_index, 'Log.out', 'Log.final.out',
