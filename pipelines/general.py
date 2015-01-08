@@ -185,7 +185,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     if type(fastqs) == list:
         fastqs = ' '.join(fastqs)
     lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, out_dir) + 
-             '\t--threads {} {}\n\n'.format(threads, fastqs))
+             '\t--extract --threads {} {}\n\n'.format(threads, fastqs))
     return lines
 
 def _make_softlink(fn, sample_name, link_dir):

@@ -196,9 +196,11 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
 
     """
     lines = ''
+    link_dir = os.path.join(link_dir, 'rna')
 
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
+    web_path = web_path + '/rna'
 
     # File with UCSC tracklines.
     if os.path.exists(tracklines_file):
@@ -208,51 +210,63 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         tf_lines = ''
     
     # Bam file and index.
+    temp_link_dir = os.path.join(link_dir, 'bam')
+    temp_web_path = web_path + '/bam'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
     fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
-    new_lines, bam_name = _make_softlink(fn, sample_name, link_dir)
+    new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
     fn = os.path.join(out_dir, os.path.split(bam_index)[1])
-    new_lines, index_name = _make_softlink(fn, sample_name, link_dir)
+    new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
     tf_lines += ' '.join(['track', 'type=bam',
                           'name="{}_bam"'.format(sample_name),
                           'description="RNAseq for {}"'.format(sample_name),
-                          'bigDataUrl={}/{}\n'.format(web_path, bam_name)])
+                          'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
     
     # Bigwig file(s).
+    temp_link_dir = os.path.join(link_dir, 'bw')
+    temp_web_path = web_path + '/bw'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
     if bigwig_minus != '':
         fn = os.path.join(out_dir, os.path.split(bigwig)[1])
-        new_lines, plus_name = _make_softlink(fn, sample_name, link_dir)
+        new_lines, plus_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
         
         fn = os.path.join(out_dir, os.path.split(bigwig_minus)[1])
-        new_lines, minus_name = _make_softlink(fn, sample_name, link_dir)
+        new_lines, minus_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
 
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_plus_cov"'.format(sample_name),
                               ('description="RNAseq plus strand coverage for '
                                '{}"'.format(sample_name)),
-                              'bigDataUrl={}/{}\n'.format(web_path,
+                              'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           plus_name)])
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_minus_cov"'.format(sample_name),
                               ('description="RNAseq minus strand coverage for '
                                '{}"'.format(sample_name)),
-                              'bigDataUrl={}/{}\n'.format(web_path,
+                              'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           minus_name)])
     else:
         fn = os.path.join(out_dir, os.path.split(bigwig)[1])
-        new_lines, bigwig_name = _make_softlink(fn, sample_name, link_dir)
+        new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
 
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_cov"'.format(sample_name),
                               ('description="RNAseq coverage for '
                                '{}"'.format(sample_name)),
-                              'bigDataUrl={}/{}\n'.format(web_path,
+                              'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           bigwig_name)])
     
     with open(tracklines_file, 'w') as tf:
@@ -380,8 +394,8 @@ def align_and_sort(
     out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
 
     # I'm going to define some file names used later.
-    r1_fastqs, temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
-    r2_fastqs, temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
+    temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
+    temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
     r1_nodup = os.path.join(temp_dir, 'nodup_R1.fastq.gz')
     r2_nodup = os.path.join(temp_dir, 'nodup_R2.fastq.gz')
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
@@ -396,7 +410,7 @@ def align_and_sort(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [temp_r1_fastqs, temp_r2_fastqs, r1_nodup, r2_nodup]
+    files_to_remove = temp_r1_fastqs + temp_r2_fastqs + [r1_nodup, r2_nodup]
 
     if strand_specific:
         out_bigwig_plus = os.path.join(temp_dir,

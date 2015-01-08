@@ -145,10 +145,10 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     """
     lines = ''
     link_dir = os.path.join(link_dir, 'atac')
-    web_path = web_path + '/atac'
 
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
+    web_path = web_path + '/atac'
 
     # File with UCSC tracklines.
     if os.path.exists(tracklines_file):
@@ -164,17 +164,13 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(r1_fastqc)[1])
-    new_lines, r1_name = _make_softlink(fn, sample_name, temp_link_dir)
+    new_lines, r1_name = _make_softlink(r1_fastqc, sample_name + '_R1',
+                                        temp_link_dir)
     lines += new_lines
-    fn = os.path.join(out_dir, os.path.split(r2_fastqc)[1])
-    new_lines, r2_name = _make_softlink(fn, sample_name, temp_link_dir)
+    new_lines, r2_name = _make_softlink(r2_fastqc, sample_name + '_R2',
+                                        temp_link_dir)
     lines += new_lines
 
-    fn = os.path.join(out_dir, os.path.split(bam_index)[1])
-    new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
-    lines += new_lines
-    
     # Bam file and index.
     temp_link_dir = os.path.join(link_dir, 'bam')
     temp_web_path = web_path + '/bam'
@@ -356,6 +352,17 @@ def align_and_sort(
     stats_file = os.path.join(out_dir,
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
     
+    tn = os.path.split(combined_r1)[1]
+    r1_fastqc = os.path.join(
+        out_dir, 
+        '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
+        'fastqc_report.html')
+    tn = os.path.split(combined_r2)[1]
+    r2_fastqc = os.path.join(
+        out_dir, 
+        '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
+        'fastqc_report.html')
+    
     # Files to copy to output directory.
     files_to_copy = [no_dup_bam, bam_index, 'Log.out', 'Log.final.out',
                      'Log.progress.out', 'SJ.out.tab', out_bigwig]
@@ -440,8 +447,8 @@ def align_and_sort(
 
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                  no_dup_bam, bam_index, out_bigwig,
-                                  sample_name, out_dir)
+                                  no_dup_bam, bam_index, out_bigwig, r1_fastqc,
+                                  r2_fastqc, sample_name, out_dir)
     f.write(lines)
     f.write('wait\n\n')
 
