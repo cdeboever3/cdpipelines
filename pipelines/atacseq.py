@@ -3,6 +3,7 @@ import os
 from general import _bedgraph_to_bigwig
 from general import _bigwig_files
 from general import _fastqc
+from general import _flagstat
 from general import _make_softlink
 from general import _pbs_header
 from general import _picard_index
@@ -305,11 +306,15 @@ def align_and_sort(
     combined_r2 = os.path.join(temp_dir, 'combined_R2.fastq.gz')
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
-    no_dup_bam = os.path.join(temp_dir, 'atac_no_dup.bam')
-    bam_index = os.path.join(temp_dir, 'atac_no_dup.bam.bai')
+    no_dup_bam = os.path.join(temp_dir,
+                              '{}_atac_no_dup.bam'.format(sample_name))
+    bam_index = os.path.join(temp_dir,
+                             '{}_atac_no_dup.bam.bai'.format(sample_name))
     out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
+    stats_file = os.path.join(out_dir,
+                              '{}_atac_no_dup.bam.flagstat'.format(sample_name))
     
     # Files to copy to output directory.
     files_to_copy = [no_dup_bam, bam_index, 'Log.out', 'Log.final.out',
@@ -371,9 +376,12 @@ def align_and_sort(
     f.write(lines)
     f.write('wait\n\n')
 
-    # Index bam file.
+    # Index bam file and collect flagstats.
     lines = _picard_index(no_dup_bam, bam_index, picard_memory, picard_path,
                           temp_dir)
+    f.write(lines)
+    
+    lines = _flagstat(no_dup_bam, stats_file, samtools_path)
     f.write(lines)
     f.write('wait\n\n')
 

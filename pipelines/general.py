@@ -10,6 +10,30 @@ def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                        '{} &\n'.format(bigwig)])
     return lines
 
+def _flagstat(bam, stats_file, samtools_path):
+    """
+    Run flagstat for a bam file.
+
+    Parameters
+    ----------
+    bam : str
+        Bam file to calculate coverage for.
+
+    stats_file : str
+        File to write flagstats to.
+
+    samtools_path : str
+        Path to samtools executable.
+
+    Returns
+    -------
+    lines : str
+        Lines to be written to PBS/shell script.
+
+    """
+    lines = '{} flagstat {} > {} &\n\n'.format(samtools_path, bam, stats_file)
+    return lines
+
 def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
     """
     Make lines that create a coverage bedgraph file.
@@ -250,7 +274,7 @@ def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
                           '\t-Djava.io.tmpdir={}'.format(temp_dir),
                           '\t-jar {} BuildBamIndex'.format(picard_path),
                           '\tI={}'.format(in_bam),
-                          '\tO={}\n\n'.format(index)]))
+                          '\tO={} &\n\n'.format(index)]))
     return line
 
 def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
