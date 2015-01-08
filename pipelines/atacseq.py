@@ -6,13 +6,6 @@ from general import _pbs_header
 from general import _picard_index
 from general import _picard_remove_duplicates
 
-"""
-(1) trim, probably different amounts from either read
-(2) align (STAR)
-(3) peaks
-(4) counts for DESeq (perhaps come from peak calling alg?)
-"""
-
 def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                 threads):
     """
@@ -305,8 +298,8 @@ def align_and_sort(
     combined_r2 = os.path.join(temp_dir, 'combined_R2.fastq.gz')
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
-    no_dup_bam = os.path.join(temp_dir, 'no_dup.bam')
-    bam_index = os.path.join(temp_dir, 'no_dup.bam.bai')
+    no_dup_bam = os.path.join(temp_dir, 'atac_no_dup.bam')
+    bam_index = os.path.join(temp_dir, 'atac_no_dup.bam.bai')
     out_bigwig = os.path.join(temp_dir, '{}.bw'.format(sample_name))
     
     dup_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
