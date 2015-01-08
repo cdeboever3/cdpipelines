@@ -347,8 +347,8 @@ def align_and_sort(
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
     f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
-        ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
-        ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
+        ' \\\n'.join(['\t{}'.format(x) for x in r1_fastqs]),
+        ' \\\n'.join(['\t{}'.format(x) for x in r2_fastqs])))
     
     # Combine fastq files and run FastQC.
     f.write('cat \\\n{} \\\n\t> {} &\n'.format(
