@@ -147,22 +147,16 @@ def _process_fastqs(fastqs, temp_dir):
 
     Returns
     -------
-    fastqs : str
-        Paths to original fastq files (concatenated with a space if multiple,
-        e.g. 'path/fq1.fastq path/fq2.fastq').
-
-    temp_fastqs : str
-        Paths to temporary fastq files (concatenated with a space if multiple,
-        e.g. 'tempdir/fq1.fastq tempdir/fq2.fastq').
+    temp_fastqs : list
+        List of paths to temporary fastq files.
 
     """
     if type(fastqs) == list:
         fns = [os.path.split(x)[1] for x in fastqs]
         temp_fastqs = [os.path.join(temp_dir, x) for x in fns]
-        fastqs = ' '.join(fastqs)
     elif type(fastqs) == str:
-        temp_fastqs = os.path.join(temp_dir, os.path.split(fastqs)[1])
-    return fastqs, temp_fastqs
+        temp_fastqs = [os.path.join(temp_dir, os.path.split(fastqs)[1])]
+    return temp_fastqs
 
 def _fastqc(fastqs, threads, out_dir, fastqc_path):
     """
@@ -190,7 +184,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     """
     if type(fastqs) == list:
         fastqs = ' '.join(fastqs)
-    lines = ('{} --outdir {} --nogroup\n'.format(fastqc_path, out_dir) + 
+    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, out_dir) + 
              '\t--threads {} {}\n\n'.format(threads, fastqs))
     return lines
 
@@ -298,7 +292,7 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
                            '\t-Djava.io.tmpdir={}'.format(temp_dir), 
                            '\t-jar {} MarkDuplicates'.format(picard_path),
-                           '\tMETRICS_FILE={}',
+                           '\tMETRICS_FILE={}'.format(duplicate_metrics),
                            '\tREMOVE_DUPLICATES=TRUE',
                            '\tVALIDATION_STRINGENCY=SILENT',
                            '\tASSUME_SORTED=TRUE',

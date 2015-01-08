@@ -81,7 +81,7 @@ def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
     """
     lines = (' \\\n'.join(['{} view -hu -F 256 {} | '.format(samtools_path,
                                                              in_bam),
-                           'java -Xmx{}g -jar '.format(picard_memory),
+                           '\tjava -Xmx{}g -jar '.format(picard_memory),
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
                            '\t-Djava.io.tmpdir={}'.format(temp_dir), 
                            '\t-jar {} SortSam'.format(picard_path),
@@ -300,10 +300,12 @@ def align_and_sort(
     out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
 
     # I'm going to define some file names used later.
-    r1_fastqs, temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
-    r2_fastqs, temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
-    combined_r1 = os.path.join(temp_dir, 'combined_R1.fastq.gz')
-    combined_r2 = os.path.join(temp_dir, 'combined_R2.fastq.gz')
+    temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
+    temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
+    combined_r1 = os.path.join(temp_dir, 
+                               '{}_combined_R1.fastq.gz'.format(sample_name))
+    combined_r2 = os.path.join(temp_dir, 
+                               '{}_combined_R2.fastq.gz'.format(sample_name))
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
     no_dup_bam = os.path.join(temp_dir,
@@ -344,16 +346,21 @@ def align_and_sort(
 
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
-    f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
+    f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
     
     # Combine fastq files and run FastQC.
-    f.write('cat {} \\\n\t> {} &\n'.format(' '.join(temp_r1_fastqs), 
-                                           combined_r1))
-    f.write('cat {} \\\n\t> {}\n\n'.format(' '.join(temp_r2_fastqs), 
-                                           combined_r2))
+    f.write('cat \\\n{} \\\n\t> {} &\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+        combined_r1))
+    f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
+        combined_r2))
     f.write('wait\n\n')
-    f.write('rm {} {}\n\n'.format(' '.join(temp_r1_fastqs), 
-                                  ' '.join(temp_r2_fastqs)))
+    f.write('rm \\\n{} \\\n{}\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+        ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
     f.write('wait\n\n')
     lines = _fastqc([combined_r1, combined_r2], threads, out_dir, fastqc_path)
     f.write(lines)
