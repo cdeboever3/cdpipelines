@@ -1,5 +1,8 @@
 import os
 
+from general import _bedgraph_to_bigwig
+from general import _bigwig_files
+from general import _coverage_bedgraph
 from general import _make_softlink
 from general import _pbs_header
 from general import _process_fastqs
@@ -141,113 +144,6 @@ def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
 
     return lines
 
-def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
-                        bedtools_path):
-    bedtools_genome_path = os.path.join(
-        os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
-        'human.hg19.genome')
-    lines =  ' '.join(['{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
-                       '{}'.format(bedtools_genome_path),
-                       '{} &\n'.format(bigwig)])
-    return lines
-
-def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
-    """
-    Make lines that create a coverage bedgraph file.
-
-    Parameters
-    ----------
-    bam : str
-        Bam file to calculate coverage for.
-
-    bedgraph : str
-        Path to output bedgraph file.
-
-    bedtools_path : str
-        Path to bedtools.
-
-    sample_name : str
-        Sample name for naming files etc.
-
-    strand : str
-        If '+' or '-', calculate strand-specific coverage. Otherwise, calculate
-        coverage using all reads.
-
-    Returns
-    -------
-    lines : str
-        Lines to be written to PBS/shell script.
-
-    """
-    if strand == '+' or strand == '-':
-        if strand == '+':
-            name = '{}_plus'.format(sample_name)
-        else:
-            name = '{}_minus'.format(sample_name)
-        lines = ' \\\n'.join(['{} genomecov -ibam'.format(bedtools_path),
-                              '\t{}'.format(bam),
-                              '\t-g hg19.genome -split -bg ',
-                              '\t-strand {} -trackline'.format(strand),
-                              '\t-trackopts \'name="{}"\''.format(name),
-                              '\t> {} &\n\n'.format(bedgraph)])
-    else:
-        name = sample_name
-        lines = ' \\\n'.join(['{} genomecov -ibam'.format(bedtools_path),
-                              '\t{}'.format(bam),
-                              '\t-g hg19.genome -split -bg ',
-                              '\t-trackline'.format(strand),
-                              '\t-trackopts \'name="{}"\''.format(name),
-                              '\t> {} &\n\n'.format(bedgraph)])
-    return lines
-
-def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
-                  bedtools_path, out_bigwig_minus=''):
-    """
-    Make bigwig coverage files.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to bam file to create bigwigs for.
-
-    out_bigwig : str
-        Path to output bigwig file. If out_bigwig_minus is provided, out_bigwig
-        has the plus strand coverage.
-
-    out_bigwig_minus : str
-        Path to output bigwig file for minus strand. If out_bigwig_minus is not
-        provided, the coverage is calculated using reads from both strands and
-        written to out_bigwig.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    lines = ''
-    if out_bigwig_minus != '':
-        lines += _coverage_bedgraph(in_bam, 'plus.bg', bedtools_path,
-                                    sample_name, strand='+')
-        lines += _coverage_bedgraph(in_bam, 'minus.bg', bedtools_path,
-                                    sample_name, strand='-')
-        lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig,
-                                      bedgraph_to_bigwig_path, bedtools_path))
-        lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus,
-                                      bedgraph_to_bigwig_path, bedtools_path))
-        lines += ('\nwait\n\n')
-        lines += ('rm plus.bg minus.bg\n\n')
-    
-    else:
-        lines = _coverage_bedgraph(in_bam, 'both.bg', bedtools_path,
-                                   sample_name)
-        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig_minus,
-                                      bedgraph_to_bigwig_path, bedtools_path))
-        lines += ('wait\n\n')
-        lines += ('rm both.bg\n\n')
-    return lines
-    
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, sample_name,
                           out_dir, bigwig_minus=''):
@@ -504,13 +400,13 @@ def align_and_sort(
 
     if strand_specific:
         out_bigwig_plus = os.path.join(temp_dir,
-                                       '{}_plus.bw'.format(sample_name))
+                                       '{}_plus_rna.bw'.format(sample_name))
         out_bigwig_minus = os.path.join(temp_dir,
-                                        '{}_minus.bw'.format(sample_name))
+                                        '{}_minus_rna.bw'.format(sample_name))
         files_to_copy.append(out_bigwig_plus)
         files_to_copy.append(out_bigwig_minus)
     else:
-        out_bigwig = os.path.join(temp_dir, '{}.bw'.format(sample_name))
+        out_bigwig = os.path.join(temp_dir, '{}_rna.bw'.format(sample_name))
         files_to_copy.append(out_bigwig)
 
     try:

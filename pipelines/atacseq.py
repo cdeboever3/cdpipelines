@@ -1,5 +1,7 @@
 import os
 
+from general import _bedgraph_to_bigwig
+from general import _bigwig_files
 from general import _fastqc
 from general import _make_softlink
 from general import _pbs_header
@@ -305,7 +307,7 @@ def align_and_sort(
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
     no_dup_bam = os.path.join(temp_dir, 'atac_no_dup.bam')
     bam_index = os.path.join(temp_dir, 'atac_no_dup.bam.bai')
-    out_bigwig = os.path.join(temp_dir, '{}.bw'.format(sample_name))
+    out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
     

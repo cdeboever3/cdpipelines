@@ -19,8 +19,10 @@ class TestAlignAndSort:
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
+        fastqc_path = 'path/to/fastqc'
+        samtools_path = 'path/to/samtools'
         shell=False
-        fn = ps.rnaseq.align_and_sort(
+        fn = ps.atacseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -33,6 +35,8 @@ class TestAlignAndSort:
             picard_path,
             bedtools_path,
             bedgraph_to_bigwig_path,
+            fastqc_path,
+            samtools_path,
             shell=False
         )
         os.remove(fn)
