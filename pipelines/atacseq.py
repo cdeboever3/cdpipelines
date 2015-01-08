@@ -63,7 +63,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
     return line
 
 def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
-                               temp_dir): 
+                               samtools_path, temp_dir): 
     """
     Coordinate sort using Picard Tools while only keeping primary alignments.
 
@@ -353,7 +353,8 @@ def align_and_sort(
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
-                                       picard_path, picard_memory, temp_dir)
+                                       picard_path, picard_memory,
+                                       samtools_path, temp_dir)
     f.write(lines)
     f.write('wait\n\n')
 
