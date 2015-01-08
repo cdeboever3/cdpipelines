@@ -17,13 +17,6 @@ will need the following (available through `pip`):
 * pysam (this is available through conda but currently it's an old version so
   you have to get it using `pip`)
 
-## Submodules
-
-### Prepare
-
-The prepare module contains functions for downloading various software and
-reference files needed for the different pipelines. 
-
 ### `rpy2`
 
 Installing `rpy2` can be tricky. Different versions of `R` and `rpy2` don't work
@@ -37,7 +30,22 @@ these commands for every bash session where you want to use this `rpy2`. I'd
 recommend putting the commands in a file that you source every time you load
 the project's Anaconda environment.
 
-### RNA-seq
+## Submodules
+
+### `general`
+
+`general` contains methods used in multiple pipelines. Some pipelines use
+similar but different versions of some methods, so the pipelines will have
+their own versions of those methods. Sometimes it may make sense to add options
+to a particular method that is used in multiple pipelines (where each pipeline
+has slightly different versions) and add the method into `general`.
+
+### `prepare`
+
+The `prepare` module contains functions for downloading various software and
+reference files needed for the different pipelines. 
+
+### `rnaseq`
 
 This pipeline currently starts from fastq files and has two steps. For detailed
 information on each step, so the docstrings for each method. The first step is

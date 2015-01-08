@@ -1,9 +1,3 @@
-# This submodules has methods that are used in different pipelines. Some
-# pipelines use similar but different versions of some methods, so the
-# pipelines will have their own versions of those methods. Sometimes it may make
-# sense to add options to a particular method that is used in multiple pipelines
-# (where each pipeline has slightly different versions) and add the method here.
-
 import os
 
 def _make_softlink(fn, sample_name, link_dir):

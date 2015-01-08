@@ -64,17 +64,6 @@ class TestPicardCoordSort:
                                              picard_path, picard_memory,
                                              temp_dir)
 
-class TestPicardIndex:
-    def test_run(self):
-        """Test to make sure the function at least runs"""
-        in_bam = 'test.bam'
-        index = 'test.bam.bai'
-        picard_memory = '58G'
-        picard_path = 'path/to/picard'
-        temp_dir = 'path/to/temp/dir'
-        lines = ps.rnaseq._picard_index(in_bam, index, picard_memory,
-                                         picard_path, temp_dir)
-
 class TestBedgraphToBigwig:
     def test_run(self):
         """Test to make sure the function at least runs"""
@@ -186,6 +175,10 @@ class TestAlignAndSort:
         tracklines_file = 'tracklines.txt'
         link_dir = '.'
         web_path_file = 'web_path_file.txt'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        bedtools_path = 'path/to/bedtools'
+        bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         remove_dup=True, 
         strand_specific=False, 
         shell=False
@@ -198,6 +191,10 @@ class TestAlignAndSort:
             tracklines_file,
             link_dir,
             web_path_file,
+            star_path,
+            picard_path,
+            bedtools_path,
+            bedgraph_to_bigwig_path,
             remove_dup=True, 
             strand_specific=False, 
             shell=False
@@ -215,6 +212,10 @@ class TestAlignAndSort:
         tracklines_file = 'tracklines.txt'
         link_dir = '.'
         web_path_file = 'web_path_file.txt'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        bedtools_path = 'path/to/bedtools'
+        bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         remove_dup = False,
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
@@ -225,6 +226,10 @@ class TestAlignAndSort:
             tracklines_file,
             link_dir,
             web_path_file,
+            star_path,
+            picard_path,
+            bedtools_path,
+            bedgraph_to_bigwig_path,
             remove_dup=remove_dup
         )
         os.remove(fn)
@@ -240,6 +245,10 @@ class TestAlignAndSort:
         tracklines_file = 'tracklines.txt'
         link_dir = '.'
         web_path_file = 'web_path_file.txt'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        bedtools_path = 'path/to/bedtools'
+        bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         strand_specific = True,
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
@@ -250,6 +259,10 @@ class TestAlignAndSort:
             tracklines_file,
             link_dir,
             web_path_file,
+            star_path,
+            picard_path,
+            bedtools_path,
+            bedgraph_to_bigwig_path,
             strand_specific=strand_specific
         )
         os.remove(fn)
@@ -265,6 +278,10 @@ class TestAlignAndSort:
         tracklines_file = 'tracklines.txt'
         link_dir = '.'
         web_path_file = 'web_path_file.txt'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        bedtools_path = 'path/to/bedtools'
+        bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         shell = True 
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
@@ -275,6 +292,10 @@ class TestAlignAndSort:
             tracklines_file,
             link_dir,
             web_path_file,
+            star_path,
+            picard_path,
+            bedtools_path,
+            bedgraph_to_bigwig_path,
             shell=True
         )
         os.remove(fn)
