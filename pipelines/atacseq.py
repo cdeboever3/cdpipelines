@@ -192,6 +192,7 @@ def align_and_sort(
     bedtools_path,
     bedgraph_to_bigwig_path,
     fastqc_path,
+    samtools_path,
     rgpl='ILLUMINA',
     rgpu='',
     temp_dir='/scratch', 
@@ -256,6 +257,9 @@ def align_and_sort(
 
     fastqc_path : str
         Path to FastQC executable.
+
+    samtools_path : str
+        Path to samtools executable.
 
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
