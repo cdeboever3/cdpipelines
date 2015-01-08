@@ -17,7 +17,9 @@ will need the following (available through `pip`):
 * pysam (this is available through conda but currently it's an old version so
   you have to get it using `pip`)
 
-## Prepare
+## Submodules
+
+### Prepare
 
 The prepare module contains functions for downloading various software and
 reference files needed for the different pipelines. 
@@ -35,7 +37,7 @@ these commands for every bash session where you want to use this `rpy2`. I'd
 recommend putting the commands in a file that you source every time you load
 the project's Anaconda environment.
 
-## RNA-seq
+### RNA-seq
 
 This pipeline currently starts from fastq files and has two steps. For detailed
 information on each step, so the docstrings for each method. The first step is

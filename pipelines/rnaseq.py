@@ -1,29 +1,7 @@
 import os
 
-def _pbs_header(out, err, name, threads, queue='high'):
-    """
-    Write header for PBS script
-
-    Parameters
-    ----------
-    out : str
-        Path to file for recording standard out.
-
-    err : str
-        Path to file for recording standard error.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    lines = ('\n'.join(['#PBS -q {}'.format(queue),
-                        '#PBS -N {}'.format(name),
-                        '#PBS -l nodes=1:ppn={}'.format(threads),
-                        '#PBS -o {}'.format(out),
-                        '#PBS -e {}\n\n'.format(err)]))
-    return lines
+from general import _make_softlink
+from general import _pbs_header
 
 def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
                                  temp_dir):
@@ -161,32 +139,6 @@ def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
     lines += 'mv {} {}\n\n'.format(index, bam_index)
 
     return lines
-
-def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
-    """
-    Index bam file using Picard Tools.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to file input bam file.
-
-    index : str
-        Path to index file for input bam file.
-
-    Returns
-    -------
-    index : str
-        Path to index file for input bam file.
-
-    """
-    line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
-                          '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                          '\t-Djava.io.tmpdir={}'.format(temp_dir),
-                          '\t-jar {} BuildBamIndex'.format(picard_path),
-                          '\tI={}'.format(in_bam),
-                          '\tO={}\n\n'.format(index)]))
-    return line
 
 def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                         bedtools_path):
@@ -326,39 +278,6 @@ def _process_fastqs(fastqs, temp_dir):
     elif type(fastqs) == str:
         temp_fastqs = os.path.join(temp_dir, os.path.split(fastqs)[1])
     return fastqs, temp_fastqs
-
-def _make_softlink(fn, sample_name, link_dir):
-    """
-    Make softlink for file fn in link_dir. sample_name followed by an underscore
-    will be appended to the name of fn.
-
-    Parameters
-    ----------
-    fn : str
-        Full path to file to make link to.
-
-    sample_name : str
-        Sample name used for naming files.
-
-    link_dir : str
-        Path to directory where softlink should be made.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    name : str
-        File name for the softlink.
-
-    """
-    if sample_name not in os.path.split(fn)[1]:
-        name = '{}_{}'.format(sample_name, os.path.split(fn)[1])
-    else:
-        name = os.path.split(fn)[1]
-    lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name))
-    return lines, name
-
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, sample_name,
