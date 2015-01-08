@@ -191,7 +191,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
 def _make_softlink(fn, sample_name, link_dir):
     """
     Make softlink for file fn in link_dir. sample_name followed by an underscore
-    will be appended to the name of fn.
+    will be appended to the front of fn if the sample_name isn't in fn.
 
     Parameters
     ----------

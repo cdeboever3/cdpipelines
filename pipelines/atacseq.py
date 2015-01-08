@@ -92,8 +92,8 @@ def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
     return lines
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                          coord_sorted_bam, bam_index, bigwig, sample_name,
-                          out_dir):
+                          coord_sorted_bam, bam_index, bigwig, r1_fastqc,
+                          r2_fastqc, sample_name, out_dir):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -128,6 +128,12 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     bigwig : str
         Path to bigwig file. 
 
+    r1_fastqc : str
+        Path to fastqc_report.html for R1 reads.
+
+    r2_fastqc : str
+        Path to fastqc_report.html for R2 reads.
+
     sample_name : str
         Sample name used for naming files.
 
@@ -138,6 +144,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
 
     """
     lines = ''
+    link_dir = os.path.join(link_dir, 'atac')
+    web_path = web_path + '/atac'
 
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
@@ -148,31 +156,61 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
             tf_lines = f.read()
     else:
         tf_lines = ''
-    
-    # Bam file and index.
-    fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
-    new_lines, bam_name = _make_softlink(fn, sample_name, link_dir)
+
+    # FastQC results.
+    temp_link_dir = os.path.join(link_dir, 'fastqc')
+    temp_web_path = web_path + '/fastqc'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
+    fn = os.path.join(out_dir, os.path.split(r1_fastqc)[1])
+    new_lines, r1_name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+    fn = os.path.join(out_dir, os.path.split(r2_fastqc)[1])
+    new_lines, r2_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
     fn = os.path.join(out_dir, os.path.split(bam_index)[1])
-    new_lines, index_name = _make_softlink(fn, sample_name, link_dir)
+    new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+    
+    # Bam file and index.
+    temp_link_dir = os.path.join(link_dir, 'bam')
+    temp_web_path = web_path + '/bam'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
+    fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
+    new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+
+    fn = os.path.join(out_dir, os.path.split(bam_index)[1])
+    new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
     tf_lines += ' '.join(['track', 'type=bam',
                           'name="{}_bam"'.format(sample_name),
                           'description="ATAC-seq for {}"'.format(sample_name),
-                          'bigDataUrl={}/{}\n'.format(web_path, bam_name)])
+                          'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
     
     # Bigwig file(s).
+    temp_link_dir = os.path.join(link_dir, 'bw')
+    temp_web_path = web_path + '/bw'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
     fn = os.path.join(out_dir, os.path.split(bigwig)[1])
-    new_lines, bigwig_name = _make_softlink(fn, sample_name, link_dir)
+    new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
     tf_lines += ' '.join(['track', 'type=bigWig',
                           'name="{}_cov"'.format(sample_name),
                           ('description="ATAC-seq coverage for '
                            '{}"'.format(sample_name)),
-                          'bigDataUrl={}/{}\n'.format(web_path,
+                          'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                       bigwig_name)])
     
     with open(tracklines_file, 'w') as tf:
