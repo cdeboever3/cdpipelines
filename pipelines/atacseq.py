@@ -350,7 +350,8 @@ def align_and_sort(
     f.write('cat {} \n\t> {} &\n'.format(' '.join(temp_r1_fastqs), combined_r1))
     f.write('cat {} \n\t> {}\n\n'.format(' '.join(temp_r2_fastqs), combined_r2))
     f.write('wait\n\n')
-    f.write('rm {} {}\n\n'.format(temp_r1_fastqs, temp_r2_fastqs))
+    f.write('rm {} {}\n\n'.format(' '.join(temp_r1_fastqs), 
+                                  ' '.join(temp_r2_fastqs)))
     f.write('wait\n\n')
     lines = _fastqc([combined_r1, combined_r2], threads, out_dir, fastqc_path)
     f.write(lines)
@@ -383,7 +384,6 @@ def align_and_sort(
     
     lines = _flagstat(no_dup_bam, stats_file, samtools_path)
     f.write(lines)
-    f.write('wait\n\n')
 
     # Make bigwig files for displaying coverage.
     lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
