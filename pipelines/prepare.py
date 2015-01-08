@@ -11,6 +11,24 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
+def download_fastqc(out_dir):
+    """
+    Download Gencode GTF.
+
+    Parameters
+    ----------
+    out_dir : str
+        Directory to save Gencode GTF to.
+
+    """
+    src = ('http://www.bioinformatics.babraham.ac.uk/projects/fastqc/'
+           'fastqc_v0.11.2.zip')
+    dest = os.path.join(out_dir, 'fastqc_v0.11.2.zip')
+    req = urlopen(src)
+    with open(dest, 'w') as f:
+        shutil.copyfileobj(req, f)
+    subprocess.check_call(['unzip', '-d', out_dir, dest])
+
 def _download_and_untar(url, dest, out_dir):
     """
     Download a tarball req into out_dir and decompress it in out_dir.
