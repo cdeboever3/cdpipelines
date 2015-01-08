@@ -377,7 +377,6 @@ def align_and_sort(
     f.write(lines)
     f.write('wait\n\n')
 
-
     # Make bigwig files for displaying coverage.
     lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
                           bedgraph_to_bigwig_path, bedtools_path)
