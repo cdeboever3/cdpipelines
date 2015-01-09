@@ -331,6 +331,11 @@ def align_and_sort(
     else: 
         pbs = True
 
+    if type(r1_fastqs) == str:
+        r1_fastqs = [r1_fastqs]
+    if type(r2_fastqs) == str:
+        r2_fastqs = [r2_fastqs]
+
     temp_dir = os.path.join(temp_dir, '{}_alignment'.format(sample_name))
     out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
 
