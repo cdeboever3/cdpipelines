@@ -251,7 +251,7 @@ def _macs2(bam, sample_name, out_dir):
 
     """
     lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
-             '-g hs -n {} --outdir {}'.format(sample_name, out_dir) + 
+             '-g hs -n {} --outdir {} '.format(sample_name, out_dir) + 
              '--call-summits\n')
     
     # Add trackline to narrowPeak file from macs.
@@ -410,7 +410,8 @@ def align_and_sort(
                              '{}_atac_no_dup.bam.bai'.format(sample_name))
     out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
     
-    duplicate_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
+    duplicate_metrics = os.path.join(
+        out_dir, '{}_duplicate_metrics.txt'.format(sample_name))
     stats_file = os.path.join(out_dir,
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
     chrom_counts = os.path.join(out_dir,
@@ -435,7 +436,8 @@ def align_and_sort(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [combined_r1, combined_r2]
+    files_to_remove = [combined_r1, combined_r2, 'Aligned.out.bam',
+                       'Aligned.out.coord.sorted.bam', '_STARtmp']
 
     try:
         os.makedirs(out_dir)
@@ -529,9 +531,16 @@ def align_and_sort(
 
     if temp_dir != out_dir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy),
+            ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
+                            os.path.split(x)[1]]),
             out_dir))
-    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+        for fn in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('rsync -avz {} {}_{}\n'.format(
+                fn, os.path.join(out_dir, sample_name), os.path.split(fn)[1]))
+            f.write('rm {}\n'.format(fn))
+    
+    f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if temp_dir != out_dir:
         f.write('rm -r {}\n'.format(temp_dir))
