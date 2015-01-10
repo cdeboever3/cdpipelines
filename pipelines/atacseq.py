@@ -254,7 +254,7 @@ def _macs2(bam, sample_name, out_dir):
     """
     lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
              '-g hs -n {} --outdir {} '.format(sample_name, out_dir) + 
-             '--keep-dup --call-summits\n')
+             '--keep-dup all --call-summits\n')
     
     # Add trackline to narrowPeak file from macs.
     out = os.path.join(out_dir, '{}_peaks.narrowPeak'.format(sample_name))
