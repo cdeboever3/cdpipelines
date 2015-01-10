@@ -6,9 +6,9 @@ from general import _fastqc
 from general import _flagstat
 from general import _make_softlink
 from general import _pbs_header
-from general import _picard_index
 from general import _picard_remove_duplicates
 from general import _process_fastqs
+from general import _samtools_index
 
 def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                 threads):
@@ -495,8 +495,7 @@ def align_and_sort(
     f.write('wait\n\n')
 
     # Index bam file and collect flagstats.
-    lines = _picard_index(no_dup_bam, bam_index, picard_memory, picard_path,
-                          temp_dir)
+    lines = _samtools_index(no_dup_bam, samtools_path)
     f.write(lines)
     lines = _flagstat(no_dup_bam, stats_file, samtools_path)
     f.write(lines)

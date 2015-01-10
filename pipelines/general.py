@@ -271,6 +271,31 @@ def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
                           '\tO={} &\n\n'.format(index)]))
     return line
 
+def _samtools_index(in_bam, samtools_path, index=''):
+    """
+    Index bam file using samtools.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to file input bam file.
+
+    index : str
+        Path to index file to be written. If not provided, the index is written
+        to the samtools default {in_bam}.bai in the current working directory.
+
+    Returns
+    -------
+    index : str
+        Path to index file for input bam file.
+
+    """
+    if index == '':
+        line = 'samtools index {} &\n\n'.format(in_bam)
+    else:
+        line = 'samtools index {} {} &\n\n'.format(in_bam, index)
+    return line
+
 def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
                               picard_memory, temp_dir):
     """
