@@ -527,9 +527,10 @@ def align_and_sort(
     f.write(lines)
     f.write('wait\n\n')
 
-    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-        ' \\\n\t'.join(files_to_copy),
-        out_dir))
+    if temp_dir != out_dir:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy),
+            out_dir))
     f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if temp_dir != out_dir:
