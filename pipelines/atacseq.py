@@ -233,17 +233,16 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
-def _macs2(bam, sample_name, out_dir, macs2_path):
+def _macs2(bam, sample_name, out_dir):
     """
-    Call peaks with MACS2.
+    Call peaks with MACS2. The macs2 executable is assumed to be in your path
+    which it should be if you installed it using pip install MACS2 into your
+    python environment.
 
     Parameters
     ----------
     bam : str:
         Path to paired-end, coordinate sorted bam file.
-
-    macs2_path : str
-        Path to MACS2.
 
     Returns
     -------
@@ -251,7 +250,7 @@ def _macs2(bam, sample_name, out_dir, macs2_path):
         Lines to be printed to shell/PBS script.
 
     """
-    lines = ('{} callpeak -t {} -f BAMPE '.format(macs2_path, bam) + 
+    lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
              '-g hs -n {} --outdir {}'.format(sample_name, out_dir) + 
              '--call-summits\n')
     
@@ -283,7 +282,7 @@ def align_and_sort(
     bedgraph_to_bigwig_path,
     fastqc_path,
     samtools_path,
-    macs2_path,
+    conda_env='',
     rgpl='ILLUMINA',
     rgpu='',
     temp_dir='/scratch', 
@@ -351,6 +350,10 @@ def align_and_sort(
 
     samtools_path : str
         Path to samtools executable.
+
+    conda_env : str
+        If provided, load conda environment with this name. This will control
+        which version of MACS2 is used.
 
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
@@ -451,7 +454,9 @@ def align_and_sort(
         err = os.path.join(out_dir, '{}_alignment.err'.format(sample_name))
         job_name = '{}_align'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
-
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(temp_dir))
     f.write('cd {}\n'.format(temp_dir))
     f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
@@ -510,7 +515,7 @@ def align_and_sort(
     f.write(lines)
 
     # Call peaks
-    lines = _macs2(no_dup_bam, sample_name, out_dir, macs2_path)
+    lines = _macs2(no_dup_bam, sample_name, out_dir)
     f.write(lines)
     
     f.write('wait\n\n')
