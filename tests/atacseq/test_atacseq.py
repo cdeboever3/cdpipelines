@@ -23,7 +23,7 @@ class TestAlignAndSort:
         samtools_path = 'path/to/samtools'
         macs2_path = 'path/to/macs2'
         shell=False
-        fn = ps.atacseq.align_and_sort(
+        fn = ps.atacseq.align_and_call(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 
@@ -62,7 +62,7 @@ class TestAlignAndSort:
         samtools_path = 'path/to/samtools'
         macs2_path = 'path/to/macs2'
         shell=False
-        fn = ps.atacseq.align_and_sort(
+        fn = ps.atacseq.align_and_call(
             r1_fastqs, 
             r2_fastqs, 
             out_dir, 

@@ -269,7 +269,7 @@ def _macs2(bam, sample_name, out_dir):
     lines += 'mv {} {}\n\n'.format(temp, out)
     return lines
 
-def align_and_sort(
+def align_and_call(
     r1_fastqs, 
     r2_fastqs, 
     out_dir, 
