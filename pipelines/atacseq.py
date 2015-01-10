@@ -47,7 +47,6 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
     line = (' \\\n'.join([star_path, 
                           '\t--runThreadN {}'.format(threads - 2),
                           '\t--alignIntronMax 1',
-                          '\t--outFilterMatchNminOverLread 0.5',
                           '\t--genomeDir {}'.format(star_index), 
                           '\t--genomeLoad NoSharedMemory', 
                           '\t--readFilesCommand zcat',
@@ -190,6 +189,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     tf_lines += ' '.join(['track', 'type=bam',
                           'name="{}_bam"'.format(sample_name),
                           'description="ATAC-seq for {}"'.format(sample_name),
+                          'visibility=0',
+                          'db=hg19',
                           'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
     
     # Bigwig file(s).
@@ -207,6 +208,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           'name="{}_cov"'.format(sample_name),
                           ('description="ATAC-seq coverage for '
                            '{}"'.format(sample_name)),
+                          'visibility=0',
+                          'db=hg19',
                           'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                       bigwig_name)])
     
@@ -214,6 +217,29 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         tf.write(tf_lines)
     
     lines += '\n'
+    return lines
+
+def _macs2(bam, sample_name, out_dir, macs_path):
+    """
+    Call peaks with MACS2.
+
+    Parameters
+    ----------
+    bam : str:
+        Path to paired-end, coordinate sorted bam file.
+
+    macs_path : str
+        Path to MACS2.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    lines = ('{} callpeak -t {} -f BAMPE '.format(macs_path, bam) + 
+             '-g hs -n {} --outdir {}'.format(sample_name, out_dir) + 
+             '--call-summits\n\n')
     return lines
 
 def align_and_sort(
@@ -357,6 +383,8 @@ def align_and_sort(
     duplicate_metrics = os.path.join(out_dir, 'duplicate_metrics.txt')
     stats_file = os.path.join(out_dir,
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
+    chrom_counts = os.path.join(out_dir,
+                                '{}_chrom_counts.txt'.format(sample_name))
     
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
@@ -444,6 +472,10 @@ def align_and_sort(
     
     lines = _flagstat(no_dup_bam, stats_file, samtools_path)
     f.write(lines)
+
+    # Count the number of reads aligned to each chromosome.
+    f.write('{} view {} | cut -f 3 | uniq -c > {}\n\n'.format(
+        samtools_path, no_dup_bam, chrom_counts))
 
     # Make bigwig files for displaying coverage.
     lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,

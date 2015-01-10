@@ -249,12 +249,16 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                               'name="{}_plus_cov"'.format(sample_name),
                               ('description="RNAseq plus strand coverage for '
                                '{}"'.format(sample_name)),
+                              'visibility=0',
+                              'db=hg19',
                               'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           plus_name)])
         tf_lines += ' '.join(['track', 'type=bigWig',
                               'name="{}_minus_cov"'.format(sample_name),
                               ('description="RNAseq minus strand coverage for '
                                '{}"'.format(sample_name)),
+                              'visibility=0',
+                              'db=hg19',
                               'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           minus_name)])
     else:
@@ -266,6 +270,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                               'name="{}_cov"'.format(sample_name),
                               ('description="RNAseq coverage for '
                                '{}"'.format(sample_name)),
+                              'visibility=0',
+                              'db=hg19',
                               'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           bigwig_name)])
     
