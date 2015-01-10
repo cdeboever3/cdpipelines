@@ -223,7 +223,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+    fn = os.path.join(out_dir, os.path.split(narrow_peak)[1])
     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
