@@ -541,7 +541,12 @@ def align_and_call(
             f.write('rsync -avz {} {}_{}\n'.format(
                 y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
             f.write('rm {}\n'.format(y))
-    
+    else:
+        for y in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('mv {} {}_{}\n'.format(
+                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if temp_dir != out_dir:
