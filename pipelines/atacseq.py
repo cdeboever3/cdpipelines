@@ -258,9 +258,9 @@ def _macs2(bam, sample_name, out_dir):
     out = os.path.join(out_dir, '{}_peaks.narrowPeak'.format(sample_name))
     temp = os.path.join(out_dir, 'temp.narrowPeak')
     track_line = ' '.join(['track', 'type=narrowPeak',
-                           'name="{}_peaks"'.format(sample_name),
-                           ('description="ATAC-seq peaks for '
-                            '{}"'.format(sample_name)),
+                           'name=\\"{}_peaks\\"'.format(sample_name),
+                           ('description=\\"ATAC-seq peaks for '
+                            '{}\\"'.format(sample_name)),
                            'visibility=0',
                            'db=hg19'])
     lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
