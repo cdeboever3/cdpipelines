@@ -269,7 +269,7 @@ def _macs2(bam, sample_name, out_dir):
     lines += 'mv {} {}\n\n'.format(temp, out)
     return lines
 
-def align_and_call(
+def align_and_call_peaks(
     r1_fastqs, 
     r2_fastqs, 
     out_dir, 
@@ -394,8 +394,8 @@ def align_and_call(
     if type(r2_fastqs) == str:
         r2_fastqs = [r2_fastqs]
 
-    temp_dir = os.path.join(temp_dir, '{}_alignment'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
+    temp_dir = os.path.join(temp_dir, '{}_peaks'.format(sample_name))
+    out_dir = os.path.join(out_dir, '{}_peaks'.format(sample_name))
 
     # I'm going to define some file names used later.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
@@ -447,16 +447,16 @@ def align_and_call(
         pass
 
     if shell:
-        fn = os.path.join(out_dir, '{}_alignment.sh'.format(sample_name))
+        fn = os.path.join(out_dir, '{}_peaks.sh'.format(sample_name))
     else:
-        fn = os.path.join(out_dir, '{}_alignment.pbs'.format(sample_name))
+        fn = os.path.join(out_dir, '{}_peaks.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(out_dir, '{}_alignment.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_alignment.err'.format(sample_name))
-        job_name = '{}_align'.format(sample_name)
+        out = os.path.join(out_dir, '{}_peaks.out'.format(sample_name))
+        err = os.path.join(out_dir, '{}_peaks.err'.format(sample_name))
+        job_name = '{}_peaks'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
     if conda_env != '':
