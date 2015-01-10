@@ -216,7 +216,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                       bigwig_name)])
    
-    # Peaks.
+    # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
+    # we don't provide a trackline but rather just a URL to UCSC.
     temp_link_dir = os.path.join(link_dir, 'peak')
     temp_web_path = web_path + '/peak'
     try:
@@ -226,6 +227,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     fn = os.path.join(out_dir, os.path.split(narrow_peak)[1])
     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
+    tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
 
     with open(tracklines_file, 'w') as tf:
         tf.write(tf_lines)
@@ -252,7 +254,7 @@ def _macs2(bam, sample_name, out_dir):
     """
     lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
              '-g hs -n {} --outdir {} '.format(sample_name, out_dir) + 
-             '--call-summits\n')
+             '--keep-dup --call-summits\n')
     
     # Add trackline to narrowPeak file from macs.
     out = os.path.join(out_dir, '{}_peaks.narrowPeak'.format(sample_name))
@@ -534,11 +536,11 @@ def align_and_sort(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
                             os.path.split(x)[1]]),
             out_dir))
-        for fn in [x for x in files_to_copy if sample_name not in 
+        for y in [x for x in files_to_copy if sample_name not in 
              os.path.split(x)[1]]:
             f.write('rsync -avz {} {}_{}\n'.format(
-                fn, os.path.join(out_dir, sample_name), os.path.split(fn)[1]))
-            f.write('rm {}\n'.format(fn))
+                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+            f.write('rm {}\n'.format(y))
     
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
