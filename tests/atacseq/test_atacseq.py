@@ -21,6 +21,7 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
+        macs2_path = 'path/to/macs2'
         shell=False
         fn = ps.atacseq.align_and_sort(
             r1_fastqs, 
@@ -37,6 +38,7 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
+            macs2_path,
             shell=False
         )
         os.remove(fn)
@@ -58,6 +60,7 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
+        macs2_path = 'path/to/macs2'
         shell=False
         fn = ps.atacseq.align_and_sort(
             r1_fastqs, 
@@ -74,6 +77,7 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
+            macs2_path,
             shell=False
         )
         os.remove(fn)

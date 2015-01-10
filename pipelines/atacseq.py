@@ -93,7 +93,7 @@ def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, r1_fastqc,
-                          r2_fastqc, sample_name, out_dir):
+                          r2_fastqc, narrow_peak, sample_name, out_dir):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -133,6 +133,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
 
     r2_fastqc : str
         Path to fastqc_report.html for R2 reads.
+
+    narrow_peak : str
+        Path to narrowPeak file from MACS2.
 
     sample_name : str
         Sample name used for naming files.
@@ -212,14 +215,25 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           'db=hg19',
                           'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                       bigwig_name)])
-    
+   
+    # Peaks.
+    temp_link_dir = os.path.join(link_dir, 'peak')
+    temp_web_path = web_path + '/peak'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
+    fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+    new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+
     with open(tracklines_file, 'w') as tf:
         tf.write(tf_lines)
     
     lines += '\n'
     return lines
 
-def _macs2(bam, sample_name, out_dir, macs_path):
+def _macs2(bam, sample_name, out_dir, macs2_path):
     """
     Call peaks with MACS2.
 
@@ -228,7 +242,7 @@ def _macs2(bam, sample_name, out_dir, macs_path):
     bam : str:
         Path to paired-end, coordinate sorted bam file.
 
-    macs_path : str
+    macs2_path : str
         Path to MACS2.
 
     Returns
@@ -237,9 +251,21 @@ def _macs2(bam, sample_name, out_dir, macs_path):
         Lines to be printed to shell/PBS script.
 
     """
-    lines = ('{} callpeak -t {} -f BAMPE '.format(macs_path, bam) + 
+    lines = ('{} callpeak -t {} -f BAMPE '.format(macs2_path, bam) + 
              '-g hs -n {} --outdir {}'.format(sample_name, out_dir) + 
-             '--call-summits\n\n')
+             '--call-summits\n')
+    
+    # Add trackline to narrowPeak file from macs.
+    out = os.path.join(out_dir, '{}_peaks.narrowPeak'.format(sample_name))
+    temp = os.path.join(out_dir, 'temp.narrowPeak')
+    track_line = ' '.join(['track', 'type=narrowPeak',
+                           'name="{}_peaks"'.format(sample_name),
+                           ('description="ATAC-seq peaks for '
+                            '{}"'.format(sample_name)),
+                           'visibility=0',
+                           'db=hg19'])
+    lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
+    lines += 'mv {} {}\n\n'.format(temp, out)
     return lines
 
 def align_and_sort(
@@ -257,6 +283,7 @@ def align_and_sort(
     bedgraph_to_bigwig_path,
     fastqc_path,
     samtools_path,
+    macs2_path,
     rgpl='ILLUMINA',
     rgpu='',
     temp_dir='/scratch', 
@@ -385,6 +412,8 @@ def align_and_sort(
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
     chrom_counts = os.path.join(out_dir,
                                 '{}_chrom_counts.txt'.format(sample_name))
+    narrow_peak = os.path.join(out_dir,
+                               '{}_peaks.narrowPeak'.format(sample_name))
     
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
@@ -469,24 +498,28 @@ def align_and_sort(
     lines = _picard_index(no_dup_bam, bam_index, picard_memory, picard_path,
                           temp_dir)
     f.write(lines)
-    
     lines = _flagstat(no_dup_bam, stats_file, samtools_path)
     f.write(lines)
 
     # Count the number of reads aligned to each chromosome.
-    f.write('{} view {} | cut -f 3 | uniq -c > {}\n\n'.format(
+    f.write('{} view {} | cut -f 3 | uniq -c > {} &\n\n'.format(
         samtools_path, no_dup_bam, chrom_counts))
 
     # Make bigwig files for displaying coverage.
     lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
                           bedgraph_to_bigwig_path, bedtools_path)
     f.write(lines)
+
+    # Call peaks
+    lines = _macs2(no_dup_bam, sample_name, out_dir, macs2_path)
+    f.write(lines)
+    
     f.write('wait\n\n')
 
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                   no_dup_bam, bam_index, out_bigwig, r1_fastqc,
-                                  r2_fastqc, sample_name, out_dir)
+                                  r2_fastqc, narrow_peak, sample_name, out_dir)
     f.write(lines)
     f.write('wait\n\n')
 
