@@ -50,6 +50,22 @@ def _download_and_untar(url, dest, out_dir):
         shutil.copyfileobj(req, d)
     subprocess.check_call('tar -xf {} -C {}'.format(dest, out_dir), shell=True)
 
+def download_subread(out_dir):
+    """
+    Download Subread. Includes featureCounts.
+
+    Parameters
+    ----------
+    out_dir : str
+        Directory to save Subread to.
+
+    """
+    url = ('http://sourceforge.net/projects/subread/files/subread-1.4.6/'
+           'subread-1.4.6-Linux-x86_64.tar.gz/download')
+    dest = os.path.join(out_dir,
+                        'subread-1.4.6-Linux-x86_64.tar.gz')
+    _download_and_untar(url, dest, out_dir)
+
 def download_samtools(out_dir):
     """
     Download Samtools.
