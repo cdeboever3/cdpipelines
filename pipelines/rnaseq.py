@@ -5,6 +5,7 @@ from general import _bigwig_files
 from general import _coverage_bedgraph
 from general import _make_softlink
 from general import _pbs_header
+from general import _picard_remove_duplicates
 from general import _process_fastqs
 
 def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
@@ -302,8 +303,8 @@ def align_and_sort(
     temp_dir='/scratch', 
     threads=32, 
     picard_memory=58, 
-    remove_dup=True, 
-    strand_specific=False, 
+    remove_dup=False, 
+    strand_specific=True, 
     shell=False
 ):
     """
@@ -378,10 +379,12 @@ def align_and_sort(
         Amount of memory (in gb) to give Picard Tools.
 
     remove_dup : boolean
-        Whether to remove duplicate reads prior to alignment.
+        Whether to remove duplicate reads after alignment using Picard tools.
+        Note that duplicates are only removed from genomic alignments, not
+        transcriptomic alignments.
 
     strand_specific : boolean
-        If true, make strand specific bigwig files. 
+        If false, data is not strand specific.
 
     shell : boolean
         If true, make a shell script rather than a PBS script.
@@ -405,21 +408,36 @@ def align_and_sort(
     # I'm going to define some file names used later.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
     temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
-    r1_nodup = os.path.join(temp_dir, 'nodup_R1.fastq.gz')
-    r2_nodup = os.path.join(temp_dir, 'nodup_R2.fastq.gz')
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
-    coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
-    bam_index = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam.bai')
+    coord_sorted_bam = \
+            os.path.join(temp_dir,
+                         '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
+    if remove_dup:
+        out_bam = \
+            os.path.join(temp_dir,
+                         ('{}_Aligned.out.coord.' + 
+                          'sorted.nodup.bam'.format(sample_name)))
+        bam_index = \
+                os.path.join(temp_dir,
+                             '{}_Aligned.out.coord.' + 
+                             'sorted.nodup.bam.bai'.format(sample_name))
+    else:
+        out_bam = coord_sorted_bam
+        bam_index = \
+                os.path.join(temp_dir,
+                             '{}_Aligned.out.coord.' + 
+                             'sorted.bam.bai'.format(sample_name))
     
     # Files to copy to output directory.
-    files_to_copy = [coord_sorted_bam, bam_index, 'Log.out', 'Log.final.out',
+    # TODO: Eventually, I'd like all filenames to include the sample name.
+    files_to_copy = [out_bam, bam_index, 'Log.out', 'Log.final.out',
                      'Log.progress.out', 'SJ.out.tab',
                      'Aligned.toTranscriptome.out.bam',
                      'Aligned.out.coord.sorted.bam.md5']
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
+    # Temporary files that can be deleted at the end of the job. We likely don't
+    # want to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = temp_r1_fastqs + temp_r2_fastqs + [r1_nodup, r2_nodup]
+    files_to_remove = temp_r1_fastqs + temp_r2_fastqs
 
     if strand_specific:
         out_bigwig_plus = os.path.join(temp_dir,
@@ -454,22 +472,11 @@ def align_and_sort(
     f.write('cd {}\n'.format(temp_dir))
     f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
 
-    # Remove duplicates if desired and align.
-    if remove_dup:
-        lines = _cbarrett_paired_dup_removal(temp_r1_fastqs, temp_r2_fastqs,
-                                             r1_nodup, r2_nodup, temp_dir)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        lines = _star_align(r1_nodup, r2_nodup, sample_name, rgpl, rgpu,
-                            star_index, star_path, threads)
-        f.write(lines)
-        f.write('wait\n\n')
-    else:
-        lines = _star_align(temp_r1_fastqs, temp_r2_fastqs, sample_name, rgpl,
-                            rgpu, star_index, star_path, threads)
-        f.write(lines)
-        f.write('wait\n\n')
+    # Align reads.
+    lines = _star_align(temp_r1_fastqs, temp_r2_fastqs, sample_name, rgpl,
+                        rgpu, star_index, star_path, threads)
+    f.write(lines)
+    f.write('wait\n\n')
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, bam_index,
@@ -477,13 +484,22 @@ def align_and_sort(
     f.write(lines)
     f.write('wait\n\n')
 
+    # Remove duplicates if desired and align.
+    if remove_dup:
+        lines = _picard_remove_duplicates(coord_sorted_bam, out_bam,
+                                          duplicate_metrics,
+                                          picard_path=picard_path,
+                                          picard_memory=picard_memory,
+                                          temp_dir=temp_dir)
+        f.write(lines)
+        f.write('wait\n\n')
     # Make bigwig files for displaying coverage.
     if strand_specific:
-        lines = _bigwig_files(coord_sorted_bam, out_bigwig_plus, sample_name,
+        lines = _bigwig_files(out_bam, out_bigwig_plus, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path,
                               out_bigwig_minus=out_bigwig_minus)
     else:
-        lines = _bigwig_files(coord_sorted_bam, out_bigwig, sample_name,
+        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path)
     f.write(lines)
     f.write('wait\n\n')
@@ -491,12 +507,12 @@ def align_and_sort(
     # Make softlinks and tracklines for genome browser.
     if strand_specific:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      coord_sorted_bam, bam_index,
+                                      out_bam, bam_index,
                                       out_bigwig_plus, sample_name, out_dir,
                                       bigwig_minus=out_bigwig_minus)
     else:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      coord_sorted_bam, bam_index, out_bigwig,
+                                      out_bam, bam_index, out_bigwig,
                                       sample_name, out_dir)
     f.write(lines)
     f.write('wait\n\n')

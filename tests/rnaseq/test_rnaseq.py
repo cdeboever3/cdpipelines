@@ -301,6 +301,8 @@ class TestAlignAndSort:
         os.remove(fn)
         os.remove(tracklines_file)
 
+# TODO: Fix these tests. This is hard because _dexseq_count relies on a working
+# R installation with DEXSeq installed (to find the DEXSeq count script).
 # class TestDexseqCount:
 #     def test_run(self):
 #         """Test to make sure the function at least runs"""
