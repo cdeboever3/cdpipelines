@@ -81,4 +81,4 @@ class TestAlignAndSort:
             shell=False
         )
         os.remove(fn)
-        # os.remove(tracklines_file)
+        os.remove(tracklines_file)
