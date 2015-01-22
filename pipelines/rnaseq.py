@@ -12,7 +12,10 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
     """
     Remove duplicates from paired fastq files using UNIX sort and uniq. Read 
     pairs with exactly the same sequences are removed such that every read pair
-    has a different sequence. 
+    has a different sequence. WARNING: This does not preserve read 1 and read 2
+    designations from fastq files (i.e. the sequences for read 1 and read 2 can
+    be switched after removing duplicates). Therefore, this duplicate removal is
+    not appropriate for strand-specific data.
 
     Parameters
     ----------
