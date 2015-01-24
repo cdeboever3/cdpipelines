@@ -415,18 +415,18 @@ def align_and_sort(
     if remove_dup:
         out_bam = \
             os.path.join(temp_dir,
-                         ('{}_Aligned.out.coord.' + 
-                          'sorted.nodup.bam'.format(sample_name)))
+                         ('{}_Aligned.out.coord.'.format(sample_name) + 
+                          'sorted.nodup.bam'))
         bam_index = \
                 os.path.join(temp_dir,
-                             '{}_Aligned.out.coord.' + 
-                             'sorted.nodup.bam.bai'.format(sample_name))
+                             ('{}_Aligned.out.coord.'.format(sample_name) +
+                              'sorted.nodup.bam.bai'))
     else:
         out_bam = coord_sorted_bam
         bam_index = \
                 os.path.join(temp_dir,
-                             '{}_Aligned.out.coord.' + 
-                             'sorted.bam.bai'.format(sample_name))
+                             ('{}_Aligned.out.coord.'.format(sample_name) + 
+                              'sorted.bam.bai'))
     
     # Files to copy to output directory.
     # TODO: Eventually, I'd like all filenames to include the sample name.
