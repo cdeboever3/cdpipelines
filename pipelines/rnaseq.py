@@ -408,6 +408,10 @@ def align_and_sort(
     # I'm going to define some file names used later.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
     temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
+    if type(r1_fastqs) == list:
+        r1_fastqs = ' '.join(r1_fastqs)
+    if type(r2_fastqs) == list:
+        r2_fastqs = ' '.join(r2_fastqs)
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = \
             os.path.join(temp_dir,
