@@ -490,6 +490,9 @@ def align_and_sort(
 
     # Remove duplicates if desired and align.
     if remove_dup:
+        duplicate_metrics = \
+                os.path.join(out_dir, 
+                             '{}_duplicate_metrics.txt'.format(sample_name))
         lines = _picard_remove_duplicates(coord_sorted_bam, out_bam,
                                           duplicate_metrics,
                                           picard_path=picard_path,
