@@ -71,13 +71,11 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
 
     Parameters
     ----------
-    r1_fastqs : str
-        Gzipped R1 fastq file(s). If multiple files, each file should be
-        separated by s space and should be ordered the same as the R2 files.
+    r1_fastqs : list 
+        List of paths to gzipped R1 fastq file(s). 
 
-    r2_fastqs : str
-        Gzipped R2 fastq file(s). If multiple files, each file should be
-        separated by s space and should be ordered the same as the R1 files.
+    r2_fastqs : list 
+        List of paths to gzipped R2 fastq file(s). 
 
     sample : str
         Sample name.
@@ -89,6 +87,8 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
         Read Group platform unit (eg. run barcode). 
 
     """
+    r1_fastqs = ' '.join(r1_fastqs)
+    r2_fastqs = ' '.join(r2_fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
     line = (' \\\n'.join([star_path, 
