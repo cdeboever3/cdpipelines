@@ -444,12 +444,18 @@ def align_and_sort(
     files_to_remove = temp_r1_fastqs + temp_r2_fastqs
 
     if strand_specific:
-        out_bigwig_plus = os.path.join(temp_dir,
-                                       '{}_plus_rna.bw'.format(sample_name))
-        out_bigwig_minus = os.path.join(temp_dir,
-                                        '{}_minus_rna.bw'.format(sample_name))
-        files_to_copy.append(out_bigwig_plus)
-        files_to_copy.append(out_bigwig_minus)
+        # TODO: I need to fix how I'm calculating strand-specific coverage. The
+        # following (commented out) approach doesn't work because the R1 reads
+        # and R2 reads are always on opposite strands. I have to split the reads
+        # up based on what strand the R1 read is mapped to.
+        # out_bigwig_plus = os.path.join(temp_dir,
+        #                                '{}_plus_rna.bw'.format(sample_name))
+        # out_bigwig_minus = os.path.join(temp_dir,
+        #                                 '{}_minus_rna.bw'.format(sample_name))
+        # files_to_copy.append(out_bigwig_plus)
+        # files_to_copy.append(out_bigwig_minus)
+        out_bigwig = os.path.join(temp_dir, '{}_rna.bw'.format(sample_name))
+        files_to_copy.append(out_bigwig)
     else:
         out_bigwig = os.path.join(temp_dir, '{}_rna.bw'.format(sample_name))
         files_to_copy.append(out_bigwig)
@@ -502,9 +508,12 @@ def align_and_sort(
         f.write('wait\n\n')
     # Make bigwig files for displaying coverage.
     if strand_specific:
-        lines = _bigwig_files(out_bam, out_bigwig_plus, sample_name,
-                              bedgraph_to_bigwig_path, bedtools_path,
-                              out_bigwig_minus=out_bigwig_minus)
+        # TODO: update for strand specific eventually.
+        # lines = _bigwig_files(out_bam, out_bigwig_plus, sample_name,
+        #                       bedgraph_to_bigwig_path, bedtools_path,
+        #                       out_bigwig_minus=out_bigwig_minus)
+        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
+                              bedgraph_to_bigwig_path, bedtools_path)
     else:
         lines = _bigwig_files(out_bam, out_bigwig, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path)
@@ -513,10 +522,14 @@ def align_and_sort(
 
     # Make softlinks and tracklines for genome browser.
     if strand_specific:
+        # TODO: update for strand specific eventually.
+        # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
+        #                               out_bam, bam_index,
+        #                               out_bigwig_plus, sample_name, out_dir,
+        #                               bigwig_minus=out_bigwig_minus)
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      out_bam, bam_index,
-                                      out_bigwig_plus, sample_name, out_dir,
-                                      bigwig_minus=out_bigwig_minus)
+                                      out_bam, bam_index, out_bigwig,
+                                      sample_name, out_dir)
     else:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       out_bam, bam_index, out_bigwig,
