@@ -437,7 +437,7 @@ def align_and_sort(
     files_to_copy = [out_bam, bam_index, 'Log.out', 'Log.final.out',
                      'Log.progress.out', 'SJ.out.tab',
                      'Aligned.toTranscriptome.out.bam',
-                     'Aligned.out.coord.sorted.bam.md5']
+                     '{}_Aligned.out.coord.sorted.bam.md5'.format(sample_name)]
     # Temporary files that can be deleted at the end of the job. We likely don't
     # want to delete the temp directory if the temp and output directory are the
     # same.
