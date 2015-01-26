@@ -550,7 +550,7 @@ def align_and_sort(
     return fn
 
 def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
-                  stranded=False, samtools_path='.'):
+                  strand_specific=False, samtools_path='.'):
     """
     Count reads overlapping exonic bins for DEXSeq.
 
@@ -568,7 +568,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     paired : boolean
         True if the data is paired-end. False otherwise.
 
-    stranded : boolean
+    strand_specific : boolean
         True if the data is strand-specific. False otherwise.
 
     Returns
@@ -591,7 +591,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
         p = 'yes'
     else:
         p = 'no'
-    if stranded:
+    if strand_specific:
         s = 'yes'
     else:
         s = 'no'
@@ -604,7 +604,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     return lines
 
 def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
-                 stranded=False):
+                 strand_specific=False):
     """
     Count reads overlapping genes for use with DESeq etc.
 
@@ -622,7 +622,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
     gtf : str
         Path to GTF file to count against. Optimized for use with Gencode GTF.
 
-    stranded : boolean
+    strand_specific : boolean
         True if the data is strand-specific. False otherwise.
 
     Returns
@@ -635,7 +635,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
 
     """
     import HTSeq
-    if stranded:
+    if strand_specific:
         s = 'yes'
     else:
         s = 'no'
@@ -653,7 +653,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
 
 def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
                samtools_path, conda_env='', rpy2_file='', paired=True,
-               stranded=False, shell=False):
+               strand_specific=False, shell=False):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
     and exonic bins for DEXSeq.
@@ -687,7 +687,7 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     paired : boolean
         True if the data is paired-end. False otherwise.
 
-    stranded : boolean
+    strand_specific : boolean
         True if the data is strand-specific. False otherwise.
 
     shell : boolean
@@ -746,11 +746,12 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
         f.write('source {}\n\n'.format(rpy2_file))
 
     lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
-                          paired=True, stranded=stranded,
+                          paired=True, strand_specific=strand_specific,
                           samtools_path=samtools_path)
     f.write(lines)
     lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
-                         stranded=stranded, samtools_path=samtools_path)
+                         strand_specific=strand_specific,
+                         samtools_path=samtools_path)
     f.write(lines)
     f.write('wait\n\n')
     
