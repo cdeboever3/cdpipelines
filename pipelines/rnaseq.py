@@ -91,7 +91,6 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
     r2_fastqs.sort()
     r1_fastqs = ','.join(r1_fastqs)
     r2_fastqs = ','.join(r2_fastqs)
-    fastqs = ' '.join(fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
     line = (' \\\n'.join([star_path, 
