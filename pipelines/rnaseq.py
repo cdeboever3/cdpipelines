@@ -89,10 +89,8 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
     """
     r1_fastqs.sort()
     r2_fastqs.sort()
-    fastqs = []
-    for i in range(len(r1_fastqs)):
-        fastqs.append(r1_fastqs[i])
-        fastqs.append(r2_fastqs[i])
+    r1_fastqs = ','.join(r1_fastqs)
+    r2_fastqs = ','.join(r2_fastqs)
     fastqs = ' '.join(fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
@@ -101,7 +99,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                           '\t--genomeDir {}'.format(star_index), 
                           '\t--genomeLoad NoSharedMemory', 
                           '\t--readFilesCommand zcat',
-                          '\t--readFilesIn {}'.format(fastqs),
+                          '\t--readFilesIn {} {}'.format(r1_fastqs, r2_fastqs),
                           '\t--outSAMtype BAM Unsorted', 
                           '\t--outSAMattributes All', 
                           '\t--outSAMunmapped Within',
