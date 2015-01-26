@@ -87,8 +87,13 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
         Read Group platform unit (eg. run barcode). 
 
     """
-    r1_fastqs = ' '.join(r1_fastqs)
-    r2_fastqs = ' '.join(r2_fastqs)
+    r1_fastqs.sort()
+    r2_fastqs.sort()
+    fastqs = []
+    for i in range(len(r1_fastqs)):
+        fastqs.append(r1_fastqs[i])
+        fastqs.append(r2_fastqs[i])
+    fastqs = ' '.join(fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
     line = (' \\\n'.join([star_path, 
@@ -96,8 +101,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                           '\t--genomeDir {}'.format(star_index), 
                           '\t--genomeLoad NoSharedMemory', 
                           '\t--readFilesCommand zcat',
-                          '\t--readFilesIn {} {}'.format(r1_fastqs, 
-                                                         r2_fastqs),
+                          '\t--readFilesIn {}'.format(fastqs),
                           '\t--outSAMtype BAM Unsorted', 
                           '\t--outSAMattributes All', 
                           '\t--outSAMunmapped Within',
