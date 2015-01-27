@@ -592,7 +592,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     else:
         p = 'no'
     if strand_specific:
-        s = 'yes'
+        s = 'reverse'
     else:
         s = 'no'
     lines = (
@@ -636,7 +636,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
     """
     import HTSeq
     if strand_specific:
-        s = 'yes'
+        s = 'reverse'
     else:
         s = 'no'
     script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
