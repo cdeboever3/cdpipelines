@@ -201,12 +201,11 @@ def download_picard(out_dir):
         Directory to save Picard tools to.
 
     """
-    url = 'https://github.com/broadinstitute/picard/tarball/master'
-    dest = os.path.join(out_dir,
-                        'broadinstitute-picard-1.127-9-g6fd825a.tar.gz')
+    url = 'https://github.com/broadinstitute/picard/archive/1.128.tar.gz'
+    dest = os.path.join(out_dir, '1.128.tar.gz')
     _download_and_untar(url, dest, out_dir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(out_dir, 'broadinstitute-picard-04ec0ac'))
+    os.chdir(os.path.join(out_dir, 'picard-1.128'))
     subprocess.check_call('ant -lib lib/ant clone-htsjdk package-commands',
                           shell=True)
     os.chdir(cwd)
