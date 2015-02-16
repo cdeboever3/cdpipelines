@@ -11,6 +11,21 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
+def download_fastx_toolkit(outdir):
+    """
+    Download FASTX Toolkit. 
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save FASTX Toolkit.
+
+    """
+    src = ('https://github.com/agordon/fastx_toolkit/releases/download/'
+           '0.0.14/fastx_toolkit-0.0.14.tar.bz2')
+    dest = os.path.join(outdir, 'fastx_toolkit-0.0.14.tar.bz2')
+    _download_and_untar(src, dest, outdir)
+
 def download_fastqc(out_dir):
     """
     Download Gencode GTF.
