@@ -1,5 +1,39 @@
 import os
 
+def _cutadapt_trim(fastq, length, out, bg=False):
+    """
+    Cut a specified number of bases from a fastq file using cutadapt. Cutadapt
+    should be installed in your python environment.
+
+    Parameters
+    ----------
+    fastq : str
+        Fastq or gzipped/bzipped fastq.
+
+    length : int
+        Positive or negative integer. Positive numbers remove bases at the front
+        of the read and negative numbers remove bases at the end of the read.
+
+    out : str
+        Path to output (optionally gzipped/bzipped) fastq files.
+
+    bg : boolean
+        Whether to run the process in the background (i.e. include an ampersand
+        at the end of the command).
+
+    Returns
+    -------
+    lines : str
+        Lines to be written to PBS/shell script.
+
+    """
+    line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
+    if bg:
+        line += ' &\n'
+    else:
+        line += '\n'
+    return line
+
 def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                         bedtools_path):
     bedtools_genome_path = os.path.join(

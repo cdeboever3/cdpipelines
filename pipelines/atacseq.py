@@ -2,6 +2,7 @@ import os
 
 from general import _bedgraph_to_bigwig
 from general import _bigwig_files
+from general import _cutadapt_trim
 from general import _fastqc
 from general import _flagstat
 from general import _make_softlink
@@ -290,7 +291,8 @@ def align_and_call_peaks(
     temp_dir='/scratch', 
     threads=32, 
     picard_memory=58, 
-    shell=False
+    shell=False,
+    trim=None,
 ):
     """
     Make a PBS or shell script for aligning ATAC-seq reads with STAR. The
@@ -375,6 +377,10 @@ def align_and_call_peaks(
 
     shell : boolean
         If true, make a shell script rather than a PBS script.
+    
+    trim : int
+        Positive or negative integer. Positive numbers remove bases at the front
+        of the read and negative numbers remove bases at the end of the read.
 
     Returns
     -------
@@ -483,8 +489,30 @@ def align_and_call_peaks(
     f.write(lines)
     f.write('wait\n\n')
 
+    # Optionally trim.
+    if trim:
+        assert(type(trim) is int)
+        trimmed_r1 = os.path.join(
+            temp_dir, '{}_trimmed_R1.fastq.gz'.format(sample_name))
+        trimmed_r2 = os.path.join(
+            temp_dir, '{}_trimmed_R2.fastq.gz'.format(sample_name))
+        files_to_remove.append(trimmed_r1)
+        files_to_remove.append(trimmed_r2)
+        lines = _cutadapt_trim(combined_r1, trim, trimmed_r1, bg=True)
+        lines += _cutadapt_trim(combined_r2, trim, trimmed_r2, bg=True)
+        to_align_r1 = trimmed_r1
+        to_align_r2 = trimmed_r2
+        f.write(lines)
+        f.write('\nwait\n\n')
+        lines = _fastqc([trimmed_r1, trimmed_r2], threads, out_dir, fastqc_path)
+        f.write(lines)
+        f.write('wait\n\n')
+    else:
+        to_align_r1 = combined_r1
+        to_align_r2 = combined_r2
+
     # Align with STAR.
-    lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
+    lines = _star_align(combined_r1, to_align_r1, to_align_r2, rgpl,
                         rgpu, star_index, star_path, threads)
     f.write(lines)
     f.write('wait\n\n')
