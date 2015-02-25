@@ -192,7 +192,7 @@ def _process_fastqs(fastqs, temp_dir):
         temp_fastqs = [os.path.join(temp_dir, os.path.split(fastqs)[1])]
     return temp_fastqs
 
-def _fastqc(fastqs, threads, out_dir, fastqc_path):
+def _fastqc(fastqs, threads, outdir, fastqc_path):
     """
     Run FastQC
 
@@ -204,7 +204,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     threads : int
         Number of threads to run FastQC with.
 
-    out_dir : str
+    outdir : str
         Path to directory to store FastQC results to.
 
     fastqc_path : str
@@ -218,7 +218,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     """
     if type(fastqs) == list:
         fastqs = ' '.join(fastqs)
-    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, out_dir) + 
+    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, outdir) + 
              '\t--extract --threads {} {}\n\n'.format(threads, fastqs))
     return lines
 

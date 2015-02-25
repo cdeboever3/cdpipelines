@@ -151,7 +151,7 @@ def _picard_coord_sort(in_bam, out_bam, bam_index, picard_path, picard_memory,
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, sample_name,
-                          out_dir, bigwig_minus=''):
+                          outdir, bigwig_minus=''):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -221,11 +221,11 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
+    fn = os.path.join(outdir, os.path.split(coord_sorted_bam)[1])
     new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
-    fn = os.path.join(out_dir, os.path.split(bam_index)[1])
+    fn = os.path.join(outdir, os.path.split(bam_index)[1])
     new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
@@ -242,11 +242,11 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     except OSError:
         pass
     if bigwig_minus != '':
-        fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+        fn = os.path.join(outdir, os.path.split(bigwig)[1])
         new_lines, plus_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
         
-        fn = os.path.join(out_dir, os.path.split(bigwig_minus)[1])
+        fn = os.path.join(outdir, os.path.split(bigwig_minus)[1])
         new_lines, minus_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
 
@@ -267,7 +267,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                               'bigDataUrl={}/{}\n'.format(temp_web_path,
                                                           minus_name)])
     else:
-        fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+        fn = os.path.join(outdir, os.path.split(bigwig)[1])
         new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
         lines += new_lines
 
@@ -289,7 +289,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
 def align_and_sort(
     r1_fastqs, 
     r2_fastqs, 
-    out_dir, 
+    outdir, 
     sample_name, 
     star_index,
     tracklines_file,
@@ -322,7 +322,7 @@ def align_and_sort(
         Either a list of paths to gzipped fastq files with R2 reads or path to a
         single gzipped fastq file with R2 reads.
 
-    out_dir : str
+    outdir : str
         Directory to store PBS/shell file and aligment results.
 
     sample_name : str
@@ -404,7 +404,7 @@ def align_and_sort(
         pbs = True
 
     temp_dir = os.path.join(temp_dir, '{}_alignment'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_alignment'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_alignment'.format(sample_name))
 
     # I'm going to define some file names used later.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
@@ -462,20 +462,20 @@ def align_and_sort(
         files_to_copy.append(out_bigwig)
 
     try:
-        os.makedirs(out_dir)
+        os.makedirs(outdir)
     except OSError:
         pass
 
     if shell:
-        fn = os.path.join(out_dir, '{}_alignment.sh'.format(sample_name))
+        fn = os.path.join(outdir, '{}_alignment.sh'.format(sample_name))
     else:
-        fn = os.path.join(out_dir, '{}_alignment.pbs'.format(sample_name))
+        fn = os.path.join(outdir, '{}_alignment.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(out_dir, '{}_alignment.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_alignment.err'.format(sample_name))
+        out = os.path.join(outdir, '{}_alignment.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_alignment.err'.format(sample_name))
         job_name = '{}_align'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
 
@@ -498,7 +498,7 @@ def align_and_sort(
     # Remove duplicates if desired and align.
     if remove_dup:
         duplicate_metrics = \
-                os.path.join(out_dir, 
+                os.path.join(outdir, 
                              '{}_duplicate_metrics.txt'.format(sample_name))
         lines = _picard_remove_duplicates(coord_sorted_bam, out_bam,
                                           duplicate_metrics,
@@ -526,24 +526,24 @@ def align_and_sort(
         # TODO: update for strand specific eventually.
         # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
         #                               out_bam, bam_index,
-        #                               out_bigwig_plus, sample_name, out_dir,
+        #                               out_bigwig_plus, sample_name, outdir,
         #                               bigwig_minus=out_bigwig_minus)
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       out_bam, bam_index, out_bigwig,
-                                      sample_name, out_dir)
+                                      sample_name, outdir)
     else:
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       out_bam, bam_index, out_bigwig,
-                                      sample_name, out_dir)
+                                      sample_name, outdir)
     f.write(lines)
     f.write('wait\n\n')
 
     f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
         ' \\\n\t'.join(files_to_copy),
-        out_dir))
+        outdir))
     f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != out_dir:
+    if temp_dir != outdir:
         f.write('rm -r {}\n'.format(temp_dir))
     f.close()
 
@@ -651,7 +651,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
 
     return lines
 
-def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
+def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
                samtools_path, conda_env='', rpy2_file='', paired=True,
                strand_specific=False, shell=False):
     """
@@ -663,7 +663,7 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     bam : str
         Coordinate sorted bam file (genomic coordinates).
 
-    out_dir : str
+    outdir : str
         Directory to store PBS/shell file and aligment results.
 
     sample_name : str
@@ -702,13 +702,13 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
         pbs = True
 
     temp_dir = os.path.join(temp_dir, '{}_counts'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_counts'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_counts'.format(sample_name))
 
     # I'm going to define some file names used later.
     temp_bam = os.path.join(temp_dir, os.path.split(bam)[1])
-    dexseq_counts = os.path.join(out_dir, 'dexseq_counts.tsv')
-    gene_counts = os.path.join(out_dir, 'gene_counts.tsv')
-    gene_count_stats = os.path.join(out_dir, 'gene_count_stats.tsv')
+    dexseq_counts = os.path.join(outdir, 'dexseq_counts.tsv')
+    gene_counts = os.path.join(outdir, 'gene_counts.tsv')
+    gene_count_stats = os.path.join(outdir, 'gene_count_stats.tsv')
     
     # Files to copy to output directory.
     files_to_copy = []
@@ -719,20 +719,20 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     files_to_remove = []
 
     try:
-        os.makedirs(out_dir)
+        os.makedirs(outdir)
     except OSError:
         pass
 
     if shell:
-        fn = os.path.join(out_dir, '{}_counts.sh'.format(sample_name))
+        fn = os.path.join(outdir, '{}_counts.sh'.format(sample_name))
     else:
-        fn = os.path.join(out_dir, '{}_counts.pbs'.format(sample_name))
+        fn = os.path.join(outdir, '{}_counts.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(out_dir, '{}_counts.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_counts.err'.format(sample_name))
+        out = os.path.join(outdir, '{}_counts.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_counts.err'.format(sample_name))
         job_name = '{}_counts'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
 
@@ -758,11 +758,11 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     if len(files_to_copy) > 0:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join(files_to_copy),
-            out_dir))
+            outdir))
     if len(files_to_remove) > 0:
         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != out_dir:
+    if temp_dir != outdir:
         f.write('rm -r {}\n'.format(temp_dir))
     f.close()
 
