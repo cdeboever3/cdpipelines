@@ -359,7 +359,8 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
                            '\tO={}\n'.format(out_bam)]))
     return lines
 
-def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name):
+def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
+                     outdir, tempdir, conda_env='', shell=False):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
@@ -375,6 +376,22 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name):
 
     snp_dir : str
         Path to directory containing SNP input files for WASP.
+    
+    sample_name : str
+        Sample name used for naming files etc.
+
+    outdir : str
+        Directory to store PBS/shell file and aligment results.
+
+    tempdir : str
+        Directory to store temporary files.
+
+    conda_env : str
+        If provided, load conda environment with this name.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+
     """
     if shell:
         pbs = False
@@ -427,14 +444,23 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name):
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
-        ' \\\n'.join(['\t{}'.format(x) for x in r1_fastqs]),
-        ' \\\n'.join(['\t{}'.format(x) for x in r2_fastqs])))
-    
-    
+    f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(bam, temp_bam))
     
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
 
     f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
                                             temp_bam, snps_dir))
+    
+    if len(files_to_copy) > 0:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy),
+            outdir))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
