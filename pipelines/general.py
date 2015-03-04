@@ -166,7 +166,7 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
         lines += ('rm both.bg\n\n')
     return lines
     
-def _process_fastqs(fastqs, temp_dir):
+def _process_fastqs(fastqs, tempdir):
     """
     Create list of temporary fastq paths.
 
@@ -176,7 +176,7 @@ def _process_fastqs(fastqs, temp_dir):
         Either a list of paths to gzipped fastq files or path to a single
         gzipped fastq file.
 
-    temp_dir : str
+    tempdir : str
         Path to temporary directory where fastq files will be copied to.
 
     Returns
@@ -187,12 +187,12 @@ def _process_fastqs(fastqs, temp_dir):
     """
     if type(fastqs) == list:
         fns = [os.path.split(x)[1] for x in fastqs]
-        temp_fastqs = sorted([os.path.join(temp_dir, x) for x in fns])
+        temp_fastqs = sorted([os.path.join(tempdir, x) for x in fns])
     elif type(fastqs) == str:
-        temp_fastqs = [os.path.join(temp_dir, os.path.split(fastqs)[1])]
+        temp_fastqs = [os.path.join(tempdir, os.path.split(fastqs)[1])]
     return temp_fastqs
 
-def _fastqc(fastqs, threads, out_dir, fastqc_path):
+def _fastqc(fastqs, threads, outdir, fastqc_path):
     """
     Run FastQC
 
@@ -204,7 +204,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     threads : int
         Number of threads to run FastQC with.
 
-    out_dir : str
+    outdir : str
         Path to directory to store FastQC results to.
 
     fastqc_path : str
@@ -218,7 +218,7 @@ def _fastqc(fastqs, threads, out_dir, fastqc_path):
     """
     if type(fastqs) == list:
         fastqs = ' '.join(fastqs)
-    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, out_dir) + 
+    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, outdir) + 
              '\t--extract --threads {} {}\n\n'.format(threads, fastqs))
     return lines
 
@@ -279,7 +279,7 @@ def _pbs_header(out, err, name, threads, queue='high'):
                         '#PBS -e {}\n\n'.format(err)]))
     return lines
 
-def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
+def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
     """
     Index bam file using Picard Tools.
 
@@ -299,7 +299,7 @@ def _picard_index(in_bam, index, picard_memory, picard_path, temp_dir):
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                          '\t-Djava.io.tmpdir={}'.format(temp_dir),
+                          '\t-Djava.io.tmpdir={}'.format(tempdir),
                           '\t-jar {} BuildBamIndex'.format(picard_path),
                           '\tI={}'.format(in_bam),
                           '\tO={} &\n\n'.format(index)]))
@@ -331,7 +331,7 @@ def _samtools_index(in_bam, samtools_path, index=''):
     return line
 
 def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
-                              picard_memory, temp_dir):
+                              picard_memory, tempdir):
     """
     Coordinate sort using Picard Tools.
 
@@ -349,7 +349,7 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
     """
     lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(temp_dir), 
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
                            '\t-jar {} MarkDuplicates'.format(picard_path),
                            '\tMETRICS_FILE={}'.format(duplicate_metrics),
                            '\tREMOVE_DUPLICATES=TRUE',
@@ -358,3 +358,83 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
                            '\tI={}'.format(in_bam), 
                            '\tO={}\n'.format(out_bam)]))
     return lines
+
+def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name):
+    """
+    Write pbs or shell script for identifying reads in a bam file that overlap
+    specified variants and switching the variant allele. This is done using
+    find_intersecting_snps.py from WASP.
+
+    Parameters
+    ----------
+    bam : str
+        Path to input bam file.
+
+    find_intersecting_snps_path : str
+        Path to find_intersecting_snps.py script.
+
+    snp_dir : str
+        Path to directory containing SNP input files for WASP.
+    """
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+    
+    jobname = '{}_wasp_allele_swap'.format(sample_name)
+
+    tempdir = os.path.join(tempdir, jobname)
+    outdir = os.path.join(outdir, jobname)
+
+    # I'm going to define some file names used later.
+    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+    
+    # Files to copy to output directory.
+    prefix = os.path.splitext(os.path.split(bam)[1])[0]
+    files_to_copy = [
+        '{}.keep.bam'.format(prefix),
+        '{}.remap.fq1.gz'.format(prefix),
+        '{}.remap.fq2.gz'.format(prefix),
+        '{}.sort.bam'.format(prefix),
+        '{}.to.remap.bam'.format(prefix),
+        '{}.to.remap.num.gz'.format(prefix)
+    ]
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+    if os.path.realpath(temp_bam) != os.path.realpath(bam):
+        files_to_remove.append(temp_bam)
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}.sh'.format(jobname))
+    else:
+        fn = os.path.join(outdir, '{}.pbs'.format(jobname))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}.out'.format(jobname))
+        err = os.path.join(outdir, '{}.err'.format(jobname))
+        f.write(_pbs_header(out, err, jobname, threads))
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in r1_fastqs]),
+        ' \\\n'.join(['\t{}'.format(x) for x in r2_fastqs])))
+    
+    
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
+
+    f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
+                                            temp_bam, snps_dir))
