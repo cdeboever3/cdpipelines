@@ -717,7 +717,7 @@ def wasp_remap(
         ' \\\n'.join(['\t{}'.format(x) for x in [r1_fastq, r2_fastq]])))
     
     # Align with STAR.
-    lines = _star_align(to_align_r1, to_align_r2, sample_name, rgpl,
+    lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
                         rgpu, star_index, star_path, threads)
     f.write(lines)
     f.write('wait\n\n')
