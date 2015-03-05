@@ -1,7 +1,7 @@
 import os
 
 def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
-                       temp_dir, bam_index=None):
+                       tempdir, bam_index=None):
     """
     Coordinate sort using Picard Tools.
 
@@ -20,7 +20,7 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
     if bam_index:
         lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                                '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                               '\t-Djava.io.tmpdir={}'.format(temp_dir), 
+                               '\t-Djava.io.tmpdir={}'.format(tempdir), 
                                '\t-jar {} SortSam'.format(picard_path),
                                '\tVALIDATION_STRINGENCY=SILENT',
                                '\tCREATE_INDEX=TRUE', 
@@ -33,7 +33,7 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
     else:
         lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                                '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                               '\t-Djava.io.tmpdir={}'.format(temp_dir), 
+                               '\t-Djava.io.tmpdir={}'.format(tempdir), 
                                '\t-jar {} SortSam'.format(picard_path),
                                '\tVALIDATION_STRINGENCY=SILENT',
                                '\tCREATE_MD5_FILE=TRUE',
@@ -44,7 +44,7 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
     return lines
 
 def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
-                               samtools_path, temp_dir): 
+                               samtools_path, tempdir): 
     """
     Coordinate sort using Picard Tools while only keeping primary alignments.
 
@@ -61,7 +61,7 @@ def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
                                                              in_bam),
                            '\tjava -Xmx{}g -jar '.format(picard_memory),
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(temp_dir), 
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
                            '\t-jar {} SortSam'.format(picard_path),
                            '\tVALIDATION_STRINGENCY=SILENT',
                            '\tI=/dev/stdin',
@@ -590,17 +590,18 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     temp_to_remap_bam = os.path.join(tempdir, os.path.split(to_remap_bam)[1])
     temp_to_remap_num = os.path.join(tempdir, os.path.split(to_remap_num)[1])
     temp_remapped_bam = os.path.join(tempdir, os.path.split(remapped_bam)[1])
-    temp_final_bam = os.path.join(tempdir,
-                                  '{}_filtered.bam'.format(sample_name))
-    temp_final_bam_index = os.path.join(
-        tempdir, '{}_filtered.bam.bai'.format(sample_name))
+    temp_filtered_bam = os.path.join(
+        tempdir, '{}_filtered.bam'.format(sample_name))
+    coord_sorted_bam = os.path.join(
+        tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
+    bam_index = coord_sorted_bam + '.bai'
     
     # Files to copy to output directory.
-    files_to_copy = [temp_final_bam, temp_final_bam_index]
+    files_to_copy = [coord_sorted_bam, bam_index]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = []
+    files_to_remove = [temp_filtered_bam]
     if os.path.realpath(temp_to_remap_bam) != os.path.realpath(to_remap_bam):
         files_to_remove.append(temp_to_remap_bam)
     if os.path.realpath(temp_to_remap_num) != os.path.realpath(to_remap_num):
@@ -638,10 +639,11 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     
     f.write('python {} -p {} {} {} {}\n\n'.format(
         filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
-        temp_final_bam, temp_to_remap_num))
+        temp_filtered_bam, temp_to_remap_num))
 
-    lines = _picard_index(temp_final_bam, temp_final_bam_index, picard_memory,
-                          picard_path, tempdir)
+    # Coordinate sort and index.
+    lines = _picard_coord_sort(temp_filtered_bam, coord_sorted_bam, picard_path,
+                               picard_memory, tempdir, bam_index=bam_index)
     f.write(lines)
     f.write('\nwait\n\n')
     
@@ -661,7 +663,7 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 def wasp_remap(
     r1_fastq, 
     r2_fastq, 
-    out_dir, 
+    outdir, 
     sample_name, 
     star_index,
     star_path,
@@ -671,7 +673,7 @@ def wasp_remap(
     conda_env='',
     rgpl='ILLUMINA',
     rgpu='',
-    temp_dir='/scratch', 
+    tempdir='/scratch', 
     threads=32, 
     picard_memory=58, 
     shell=False,
@@ -688,7 +690,7 @@ def wasp_remap(
     r2_fastq : str
         R2 reads from find_intersecting_snps.py to be remapped.
 
-    out_dir : str
+    outdir : str
         Directory to store PBS/shell file and aligment results.
 
     sample_name : str
@@ -719,7 +721,7 @@ def wasp_remap(
     rgpu : str
         Read Group platform unit (eg. run barcode). 
 
-    temp_dir : str
+    tempdir : str
         Directory to store files as STAR runs.
 
     threads : int
@@ -748,15 +750,15 @@ def wasp_remap(
     else: 
         pbs = True
 
-    temp_dir = os.path.join(temp_dir, '{}_wasp_remap'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_wasp_remap'.format(sample_name))
+    tempdir = os.path.join(tempdir, '{}_wasp_remap'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_wasp_remap'.format(sample_name))
 
     # I'm going to define some file names used later.
-    temp_r1 = os.path.join(temp_dir, os.path.split(r1_fastq)[1])
-    temp_r2 = os.path.join(temp_dir, os.path.split(r2_fastq)[1])
-    aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
+    temp_r1 = os.path.join(tempdir, os.path.split(r1_fastq)[1])
+    temp_r2 = os.path.join(tempdir, os.path.split(r2_fastq)[1])
+    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(
-        temp_dir, '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
+        tempdir, '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
     bam_index = coord_sorted_bam + '.bai'
     
     # Files to copy to output directory.
@@ -766,7 +768,7 @@ def wasp_remap(
     # to delete the temp directory if the temp and output directory are the
     # same.
     files_to_remove = ['Aligned.out.bam', '_STARtmp']
-    if os.path.realpath(temp_dir) != os.path.realpath(out_dir):
+    if os.path.realpath(tempdir) != os.path.realpath(outdir):
         files_to_remove.append('Aligned.out.coord.sorted.bam')
     if os.path.realpath(temp_r1) != os.path.realpath(r1_fastq):
         files_to_remove.append(temp_r1)
@@ -774,27 +776,27 @@ def wasp_remap(
         files_to_remove.append(temp_r2)
 
     try:
-        os.makedirs(out_dir)
+        os.makedirs(outdir)
     except OSError:
         pass
 
     if shell:
-        fn = os.path.join(out_dir, '{}_wasp_remap.sh'.format(sample_name))
+        fn = os.path.join(outdir, '{}_wasp_remap.sh'.format(sample_name))
     else:
-        fn = os.path.join(out_dir, '{}_wasp_remap.pbs'.format(sample_name))
+        fn = os.path.join(outdir, '{}_wasp_remap.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(out_dir, '{}_wasp_remap.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_wasp_remap.err'.format(sample_name))
+        out = os.path.join(outdir, '{}_wasp_remap.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_wasp_remap.err'.format(sample_name))
         job_name = '{}_wasp_remap'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(temp_dir))
-    f.write('cd {}\n'.format(temp_dir))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in [r1_fastq, r2_fastq]])))
     
@@ -806,7 +808,7 @@ def wasp_remap(
         f.write(lines)
         f.write('wait\n\n')
         lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                                   picard_memory, temp_dir)
+                                   picard_memory, tempdir)
         f.write(lines)
         f.write('wait\n\n')
     
@@ -818,30 +820,30 @@ def wasp_remap(
         f.write('wait\n\n')
         lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
                                            picard_path, picard_memory,
-                                           samtools_path, temp_dir)
+                                           samtools_path, tempdir)
         f.write(lines)
         f.write('wait\n\n')
 
-    if temp_dir != out_dir:
+    if tempdir != outdir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
                             os.path.split(x)[1]]),
-            out_dir))
+            outdir))
         for y in [x for x in files_to_copy if sample_name not in 
              os.path.split(x)[1]]:
             f.write('rsync -avz {} {}_{}\n'.format(
-                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
             f.write('rm {}\n'.format(y))
     else:
         for y in [x for x in files_to_copy if sample_name not in 
              os.path.split(x)[1]]:
             f.write('mv {} {}_{}\n'.format(
-                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
 
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != out_dir:
-        f.write('rm -r {}\n'.format(temp_dir))
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
     return fn
