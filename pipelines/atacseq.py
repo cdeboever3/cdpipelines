@@ -671,7 +671,7 @@ def wasp_remap(
 
     # I'm going to define some file names used later.
     temp_r1 = os.path.join(temp_dir, os.path.split(r1_fastq)[1])
-    temp_r2 = os.path.join(temp_dir, os.path.split(r2_fastq)[2])
+    temp_r2 = os.path.join(temp_dir, os.path.split(r2_fastq)[1])
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
     bam_index = os.path.join(
