@@ -412,7 +412,6 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
         '{}.keep.bam'.format(prefix),
         '{}.remap.fq1.gz'.format(prefix),
         '{}.remap.fq2.gz'.format(prefix),
-        '{}.sort.bam'.format(prefix),
         '{}.to.remap.bam'.format(prefix),
         '{}.to.remap.num.gz'.format(prefix)
     ]
