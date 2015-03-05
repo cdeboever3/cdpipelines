@@ -525,6 +525,8 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     files_to_remove = []
     if os.path.realpath(temp_to_remap_bam) != os.path.realpath(to_remap_bam):
         files_to_remove.append(temp_to_remap_bam)
+    if os.path.realpath(temp_to_remap_num) != os.path.realpath(to_remap_num):
+        files_to_remove.append(temp_to_remap_num)
     if os.path.realpath(temp_remapped_bam) != os.path.realpath(remapped_bam):
         files_to_remove.append(temp_remapped_bam)
 
