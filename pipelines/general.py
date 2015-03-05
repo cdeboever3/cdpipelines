@@ -511,8 +511,9 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     outdir = os.path.join(outdir, jobname)
 
     # I'm going to define some file names used later.
-    temp_to_remap = os.path.join(tempdir, os.path.split(to_remap_bam)[1])
-    temp_remapped = os.path.join(tempdir, os.path.split(remapped_bam)[1])
+    temp_to_remap_bam = os.path.join(tempdir, os.path.split(to_remap_bam)[1])
+    temp_to_remap_num = os.path.join(tempdir, os.path.split(to_remap_num)[1])
+    temp_remapped_bam = os.path.join(tempdir, os.path.split(remapped_bam)[1])
     temp_final_bam = os.path.join(tempdir,
                                   '{}_filtered.bam'.format(sample_name))
     
@@ -548,7 +549,12 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(bam, temp_bam))
+    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(to_remap_bam,
+                                                       temp_to_remap_bam))
+    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(to_remap_num,
+                                                       temp_to_remap_num))
+    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(remapped_bam,
+                                                       temp_remapped_bam))
     
     f.write('python {} -p {} {} {} {}\n\n'.format(
         filter_remapped_reads_path, temp_to_remap, temp_remapped,
