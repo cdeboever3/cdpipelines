@@ -523,10 +523,10 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     # to delete the temp directory if the temp and output directory are the
     # same.
     files_to_remove = []
-    if os.path.realpath(temp_to_remap) != os.path.realpath(to_remap_bam):
-        files_to_remove.append(temp_to_remap)
-    if os.path.realpath(temp_remapped) != os.path.realpath(remapped_bam):
-        files_to_remove.append(temp_remapped)
+    if os.path.realpath(temp_to_remap_bam) != os.path.realpath(to_remap_bam):
+        files_to_remove.append(temp_to_remap_bam)
+    if os.path.realpath(temp_remapped_bam) != os.path.realpath(remapped_bam):
+        files_to_remove.append(temp_remapped_bam)
 
     try:
         os.makedirs(outdir)
@@ -557,8 +557,8 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                                                        temp_remapped_bam))
     
     f.write('python {} -p {} {} {} {}\n\n'.format(
-        filter_remapped_reads_path, temp_to_remap, temp_remapped,
-        temp_final_bam, to_remap_num))
+        filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
+        temp_final_bam, temp_to_remap_num))
     
     if len(files_to_copy) > 0:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
