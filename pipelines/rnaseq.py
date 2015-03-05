@@ -460,7 +460,7 @@ def align_and_sort(
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                               picard_memory, temp_dir, bam_index=bam_index))
+                               picard_memory, temp_dir, bam_index=bam_index)
     f.write(lines)
     f.write('wait\n\n')
 
