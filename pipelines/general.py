@@ -444,7 +444,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(bam, temp_bam))
+    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(bam, temp_bam))
     
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
