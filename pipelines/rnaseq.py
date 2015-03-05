@@ -767,3 +767,178 @@ def get_counts(bam, out_dir, sample_name, temp_dir, dexseq_annotation, gtf,
     f.close()
 
     return fn
+
+def wasp_remap(
+    r1_fastq, 
+    r2_fastq, 
+    out_dir, 
+    sample_name, 
+    star_index,
+    star_path,
+    picard_path,
+    samtools_path,
+    conda_env='',
+    rgpl='ILLUMINA',
+    rgpu='',
+    temp_dir='/scratch', 
+    threads=32, 
+    picard_memory=58, 
+    shell=False,
+):
+    """
+    Make a PBS or shell script for aligning ATAC-seq reads with STAR. The
+    defaults are set for use on the Frazer lab's PBS scheduler on FLC.
+
+    Parameters
+    ----------
+    r1_fastq : str
+        R1 reads from find_intersecting_snps.py to be remapped.
+
+    r2_fastq : str
+        R2 reads from find_intersecting_snps.py to be remapped.
+
+    out_dir : str
+        Directory to store PBS/shell file and aligment results.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    star_index : str
+        Path to STAR index.
+
+    star_path : str
+        Path to STAR aligner.
+
+    picard_path : str
+        Path to Picard tools.
+
+    samtools_path : str
+        Path to samtools executable.
+
+    conda_env : str
+        If provided, load conda environment with this name. This will control
+        which version of MACS2 is used.
+
+    rgpl : str
+        Read Group platform (e.g. illumina, solid). 
+
+    rgpu : str
+        Read Group platform unit (eg. run barcode). 
+
+    temp_dir : str
+        Directory to store files as STAR runs.
+
+    threads : int
+        Number of threads to reserve using PBS scheduler. This number of threads
+        minus 2 will be used by STAR, so this must be at least 3.
+
+    picard_memory : int
+        Amount of memory (in gb) to give Picard Tools.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+    
+    Returns
+    -------
+    fn : str
+        Path to PBS/shell script.
+
+    """
+    assert threads >= 3
+
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    temp_dir = os.path.join(temp_dir, '{}_wasp_remap'.format(sample_name))
+    out_dir = os.path.join(out_dir, '{}_wasp_remap'.format(sample_name))
+
+    # I'm going to define some file names used later.
+    temp_r1 = os.path.join(temp_dir, os.path.split(r1_fastq)[1])
+    temp_r2 = os.path.join(temp_dir, os.path.split(r2_fastq)[1])
+    aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
+    coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
+    bam_index = os.path.join(
+        temp_dir, 'Aligned.out.coord.sorted.bam.bai'.format(sample_name))
+    
+    # Files to copy to output directory.
+    files_to_copy = [coord_sorted_bam, bam_index, 'Log.out', 'Log.final.out',
+                     'Log.progress.out', 'SJ.out.tab']
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = ['Aligned.out.bam', '_STARtmp']
+    if os.path.realpath(temp_dir) != os.path.realpath(out_dir):
+        files_to_remove.append('Aligned.out.coord.sorted.bam')
+    if os.path.realpath(temp_r1) != os.path.realpath(r1_fastq):
+        files_to_remove.append(temp_r1)
+    if os.path.realpath(temp_r2) != os.path.realpath(r2_fastq):
+        files_to_remove.append(temp_r2)
+
+    try:
+        os.makedirs(out_dir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(out_dir, '{}_wasp_remap.sh'.format(sample_name))
+    else:
+        fn = os.path.join(out_dir, '{}_wasp_remap.pbs'.format(sample_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(out_dir, '{}_wasp_remap.out'.format(sample_name))
+        err = os.path.join(out_dir, '{}_wasp_remap.err'.format(sample_name))
+        job_name = '{}_wasp_remap'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
+    f.write('mkdir -p {}\n'.format(temp_dir))
+    f.write('cd {}\n'.format(temp_dir))
+    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in [r1_fastq, r2_fastq]])))
+    
+    # Align with STAR.
+    lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
+                        rgpu, star_index, star_path, threads)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    # Coordinate sort bam file.
+    lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
+                                       picard_path, picard_memory,
+                                       samtools_path, temp_dir)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    # Index bam file.
+    lines = _samtools_index(coord_sorted_bam, samtools_path)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    if temp_dir != out_dir:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
+                            os.path.split(x)[1]]),
+            out_dir))
+        for y in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('rsync -avz {} {}_{}\n'.format(
+                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+            f.write('rm {}\n'.format(y))
+    else:
+        for y in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('mv {} {}_{}\n'.format(
+                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+
+    f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if temp_dir != out_dir:
+        f.write('rm -r {}\n'.format(temp_dir))
+    f.close()
+
+    return fn
