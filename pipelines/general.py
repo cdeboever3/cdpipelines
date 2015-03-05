@@ -360,7 +360,7 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
     return lines
 
 def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
-                     outdir, tempdir, conda_env='', shell=False):
+                     outdir, tempdir, conda_env='', shell=False, threads=6):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
@@ -391,6 +391,9 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
     shell : boolean
         If true, make a shell script rather than a PBS script.
+    
+    threads : int
+        Number of threads to request for PBS script.
 
     """
     if shell:
@@ -463,7 +466,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
 def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                            filter_remapped_reads_path, sample_name, outdir,
-                           tempdir, conda_env='', shell=False):
+                           tempdir, conda_env='', shell=False, threads=6):
     """
     Write pbs or shell script for checking original mapping position of reads
     against remapping after swapping alleles using WASP.
@@ -498,6 +501,9 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
     shell : boolean
         If true, make a shell script rather than a PBS script.
+
+    threads : int
+        Number of threads to request for PBS script.
 
     """
     if shell:
