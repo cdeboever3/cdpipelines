@@ -517,7 +517,6 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                                   '{}_filtered.bam'.format(sample_name))
     
     # Files to copy to output directory.
-    prefix = os.path.splitext(os.path.split(bam)[1])[0]
     files_to_copy = [temp_final_bam]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
