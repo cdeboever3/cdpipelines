@@ -460,3 +460,110 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
     f.close()
 
     return fn
+
+def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
+                           filter_remapped_reads_path, sample_name, outdir,
+                           tempdir, conda_env='', shell=False):
+    """
+    Write pbs or shell script for checking original mapping position of reads
+    against remapping after swapping alleles using WASP.
+
+    Parameters
+    ----------
+    to_remap_bam : str
+        Bam file from find_intersecting_snps.py that has reads that will be
+        remapped (e.g. *.to.remap.bam).
+
+    to_remap_num : str
+        Gzipped text file from find_intersecting_snps.py (e.g.
+        *.to.remap.num.gz).
+
+    remapped_bam : str
+        Bam file with remapped reads.
+
+    filter_remapped_reads_path : str
+        Path to filter_remapped_reads.py script.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    outdir : str
+        Directory to store PBS/shell file and aligment results.
+
+    tempdir : str
+        Directory to store temporary files.
+
+    conda_env : str
+        If provided, load conda environment with this name.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+
+    """
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+    
+    jobname = '{}_wasp_alignment_compare'.format(sample_name)
+
+    tempdir = os.path.join(tempdir, jobname)
+    outdir = os.path.join(outdir, jobname)
+
+    # I'm going to define some file names used later.
+    temp_to_remap = os.path.join(tempdir, os.path.split(to_remap_bam)[1])
+    temp_remapped = os.path.join(tempdir, os.path.split(remapped_bam)[1])
+    temp_final_bam = os.path.join(tempdir,
+                                  '{}_filtered.bam'.format(sample_name))
+    
+    # Files to copy to output directory.
+    prefix = os.path.splitext(os.path.split(bam)[1])[0]
+    files_to_copy = [temp_final_bam]
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+    if os.path.realpath(temp_to_remap) != os.path.realpath(to_remap_bam):
+        files_to_remove.append(temp_to_remap)
+    if os.path.realpath(temp_remapped) != os.path.realpath(remaped_bam):
+        files_to_remove.append(temp_remapped)
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}.sh'.format(jobname))
+    else:
+        fn = os.path.join(outdir, '{}.pbs'.format(jobname))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}.out'.format(jobname))
+        err = os.path.join(outdir, '{}.err'.format(jobname))
+        f.write(_pbs_header(out, err, jobname, threads))
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(bam, temp_bam))
+    
+    f.write('python {} -p {} {} {} {}\n\n'.format(
+        filter_remapped_reads_path, temp_to_remap, temp_remapped,
+        temp_final_bam, to_remap_num))
+    
+    if len(files_to_copy) > 0:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy),
+            outdir))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
