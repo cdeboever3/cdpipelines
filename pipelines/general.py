@@ -535,7 +535,8 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
 def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                            filter_remapped_reads_path, sample_name, outdir,
-                           tempdir, conda_env='', shell=False, threads=6):
+                           picard_path, picard_memory=58, tempdir, conda_env='',
+                           shell=False, threads=6):
     """
     Write pbs or shell script for checking original mapping position of reads
     against remapping after swapping alleles using WASP.
