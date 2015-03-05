@@ -739,8 +739,8 @@ def wasp_remap(
     """
     assert threads >= 3
     seq_types = ['ATAC', 'RNA']
-    (assert seq_type in seq_types, 'Only {} currently support for
-     seq_type'.format(', '.join(seq_types)))
+    assert seq_type in seq_types, ('Only {} currently support for '
+                                   'seq_type'.format(', '.join(seq_types)))
 
     if shell:
         pbs = False
