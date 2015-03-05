@@ -683,7 +683,7 @@ def wasp_remap(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [combined_r1, combined_r2, 'Aligned.out.bam', '_STARtmp']
+    files_to_remove = ['Aligned.out.bam', '_STARtmp']
     if os.path.realpath(temp_dir) != os.path.realpath(out_dir):
         files_to_remove.append('Aligned.out.coord.sorted.bam')
     if os.path.realpath(temp_r1) != os.path.realpath(r1_fastq):
