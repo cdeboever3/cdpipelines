@@ -821,11 +821,6 @@ def wasp_remap(
         f.write(lines)
         f.write('wait\n\n')
 
-    # Index bam file.
-    lines = _samtools_index(coord_sorted_bam, samtools_path)
-    f.write(lines)
-    f.write('wait\n\n')
-
     if temp_dir != out_dir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
