@@ -293,8 +293,8 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
 
     Returns
     -------
-    index : str
-        Path to index file for input bam file.
+    line : str
+        Line to print to shell/pbs script.
 
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
@@ -522,9 +522,11 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     temp_remapped_bam = os.path.join(tempdir, os.path.split(remapped_bam)[1])
     temp_final_bam = os.path.join(tempdir,
                                   '{}_filtered.bam'.format(sample_name))
+    temp_final_bam_index = os.path.join(
+        tempdir, '{}_filtered.bam.bai'.format(sample_name))
     
     # Files to copy to output directory.
-    files_to_copy = [temp_final_bam]
+    files_to_copy = [temp_final_bam, temp_final_bam_index]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -567,6 +569,11 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     f.write('python {} -p {} {} {} {}\n\n'.format(
         filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
         temp_final_bam, temp_to_remap_num))
+
+    lines = _picard_index(temp_final_bam, temp_final_bam_index, picard_memory,
+                          picard_path, tempdir)
+    f.write(lines)
+    f.write('\nwait\n\n')
     
     if len(files_to_copy) > 0:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
