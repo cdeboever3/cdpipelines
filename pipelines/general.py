@@ -803,7 +803,7 @@ def wasp_remap(
     # Align with STAR and coordinate sort.
     if seq_type == 'RNA':
         from rnaseq import _star_align
-        lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
+        lines = _star_align([temp_r1], [temp_r2], sample_name, rgpl,
                             rgpu, star_index, star_path, threads)
         f.write(lines)
         f.write('wait\n\n')
