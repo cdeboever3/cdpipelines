@@ -759,10 +759,9 @@ def wasp_remap(
     aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
     coord_sorted_bam = os.path.join(
         tempdir, '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
-    bam_index = coord_sorted_bam + '.bai'
     
     # Files to copy to output directory.
-    files_to_copy = [coord_sorted_bam, bam_index, 'Log.out', 'Log.final.out',
+    files_to_copy = [coord_sorted_bam, 'Log.out', 'Log.final.out',
                      'Log.progress.out', 'SJ.out.tab']
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
