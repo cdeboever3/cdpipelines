@@ -26,27 +26,27 @@ def download_fastx_toolkit(outdir):
     dest = os.path.join(outdir, 'fastx_toolkit-0.0.14.tar.bz2')
     _download_and_untar(src, dest, outdir)
 
-def download_fastqc(out_dir):
+def download_fastqc(outdir):
     """
     Download Gencode GTF.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Gencode GTF to.
 
     """
     src = ('http://www.bioinformatics.babraham.ac.uk/projects/fastqc/'
            'fastqc_v0.11.2.zip')
-    dest = os.path.join(out_dir, 'fastqc_v0.11.2.zip')
+    dest = os.path.join(outdir, 'fastqc_v0.11.2.zip')
     req = urlopen(src)
     with open(dest, 'w') as f:
         shutil.copyfileobj(req, f)
-    subprocess.check_call(['unzip', '-d', out_dir, dest])
+    subprocess.check_call(['unzip', '-d', outdir, dest])
 
-def _download_and_untar(url, dest, out_dir):
+def _download_and_untar(url, dest, outdir):
     """
-    Download a tarball req into out_dir and decompress it in out_dir.
+    Download a tarball req into outdir and decompress it in outdir.
 
     Parameters
     ----------
@@ -56,128 +56,147 @@ def _download_and_untar(url, dest, out_dir):
     dest : str
         Full path to save tarball to.
 
-    out_dir : str
+    outdir : str
         Directory to save tarball to and decompress to.
 
     """
     req = urlopen(url)
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
-    subprocess.check_call('tar -xf {} -C {}'.format(dest, out_dir), shell=True)
+    subprocess.check_call('tar -xf {} -C {}'.format(dest, outdir), shell=True)
 
-def download_subread(out_dir):
+def download_vcftools(outdir):
+    """
+    Download and compile vcftools.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save vcftools to.
+
+    """
+    url = ('http://sourceforge.net/projects/vcftools/'
+           'files/vcftools_0.1.12b.tar.gz/download')
+    dest = os.path.join(outdir, 'vcftools_0.1.12b.tar.gz')
+    _download_and_untar(url, dest, outdir)
+    cwd = os.getcwd()
+    os.chdir(os.path.join(outdir, 'vcftools_0.1.12b'))
+    subprocess.check_call('make')
+    os.chdir(cwd)
+
+def download_subread(outdir):
     """
     Download Subread. Includes featureCounts.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Subread to.
 
     """
     url = ('http://sourceforge.net/projects/subread/files/subread-1.4.6/'
            'subread-1.4.6-Linux-x86_64.tar.gz/download')
-    dest = os.path.join(out_dir,
+    dest = os.path.join(outdir,
                         'subread-1.4.6-Linux-x86_64.tar.gz')
-    _download_and_untar(url, dest, out_dir)
+    _download_and_untar(url, dest, outdir)
 
-def download_samtools(out_dir):
+def download_samtools(outdir):
     """
     Download Samtools.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Samtools to.
 
     """
     url = ('http://sourceforge.net/projects/samtools/files/samtools/1.0/'
            'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2/download')
-    dest = os.path.join(out_dir,
+    dest = os.path.join(outdir,
                         'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2')
-    _download_and_untar(url, dest, out_dir)
+    _download_and_untar(url, dest, outdir)
     
-def download_hg19(out_dir, samtools_path):
+def download_hg19(outdir, samtools_path):
     """
     Download hg19.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save hg19 fasta to.
 
     samtools_path : str
         Path to Samtools executable needed to index fasta.
 
     """
-    out_dir = os.path.join(out_dir, 'hg19')
+    outdir = os.path.join(outdir, 'hg19')
     try:
-        os.makedirs(out_dir)
+        os.makedirs(outdir)
     except OSError:
         pass
     req = urlopen(
         'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/hg19.2bit')
-    dest = os.path.join(out_dir, 'hg19.2bit')
+    dest = os.path.join(outdir, 'hg19.2bit')
 
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     req = urlopen(
         'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa')
-    dest = os.path.join(out_dir, 'twoBitToFa')
+    dest = os.path.join(outdir, 'twoBitToFa')
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
-    subprocess.check_call('chmod 755 {}'.format(os.path.join(out_dir, 
+    subprocess.check_call('chmod 755 {}'.format(os.path.join(outdir, 
                                                              'twoBitToFa')),
                           shell=True)
     subprocess.check_call('{} {} {}'.format(
-        os.path.join(out_dir, 'twoBitToFa'), 
-        os.path.join(out_dir, 'hg19.2bit'), 
-        os.path.join(out_dir, 'hg19.fa')),
+        os.path.join(outdir, 'twoBitToFa'), 
+        os.path.join(outdir, 'hg19.2bit'), 
+        os.path.join(outdir, 'hg19.fa')),
                           shell=True)    
     subprocess.check_call('{} faidx {}'.format(
         samtools_path,
-        os.path.join(out_dir, 'hg19.fa')),
+        os.path.join(outdir, 'hg19.fa')),
                           shell=True)
 
-def download_htsjdk(out_dir):
+def download_htsjdk(outdir):
     """
     Download STAR aligner.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save STAR to.
 
     """
     url = 'https://github.com/samtools/htsjdk/tarball/master'
-    dest = os.path.join(out_dir, 'samtools-htsjdk-1.127-10-g18192d8.tar.gz')
-    _download_and_untar(url, dest, out_dir)
+    dest = os.path.join(outdir, 'samtools-htsjdk-1.127-10-g18192d8.tar.gz')
+    _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(out_dir, 'samtools-htsjdk-18192d8'))
+    os.chdir(os.path.join(outdir, 'samtools-htsjdk-18192d8'))
     subprocess.check_call(['ant', 'htsjdk-jar'])
     os.chdir(cwd)
 
-def download_star(out_dir):
+def download_star(outdir):
     """
     Download STAR aligner.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save STAR to.
 
     """
     url = 'https://github.com/alexdobin/STAR/archive/STAR_2.4.0h.tar.gz'
-    dest = os.path.join(out_dir, 'STAR_2.4.0h.tar.gz')
-    _download_and_untar(url, dest, out_dir)
+    dest = os.path.join(outdir, 'STAR_2.4.0h.tar.gz')
+    _download_and_untar(url, dest, outdir)
 
-def make_star_index(out_dir, threads, genome, gtf, star_path='STARstatic'):
+def make_star_index(outdir, threads, genome, gtf, star_path='STARstatic'):
     """
     Make index for STAR aligner.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save index to.
 
     threads : int
@@ -193,7 +212,7 @@ def make_star_index(out_dir, threads, genome, gtf, star_path='STARstatic'):
         Path to STAR executable.
 
     """
-    dest = os.path.join(out_dir, 'star_index')
+    dest = os.path.join(outdir, 'star_index')
     try:
         os.makedirs(dest)
     except OSError:
@@ -206,65 +225,65 @@ def make_star_index(out_dir, threads, genome, gtf, star_path='STARstatic'):
                           shell=False)
     shutil.move('Log.out', dest)
 
-def download_picard(out_dir):
+def download_picard(outdir):
     """
     Download Picard tools.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Picard tools to.
 
     """
     url = 'https://github.com/broadinstitute/picard/archive/1.128.tar.gz'
-    dest = os.path.join(out_dir, '1.128.tar.gz')
-    _download_and_untar(url, dest, out_dir)
+    dest = os.path.join(outdir, '1.128.tar.gz')
+    _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(out_dir, 'picard-1.128'))
+    os.chdir(os.path.join(outdir, 'picard-1.128'))
     subprocess.check_call('ant -lib lib/ant clone-htsjdk package-commands',
                           shell=True)
     os.chdir(cwd)
 
-def download_bedtools(out_dir): 
+def download_bedtools(outdir): 
     """
     Download Bedtools.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Bedtools to.
 
     """
     url = ('https://github.com/arq5x/bedtools2/releases/'
            'download/v2.20.1/bedtools-2.20.1.tar.gz')
-    dest = os.path.join(out_dir, 'bedtools-2.20.1.tar.gz')
-    _download_and_untar(url, dest, out_dir)
+    dest = os.path.join(outdir, 'bedtools-2.20.1.tar.gz')
+    _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(out_dir, 'bedtools2-2.20.1'))
+    os.chdir(os.path.join(outdir, 'bedtools2-2.20.1'))
     subprocess.check_call('make')
     os.chdir(cwd)
     raw_input('\n\n\nYou should add\n' + 
-              os.path.join(out_dir, 'bedtools2-2.20.1', 'bin') + 
+              os.path.join(outdir, 'bedtools2-2.20.1', 'bin') + 
               '\nto your path when using this environment so\n'
               'pybedtools uses the correct bedtools installation.\n'
               'Press any key to continue.\n\n\n')
 
-def download_r(out_dir):
+def download_r(outdir):
     """
     Download R.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save R to.
 
     """
     rbase = 'R-3.1.1'
     url = 'http://cran.stat.ucla.edu/src/base/R-3/R-3.1.1.tar.gz'
-    dest = os.path.join(out_dir, '{}.tar.gz'.format(rbase))
-    _download_and_untar(url, dest, out_dir)
+    dest = os.path.join(outdir, '{}.tar.gz'.format(rbase))
+    _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(out_dir)
+    os.chdir(outdir)
     shutil.move(rbase, '{}-source'.format(rbase))
     rpath = os.getcwd()
     os.chdir('{}-source'.format(rbase))
@@ -346,7 +365,7 @@ def download_r(out_dir):
 # 
 # get_ipython().run_cell_magic(u'R', u'', u'\nsource("http://bioconductor.org/biocLite.R")\nbiocLite(ask=FALSE)\nbiocLite("DEXSeq", ask=FALSE)\nbiocLite("Gviz", ask=FALSE)\nbiocLite("BiocParallel", ask=FALSE)')
 
-def download_install_rpy2(r_path, out_dir):
+def download_install_rpy2(r_path, outdir):
     """
     Download and install rpy2. R must be installed and the LDFLAGS and
     LD_LIBRARY_PATH must be set. If they are not set, you can run the method to
@@ -382,28 +401,28 @@ def download_install_rpy2(r_path, out_dir):
     sys.stdout.flush()
 
     url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.4.2.tar.gz')
-    dest = os.path.join(out_dir, 'rpy2-2.4.2.tar.gz')
-    _download_and_untar(url, dest, out_dir)
-    os.chdir(os.path.join(out_dir, 'rpy2-2.4.2'))
+    dest = os.path.join(outdir, 'rpy2-2.4.2.tar.gz')
+    _download_and_untar(url, dest, outdir)
+    os.chdir(os.path.join(outdir, 'rpy2-2.4.2'))
     r_home = os.path.split(os.path.split(r_path)[0])[0]
     subprocess.check_call('python setup.py build --r-home ' + 
                           '{} install >& '.format(r_home) + 
                           'rpy2_install_log.txt', shell=True)
     os.chdir(cwd)
 
-def download_gencode_gtf(out_dir):
+def download_gencode_gtf(outdir):
     """
     Download Gencode GTF.
 
     Parameters
     ----------
-    out_dir : str
+    outdir : str
         Directory to save Gencode GTF to.
 
     """
     src = ('ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/'
            'gencode.v19.annotation.gtf.gz')
-    dest = os.path.join(out_dir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
+    dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
     try:
         os.makedirs(os.path.split(dest)[0])
     except OSError:
@@ -414,10 +433,10 @@ def download_gencode_gtf(out_dir):
     subprocess.check_call(['gunzip', dest])
 
 
-def download_bedGraphToBigWig(out_dir):
+def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
                   'linux.x86_64/bedGraphToBigWig')
-    dest = os.path.join(out_dir, 'bedGraphToBigWig')
+    dest = os.path.join(outdir, 'bedGraphToBigWig')
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])

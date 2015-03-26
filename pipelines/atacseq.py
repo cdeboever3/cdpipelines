@@ -69,7 +69,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, bigwig, r1_fastqc,
-                          r2_fastqc, narrow_peak, sample_name, out_dir):
+                          r2_fastqc, narrow_peak, sample_name, outdir):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -157,11 +157,11 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(coord_sorted_bam)[1])
+    fn = os.path.join(outdir, os.path.split(coord_sorted_bam)[1])
     new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
-    fn = os.path.join(out_dir, os.path.split(bam_index)[1])
+    fn = os.path.join(outdir, os.path.split(bam_index)[1])
     new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
@@ -179,7 +179,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(bigwig)[1])
+    fn = os.path.join(outdir, os.path.split(bigwig)[1])
     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
 
@@ -200,7 +200,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(out_dir, os.path.split(narrow_peak)[1])
+    fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
     tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
@@ -211,7 +211,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
-def _macs2(bam, sample_name, out_dir):
+def _macs2(bam, sample_name, outdir):
     """
     Call peaks with MACS2. The macs2 executable is assumed to be in your path
     which it should be if you installed it using pip install MACS2 into your
@@ -229,12 +229,12 @@ def _macs2(bam, sample_name, out_dir):
 
     """
     lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
-             '-g hs -n {} --outdir {} '.format(sample_name, out_dir) + 
+             '-g hs -n {} --outdir {} '.format(sample_name, outdir) + 
              '--keep-dup all --call-summits\n')
     
     # Add trackline to narrowPeak file from macs.
-    out = os.path.join(out_dir, '{}_peaks.narrowPeak'.format(sample_name))
-    temp = os.path.join(out_dir, 'temp.narrowPeak')
+    out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
+    temp = os.path.join(outdir, 'temp.narrowPeak')
     track_line = ' '.join(['track', 'type=narrowPeak',
                            'name=\\"{}_peaks\\"'.format(sample_name),
                            ('description=\\"ATAC-seq peaks for '
@@ -248,7 +248,7 @@ def _macs2(bam, sample_name, out_dir):
 def align_and_call_peaks(
     r1_fastqs, 
     r2_fastqs, 
-    out_dir, 
+    outdir, 
     sample_name, 
     star_index,
     tracklines_file,
@@ -283,7 +283,7 @@ def align_and_call_peaks(
         Either a list of paths to gzipped fastq files with R2 reads or path to a
         single gzipped fastq file with R2 reads.
 
-    out_dir : str
+    outdir : str
         Directory to store PBS/shell file and aligment results.
 
     sample_name : str
@@ -376,7 +376,7 @@ def align_and_call_peaks(
         r2_fastqs = [r2_fastqs]
 
     temp_dir = os.path.join(temp_dir, '{}_peaks'.format(sample_name))
-    out_dir = os.path.join(out_dir, '{}_peaks'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_peaks'.format(sample_name))
 
     # I'm going to define some file names used later.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
@@ -394,22 +394,22 @@ def align_and_call_peaks(
     out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(
-        out_dir, '{}_duplicate_metrics.txt'.format(sample_name))
-    stats_file = os.path.join(out_dir,
+        outdir, '{}_duplicate_metrics.txt'.format(sample_name))
+    stats_file = os.path.join(outdir,
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
-    chrom_counts = os.path.join(out_dir,
+    chrom_counts = os.path.join(outdir,
                                 '{}_chrom_counts.txt'.format(sample_name))
-    narrow_peak = os.path.join(out_dir,
+    narrow_peak = os.path.join(outdir,
                                '{}_peaks.narrowPeak'.format(sample_name))
     
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
-        out_dir, 
+        outdir, 
         '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
         'fastqc_report.html')
     tn = os.path.split(combined_r2)[1]
     r2_fastqc = os.path.join(
-        out_dir, 
+        outdir, 
         '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
         'fastqc_report.html')
     
@@ -423,20 +423,20 @@ def align_and_call_peaks(
                        'Aligned.out.coord.sorted.bam', '_STARtmp']
 
     try:
-        os.makedirs(out_dir)
+        os.makedirs(outdir)
     except OSError:
         pass
 
     if shell:
-        fn = os.path.join(out_dir, '{}_peaks.sh'.format(sample_name))
+        fn = os.path.join(outdir, '{}_peaks.sh'.format(sample_name))
     else:
-        fn = os.path.join(out_dir, '{}_peaks.pbs'.format(sample_name))
+        fn = os.path.join(outdir, '{}_peaks.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(out_dir, '{}_peaks.out'.format(sample_name))
-        err = os.path.join(out_dir, '{}_peaks.err'.format(sample_name))
+        out = os.path.join(outdir, '{}_peaks.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_peaks.err'.format(sample_name))
         job_name = '{}_peaks'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
@@ -460,7 +460,7 @@ def align_and_call_peaks(
         ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
         ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
     f.write('wait\n\n')
-    lines = _fastqc([combined_r1, combined_r2], threads, out_dir, fastqc_path)
+    lines = _fastqc([combined_r1, combined_r2], threads, outdir, fastqc_path)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -479,7 +479,7 @@ def align_and_call_peaks(
         to_align_r2 = trimmed_r2
         f.write(lines)
         f.write('\nwait\n\n')
-        lines = _fastqc([trimmed_r1, trimmed_r2], threads, out_dir, fastqc_path)
+        lines = _fastqc([trimmed_r1, trimmed_r2], threads, outdir, fastqc_path)
         f.write(lines)
         f.write('wait\n\n')
     else:
@@ -522,7 +522,7 @@ def align_and_call_peaks(
     f.write(lines)
 
     # Call peaks
-    lines = _macs2(no_dup_bam, sample_name, out_dir)
+    lines = _macs2(no_dup_bam, sample_name, outdir)
     f.write(lines)
     
     f.write('wait\n\n')
@@ -530,29 +530,29 @@ def align_and_call_peaks(
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                   no_dup_bam, bam_index, out_bigwig, r1_fastqc,
-                                  r2_fastqc, narrow_peak, sample_name, out_dir)
+                                  r2_fastqc, narrow_peak, sample_name, outdir)
     f.write(lines)
     f.write('wait\n\n')
 
-    if temp_dir != out_dir:
+    if temp_dir != outdir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
                             os.path.split(x)[1]]),
-            out_dir))
+            outdir))
         for y in [x for x in files_to_copy if sample_name not in 
              os.path.split(x)[1]]:
             f.write('rsync -avz {} {}_{}\n'.format(
-                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
             f.write('rm {}\n'.format(y))
     else:
         for y in [x for x in files_to_copy if sample_name not in 
              os.path.split(x)[1]]:
             f.write('mv {} {}_{}\n'.format(
-                y, os.path.join(out_dir, sample_name), os.path.split(y)[1]))
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
 
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != out_dir:
+    if temp_dir != outdir:
         f.write('rm -r {}\n'.format(temp_dir))
     f.close()
 
