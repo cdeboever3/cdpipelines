@@ -11,6 +11,24 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
+def download_rsem(outdir):
+    """
+    Download RSEM.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save RSEM.
+
+    """
+    src = ('http://deweylab.biostat.wisc.edu/rsem/src/rsem-1.2.20.tar.gz')
+    dest = os.path.join(outdir, 'rsem-1.2.20.tar.gz')
+    _download_and_untar(src, dest, outdir)
+    cwd = os.getcwd()
+    os.chdir(os.path.join(outdir, 'rsem-1.2.20.tar.gz'))
+    subprocess.check_call('make')
+    os.chdir(cwd)
+
 def download_fastx_toolkit(outdir):
     """
     Download FASTX Toolkit. 
