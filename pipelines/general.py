@@ -846,3 +846,175 @@ def wasp_remap(
     f.close()
 
     return fn
+
+def _mbased(infile, locus_outfile, snv_outfile, sample_name, is_phased=False,
+            num_sim=1000000, threads=1):
+    """
+    Make a PBS or shell script for running MBASED to determine allelic bias from
+    sequencing reads.
+
+    Parameters
+    ----------
+    infile : str
+        Tab-separated file with following columns: chrom, pos, ref_allele,
+        alt_allele, locus, name, ref_count, alt_count.
+
+    locus_outfile : str
+        Path to file to store locus-level results.
+
+    snv_outfile : str
+        Path to file to store SNV-level results.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    is_phased : bool
+        Whether the input file is phased. If so, the reference alleles are
+        assumed to be in phase. Note that this only matter locus by locus.
+
+    num_sim : int
+        Number of simulations for MBASED to perform.
+
+    threads : int
+        Number of threads for MBASED to use.
+    
+    Returns
+    -------
+    lines : str
+        Lines to be printed to PBS/shell script.
+
+    """
+    from __init__ import scripts
+    is_phased = str(is_phased).upper()
+    script = os.path.join(scripts, 'mbased.R')
+    lines = ' '.join([script, infile, locus_outfile, snv_outfile, sample_name,
+                      is_phased, num_sim, threads]) + '\n'
+    return lines
+
+def run_mbased(
+    infile, 
+    outdir, 
+    sample_name, 
+    is_phased=False,
+    num_sim=1000000,
+    threads=6, 
+    r_env='',
+    tempdir='/scratch', 
+    shell=False,
+):
+    """
+    Make a PBS or shell script for running MBASED to determine allelic bias from
+    sequencing reads.
+
+    Parameters
+    ----------
+    infile : str
+        Tab-separated file with following columns: chrom, pos, ref_allele,
+        alt_allele, locus, name, ref_count, alt_count.
+
+    outdir : str
+        Directory to store PBS/shell file and MBASED results.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    is_phased : bool
+        Whether the input file is phased. If so, the reference alleles are
+        assumed to be in phase. Note that this only matter locus by locus.
+
+    num_sim : int
+        Number of simulations for MBASED to perform.
+
+    r_env : str
+        If provided, this file will be sourced to set the environment for R.
+
+    tempdir : str
+        Directory to store files as STAR runs.
+
+    threads : int
+        Number of threads to reserve using PBS scheduler and for MBASED to use.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+    
+    Returns
+    -------
+    fn : str
+        Path to PBS/shell script.
+
+    """
+    assert threads >= 1
+    
+    if r_env != '':
+        f.write('source {}\n\n'.format(r_env))
+
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    tempdir = os.path.join(tempdir, '{}_mbased'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_mbased'.format(sample_name))
+
+    # I'm going to define some file names used later.
+    locus_outfile = os.path.join(outdir, '{}_locus.tsv'.format(sample_name))
+    snvs_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
+    
+    # Files to copy to output directory.
+    files_to_copy = []
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}_mbased.sh'.format(sample_name))
+    else:
+        fn = os.path.join(outdir, '{}_mbased.pbs'.format(sample_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}_mbased.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_mbased.err'.format(sample_name))
+        job_name = '{}_mbased'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+    
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    
+
+    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name,
+                    is_phased=is_phased, num_sim=num_sim, threads=threads)
+    f.write(lines)
+    f.write('wait\n\n')
+    
+    if tempdir != outdir:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
+                            os.path.split(x)[1]]),
+            outdir))
+        for y in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('rsync -avz {} {}_{}\n'.format(
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
+            f.write('rm {}\n'.format(y))
+    else:
+        for y in [x for x in files_to_copy if sample_name not in 
+             os.path.split(x)[1]]:
+            f.write('mv {} {}_{}\n'.format(
+                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
+
+    if len(files_to_remove) > 0:
+        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn

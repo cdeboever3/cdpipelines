@@ -10,7 +10,7 @@ from general import _picard_remove_duplicates
 from general import _process_fastqs
 
 def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
-                                 temp_dir):
+                                 tempdir):
     """
     Remove duplicates from paired fastq files using UNIX sort and uniq. Read 
     pairs with exactly the same sequences are removed such that every read pair
@@ -35,7 +35,7 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
     r2_nodup : str
         Path to write gzipped R2 fastq file with duplicates removed.
 
-    temp_dir : str
+    tempdir : str
         Path to temporary directory where fastq files will be copied to.
 
     Returns
@@ -58,7 +58,7 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
                  '$1,$3,$4,$6,$2,$5; else printf "%s %s %s %s %s %s\\n",'
                  '$1,$6,$4,$3,$5,$2}\' | \\\n')
     lines.append('\tsort -k 5,5 -k 6,6 -T {0} -S 30G --parallel=8 | '
-                 'uniq -f 4 | \\\n'.format(temp_dir))
+                 'uniq -f 4 | \\\n'.format(tempdir))
     lines.append('\tawk \'{printf "@%s\\n%s\\n+\\n%s\\n",$1,$5,$2 | '
                  '"gzip -c > ' + r1_nodup + 
                  '"; printf "@%s\\n%s\\n+\\n%s\\n",$3,$6,$4 | "gzip -c > ' + 
@@ -270,7 +270,7 @@ def align_and_sort(
     bedgraph_to_bigwig_path,
     rgpl='ILLUMINA',
     rgpu='',
-    temp_dir='/scratch', 
+    tempdir='/scratch', 
     threads=32, 
     picard_memory=58, 
     remove_dup=False, 
@@ -338,7 +338,7 @@ def align_and_sort(
     rgpu : str
         Read Group platform unit (eg. run barcode). 
 
-    temp_dir : str
+    tempdir : str
         Directory to store files as STAR runs.
 
     threads : int
@@ -372,33 +372,33 @@ def align_and_sort(
     else: 
         pbs = True
 
-    temp_dir = os.path.join(temp_dir, '{}_alignment'.format(sample_name))
+    tempdir = os.path.join(tempdir, '{}_alignment'.format(sample_name))
     outdir = os.path.join(outdir, '{}_alignment'.format(sample_name))
 
     # I'm going to define some file names used later.
-    temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
-    temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
+    temp_r1_fastqs = _process_fastqs(r1_fastqs, tempdir)
+    temp_r2_fastqs = _process_fastqs(r2_fastqs, tempdir)
     if type(r1_fastqs) == list:
         r1_fastqs = ' '.join(r1_fastqs)
     if type(r2_fastqs) == list:
         r2_fastqs = ' '.join(r2_fastqs)
-    aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
+    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
     coord_sorted_bam = \
-            os.path.join(temp_dir,
+            os.path.join(tempdir,
                          '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
     if remove_dup:
         out_bam = \
-            os.path.join(temp_dir,
+            os.path.join(tempdir,
                          ('{}_Aligned.out.coord.'.format(sample_name) + 
                           'sorted.nodup.bam'))
         bam_index = \
-                os.path.join(temp_dir,
+                os.path.join(tempdir,
                              ('{}_Aligned.out.coord.'.format(sample_name) +
                               'sorted.nodup.bam.bai'))
     else:
         out_bam = coord_sorted_bam
         bam_index = \
-                os.path.join(temp_dir,
+                os.path.join(tempdir,
                              ('{}_Aligned.out.coord.'.format(sample_name) + 
                               'sorted.bam.bai'))
     
@@ -418,16 +418,16 @@ def align_and_sort(
         # following (commented out) approach doesn't work because the R1 reads
         # and R2 reads are always on opposite strands. I have to split the reads
         # up based on what strand the R1 read is mapped to.
-        # out_bigwig_plus = os.path.join(temp_dir,
+        # out_bigwig_plus = os.path.join(tempdir,
         #                                '{}_plus_rna.bw'.format(sample_name))
-        # out_bigwig_minus = os.path.join(temp_dir,
+        # out_bigwig_minus = os.path.join(tempdir,
         #                                 '{}_minus_rna.bw'.format(sample_name))
         # files_to_copy.append(out_bigwig_plus)
         # files_to_copy.append(out_bigwig_minus)
-        out_bigwig = os.path.join(temp_dir, '{}_rna.bw'.format(sample_name))
+        out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
         files_to_copy.append(out_bigwig)
     else:
-        out_bigwig = os.path.join(temp_dir, '{}_rna.bw'.format(sample_name))
+        out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
         files_to_copy.append(out_bigwig)
 
     try:
@@ -448,8 +448,8 @@ def align_and_sort(
         job_name = '{}_align'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
 
-    f.write('mkdir -p {}\n'.format(temp_dir))
-    f.write('cd {}\n'.format(temp_dir))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
 
     # Align reads.
@@ -460,7 +460,7 @@ def align_and_sort(
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                               picard_memory, temp_dir, bam_index=bam_index)
+                               picard_memory, tempdir, bam_index=bam_index)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -473,7 +473,7 @@ def align_and_sort(
                                           duplicate_metrics,
                                           picard_path=picard_path,
                                           picard_memory=picard_memory,
-                                          temp_dir=temp_dir)
+                                          tempdir=tempdir)
         f.write(lines)
         f.write('wait\n\n')
     # Make bigwig files for displaying coverage.
@@ -512,8 +512,8 @@ def align_and_sort(
         outdir))
     f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != outdir:
-        f.write('rm -r {}\n'.format(temp_dir))
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
     return fn
@@ -620,7 +620,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
 
     return lines
 
-def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
+def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
                samtools_path, conda_env='', rpy2_file='', paired=True,
                strand_specific=False, shell=False):
     """
@@ -638,7 +638,7 @@ def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
     sample_name : str
         Sample name used for naming files etc.
 
-    temp_dir : str
+    tempdir : str
         Directory to store temporary files.
 
     dexseq_annotation : str
@@ -670,11 +670,11 @@ def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
     else: 
         pbs = True
 
-    temp_dir = os.path.join(temp_dir, '{}_counts'.format(sample_name))
+    tempdir = os.path.join(tempdir, '{}_counts'.format(sample_name))
     outdir = os.path.join(outdir, '{}_counts'.format(sample_name))
 
     # I'm going to define some file names used later.
-    temp_bam = os.path.join(temp_dir, os.path.split(bam)[1])
+    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
     dexseq_counts = os.path.join(outdir, 'dexseq_counts.tsv')
     gene_counts = os.path.join(outdir, 'gene_counts.tsv')
     gene_count_stats = os.path.join(outdir, 'gene_count_stats.tsv')
@@ -705,8 +705,8 @@ def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
         job_name = '{}_counts'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
 
-    f.write('mkdir -p {}\n'.format(temp_dir))
-    f.write('cd {}\n'.format(temp_dir))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
     if conda_env != '':
@@ -731,8 +731,100 @@ def get_counts(bam, outdir, sample_name, temp_dir, dexseq_annotation, gtf,
     if len(files_to_remove) > 0:
         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != outdir:
-        f.write('rm -r {}\n'.format(temp_dir))
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
+
+def rsem_expression(bam, outdir, sample_name, tempdir, rpy2_file='',
+                    threads=32, strand_specific=False, shell=False):
+    """
+    Make a PBS or shell script for counting reads that overlap genes for DESeq2
+    and exonic bins for DEXSeq.
+
+    Parameters
+    ----------
+    bam : str
+        Coordinate sorted bam file (genomic coordinates).
+
+    outdir : str
+        Directory to store PBS/shell file and aligment results.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    tempdir : str
+        Directory to store temporary files.
+
+    rpy2_file : str
+        If provided, this file will be sourced to set the environment for rpy2.
+
+    strand_specific : boolean
+        True if the data is strand-specific. False otherwise.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+
+    """
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    tempdir = os.path.join(tempdir, '{}_rsem'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_rsem'.format(sample_name))
+
+    # I'm going to define some file names used later.
+    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+    
+    # Files to copy to output directory.
+    files_to_copy = []
+    
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}_rsem.sh'.format(sample_name))
+    else:
+        fn = os.path.join(outdir, '{}_rsem.pbs'.format(sample_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}_rsem.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_rsem.err'.format(sample_name))
+        job_name = '{}_rsem'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    f.write('rsync -avz {} .\n\n'.format(bam))
+
+    if conda_env != '':
+        f.write('source activate {}\n\n'.format(conda_env))
+    if rpy2_file != '':
+        f.write('source {}\n\n'.format(rpy2_file))
+
+    f.write(lines)
+    f.write('wait\n\n')
+    
+    if len(files_to_copy) > 0:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy),
+            outdir))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
     return fn
