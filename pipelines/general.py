@@ -847,8 +847,8 @@ def wasp_remap(
 
     return fn
 
-def _mbased(infile, locus_outfile, snv_outfile, sample_name, is_phased=False,
-            num_sim=1000000, threads=1):
+def _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
+            is_phased=False, num_sim=1000000, threads=1):
     """
     Make a PBS or shell script for running MBASED to determine allelic bias from
     sequencing reads.
@@ -867,6 +867,9 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name, is_phased=False,
 
     sample_name : str
         Sample name used for naming files etc.
+
+    rscript : str
+        Rscript executable to use.
 
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
@@ -887,18 +890,19 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name, is_phased=False,
     from __init__ import scripts
     is_phased = str(is_phased).upper()
     script = os.path.join(scripts, 'mbased.R')
-    lines = ' '.join([script, infile, locus_outfile, snv_outfile, sample_name,
-                      is_phased, str(num_sim), str(threads)]) + '\n'
+    lines = ' '.join([rscript, script, infile, locus_outfile, snv_outfile,
+                      sample_name, is_phased, str(num_sim), str(threads)])
+    lines += '\n'
     return lines
 
 def run_mbased(
     infile, 
     outdir, 
     sample_name, 
+    rscript, 
     is_phased=False,
     num_sim=1000000,
     threads=6, 
-    r_env='',
     shell=False,
 ):
     """
@@ -917,15 +921,15 @@ def run_mbased(
     sample_name : str
         Sample name used for naming files etc.
 
+    rscript : str
+        Rscript executable to use.
+
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
         assumed to be in phase. Note that this only matter locus by locus.
 
     num_sim : int
         Number of simulations for MBASED to perform.
-
-    r_env : str
-        If provided, this file will be sourced to set the environment for R.
 
     threads : int
         Number of threads to reserve using PBS scheduler and for MBASED to use.
@@ -970,9 +974,6 @@ def run_mbased(
         job_name = '{}_mbased'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
-    if r_env != '':
-        f.write('source {}\n\n'.format(r_env))
-
     lines = _mbased(infile, locus_outfile, snv_outfile, sample_name,
                     is_phased=is_phased, num_sim=num_sim, threads=threads)
     f.write(lines)
