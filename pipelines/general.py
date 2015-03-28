@@ -888,7 +888,7 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name, is_phased=False,
     is_phased = str(is_phased).upper()
     script = os.path.join(scripts, 'mbased.R')
     lines = ' '.join([script, infile, locus_outfile, snv_outfile, sample_name,
-                      is_phased, num_sim, threads]) + '\n'
+                      is_phased, str(num_sim), str(threads)]) + '\n'
     return lines
 
 def run_mbased(
