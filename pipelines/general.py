@@ -945,9 +945,6 @@ def run_mbased(
     """
     assert threads >= 1
     
-    if r_env != '':
-        f.write('source {}\n\n'.format(r_env))
-
     if shell:
         pbs = False
     else: 
@@ -988,6 +985,8 @@ def run_mbased(
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
     
+    if r_env != '':
+        f.write('source {}\n\n'.format(r_env))
 
     lines = _mbased(infile, locus_outfile, snv_outfile, sample_name,
                     is_phased=is_phased, num_sim=num_sim, threads=threads)
