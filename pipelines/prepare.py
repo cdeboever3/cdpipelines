@@ -532,4 +532,4 @@ def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
     command = '{}/rsem-prepare-reference {} {}'.format(rsem_path, fasta, name)
     if gtf:
         command += ' --gtf {}'.format(gtf)
-    subprocess.check_call(command)
+    subprocess.check_call(command, shell=True)
