@@ -955,7 +955,7 @@ def run_mbased(
 
     # I'm going to define some file names used later.
     locus_outfile = os.path.join(outdir, '{}_locus.tsv'.format(sample_name))
-    snvs_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
+    snv_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
     
     # Files to copy to output directory.
     files_to_copy = []
