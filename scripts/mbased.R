@@ -63,28 +63,30 @@ main <- function() {
 	    p_val_ase=assays(results)$pValueASE[,1],
 	    p_val_het=assays(results)$pValueHeterogeneity[,1]
 	)
+	locus_df[["p_val_ase_bh"]] = p.adjust(locus_df$p_val_ase, method="BH")
+	locus_df[["p_val_het_bh"]] = p.adjust(locus_df$p_val_het, method="BH")
 
 	write.table(locus_df, file=locus_outfile, sep="\t", quote=FALSE,
 		    col.names=NA)
 
-	lociOutputGR <- rowData(exptData(results)$locusSpecificResults)
-	lociOutputGR$ref_is_major <- 
+	snv_gr <- rowData(exptData(results)$locusSpecificResults)
+	snv_gr$ref_is_major <- 
 		assays(exptData(results)$locusSpecificResults)$allele1IsMajor[,1]
-	lociOutputGR$maf <- 
+	snv_gr$maf <- 
 		assays(exptData(results)$locusSpecificResults)$MAF[,1]
-	lociOutputList <- 
-		split(lociOutputGR, factor(lociOutputGR$aseID, 
-					   levels=unique(lociOutputGR$aseID)))
-	df = as.data.frame(lociOutputList)
-	df = df[c("seqnames", "start", "aseID", "allele1", "allele2",
-	          "ref_is_major", "maf")]
-	colnames(df)[1] = "chrom"
-	colnames(df)[2] = "position"
-	colnames(df)[3] = "locus"
-	colnames(df)[4] = "ref"
-	colnames(df)[5] = "alt"
+	snv_list <- 
+		split(snv_gr, factor(snv_gr$aseID,
+				     levels=unique(snv_gr$aseID)))
+	snv_df = as.data.frame(snv_list)
+	snv_df = snv_df[c("seqnames", "start", "aseID", "allele1", "allele2",
+			  "ref_is_major", "maf")]
+	colnames(snv_df)[1] = "chrom"
+	colnames(snv_df)[2] = "position"
+	colnames(snv_df)[3] = "locus"
+	colnames(snv_df)[4] = "ref"
+	colnames(snv_df)[5] = "alt"
 
-	write.table(df, file=snv_outfile, sep="\t", quote=FALSE,
+	write.table(snv_df, file=snv_outfile, sep="\t", quote=FALSE,
 		    col.names=NA)
 
 	sessionInfo()
