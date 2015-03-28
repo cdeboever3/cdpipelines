@@ -621,7 +621,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
     return lines
 
 def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
-               samtools_path, conda_env='', rpy2_file='', paired=True,
+               samtools_path, conda_env='', r_env='', paired=True,
                strand_specific=False, shell=False):
     """
     Make a PBS or shell script for counting reads that overlap genes for DESeq2
@@ -650,7 +650,7 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
     conda_env : str
         If provided, load conda environment with this name.
 
-    rpy2_file : str
+    r_env : str
         If provided, this file will be sourced to set the environment for rpy2.
 
     paired : boolean
@@ -711,8 +711,8 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
 
     if conda_env != '':
         f.write('source activate {}\n\n'.format(conda_env))
-    if rpy2_file != '':
-        f.write('source {}\n\n'.format(rpy2_file))
+    if r_env != '':
+        f.write('source {}\n\n'.format(r_env))
 
     lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
                           paired=True, strand_specific=strand_specific,
@@ -737,11 +737,47 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
 
     return fn
 
-def rsem_expression(bam, outdir, sample_name, tempdir, rpy2_file='',
+def _rsem_calculate_expression(bam, reference, sample_name,
+                               strand_specific=False): 
+    """
+    Esimate expression using RSEM.
+
+    Parameters
+    ----------
+    bam : str
+        Transcriptome bam file.
+
+    reference : str
+        RSEM reference.
+
+    sample_name : str
+        Sample name for RSEM to name files.
+
+    strand_specific : boolean
+        True if the data is strand-specific. False otherwise. For now, this
+        means that the R1 read is on the reverse strand.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    name : str
+        File name for the softlink.
+
+    """
+    line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
+            '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
+            '--estimate-rspd {} {} {}'.format(bam, reference, sample_name))
+    if strand_specific:
+        line += ' --forward-prob 0'
+    line += '\n'
+    return line
+
+def rsem_expression(bam, outdir, sample_name, tempdir, r_env='',
                     threads=32, strand_specific=False, shell=False):
     """
-    Make a PBS or shell script for counting reads that overlap genes for DESeq2
-    and exonic bins for DEXSeq.
+    Make a PBS or shell script for estimating expression using RSEM.
 
     Parameters
     ----------
@@ -757,7 +793,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rpy2_file='',
     tempdir : str
         Directory to store temporary files.
 
-    rpy2_file : str
+    r_env : str
         If provided, this file will be sourced to set the environment for rpy2.
 
     strand_specific : boolean
@@ -779,11 +815,13 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rpy2_file='',
     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
     
     # Files to copy to output directory.
+    # TODO: I need to add in the files to copy.
     files_to_copy = []
     
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
+    # TODO: I need to add in the files to remove.
     files_to_remove = []
 
     try:
@@ -808,11 +846,8 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rpy2_file='',
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    if conda_env != '':
-        f.write('source activate {}\n\n'.format(conda_env))
-    if rpy2_file != '':
-        f.write('source {}\n\n'.format(rpy2_file))
-
+    lines = _rsem_calculate_expression(bam, reference, sample_name,
+                                       strand_specific=strand_specific)
     f.write(lines)
     f.write('wait\n\n')
     
