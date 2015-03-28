@@ -508,3 +508,28 @@ def make_dexseq_annotation(gtf, out_gff):
     script = os.path.join(scripts_path, 'dexseq_prepare_annotation.py')
     command = 'python {} -r no {} {}'.format(script, gtf, out_gff)
     subprocess.check_call(command, shell=True)
+
+def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
+    """
+    Run rsem-prepare-reference
+
+    Parameters
+    ----------
+    fasta : str
+        Path to fasta to provide to RSEM. Should be a transcriptome fasta unless
+        gtf is specified. If gtf is specified, then this is a genome fasta.
+
+    name : str
+        Name of the RSEM reference.
+
+    rsem_path : str
+        Path to directory with RSEM executables.
+
+    gtf : str
+        Path to GTF file that defines genes and transcripts to provide to RSEM.
+
+    """
+    command = '{}/rsem-prepare-reference {} {}'.format(rsem_path, fasta, name)
+    if gtf:
+        command += ' --gtf {}'.format(gtf)
+    subprocess.check_call(command)
