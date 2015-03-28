@@ -974,7 +974,7 @@ def run_mbased(
         job_name = '{}_mbased'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
-    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name,
+    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
                     is_phased=is_phased, num_sim=num_sim, threads=threads)
     f.write(lines)
     f.write('wait\n\n')
