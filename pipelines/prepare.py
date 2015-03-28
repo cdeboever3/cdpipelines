@@ -11,7 +11,7 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
-def download_rsem(outdir):
+def download_rsem(outdir, lncurses=False):
     """
     Download RSEM.
 
@@ -20,12 +20,24 @@ def download_rsem(outdir):
     outdir : str
         Directory to save RSEM.
 
+    lncurses : bool
+        Set to true to use lncurses rather than lcurses to build samtools. See
+        http://seqanswers.com/forums/showthread.php?t=6669 for more information.
+
     """
     src = ('http://deweylab.biostat.wisc.edu/rsem/src/rsem-1.2.20.tar.gz')
     dest = os.path.join(outdir, 'rsem-1.2.20.tar.gz')
     _download_and_untar(src, dest, outdir)
     cwd = os.getcwd()
     os.chdir(os.path.join(outdir, 'rsem-1.2.20.tar.gz'))
+    if lncurses:
+        f = open(os.path.join('sam', 'Makefile'), 'r')
+        lines = f.read().replace('lcurses', 'lncurses')
+        f.close()
+        f = open(os.path.join('sam', 'Makefile'), 'w')
+        f.write(lines)
+        f.close()
+
     subprocess.check_call('make')
     os.chdir(cwd)
 
