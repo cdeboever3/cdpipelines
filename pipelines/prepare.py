@@ -29,7 +29,7 @@ def download_rsem(outdir, lncurses=False):
     dest = os.path.join(outdir, 'rsem-1.2.20.tar.gz')
     _download_and_untar(src, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(outdir, 'rsem-1.2.20.tar.gz'))
+    os.chdir(os.path.join(outdir, 'rsem-1.2.20'))
     if lncurses:
         f = open(os.path.join('sam', 'Makefile'), 'r')
         lines = f.read().replace('lcurses', 'lncurses')
