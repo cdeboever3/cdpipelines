@@ -899,7 +899,6 @@ def run_mbased(
     num_sim=1000000,
     threads=6, 
     r_env='',
-    tempdir='/scratch', 
     shell=False,
 ):
     """
@@ -928,9 +927,6 @@ def run_mbased(
     r_env : str
         If provided, this file will be sourced to set the environment for R.
 
-    tempdir : str
-        Directory to store files as STAR runs.
-
     threads : int
         Number of threads to reserve using PBS scheduler and for MBASED to use.
 
@@ -950,20 +946,12 @@ def run_mbased(
     else: 
         pbs = True
 
-    tempdir = os.path.join(tempdir, '{}_mbased'.format(sample_name))
     outdir = os.path.join(outdir, '{}_mbased'.format(sample_name))
 
     # I'm going to define some file names used later.
     locus_outfile = os.path.join(outdir, '{}_locus.tsv'.format(sample_name))
     snv_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
     
-    # Files to copy to output directory.
-    files_to_copy = []
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = []
-
     try:
         os.makedirs(outdir)
     except OSError:
@@ -982,9 +970,6 @@ def run_mbased(
         job_name = '{}_mbased'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    
     if r_env != '':
         f.write('source {}\n\n'.format(r_env))
 
@@ -993,27 +978,6 @@ def run_mbased(
     f.write(lines)
     f.write('wait\n\n')
     
-    if tempdir != outdir:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
-                            os.path.split(x)[1]]),
-            outdir))
-        for y in [x for x in files_to_copy if sample_name not in 
-             os.path.split(x)[1]]:
-            f.write('rsync -avz {} {}_{}\n'.format(
-                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
-            f.write('rm {}\n'.format(y))
-    else:
-        for y in [x for x in files_to_copy if sample_name not in 
-             os.path.split(x)[1]]:
-            f.write('mv {} {}_{}\n'.format(
-                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
-
-    if len(files_to_remove) > 0:
-        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
     return fn
