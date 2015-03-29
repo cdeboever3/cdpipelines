@@ -822,14 +822,14 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
     
     # Files to copy to output directory.
-    # TODO: I need to add in the files to copy.
-    files_to_copy = []
+    files_to_copy = ['{}.genes.results'.format(sample_name),
+                     '{}.isoforms.results'.format(sample_name),
+                     '{}.stat'.format(sample_name)]
     
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    # TODO: I need to add in the files to remove.
-    files_to_remove = []
+    files_to_remove = [temp_bam]
 
     try:
         os.makedirs(outdir)
@@ -853,7 +853,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    lines = _rsem_calculate_expression(bam, rsem_reference, sample_name,
+    lines = _rsem_calculate_expression(temp_bam, rsem_reference, sample_name,
                                        strand_specific=strand_specific)
     f.write(lines)
     f.write('wait\n\n')
@@ -865,7 +865,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
     if len(files_to_remove) > 0:
         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if tempdir != outdir:
+    if os.path.realpath(tempdir) != os.path.realpath(outdir):
         f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
