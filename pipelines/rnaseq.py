@@ -797,6 +797,9 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
     tempdir : str
         Directory to store temporary files.
 
+    rsem_path : str
+        Path to directory with RSEM executables.
+
     rsem_reference : str
         RSEM reference.
 
@@ -853,7 +856,8 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    lines = _rsem_calculate_expression(temp_bam, rsem_reference, sample_name,
+    lines = _rsem_calculate_expression(temp_bam, rsem_reference, rsem_path,
+                                       sample_name, threads=threads,
                                        strand_specific=strand_specific)
     f.write(lines)
     f.write('wait\n\n')
