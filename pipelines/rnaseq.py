@@ -737,10 +737,10 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
 
     return fn
 
-def _rsem_calculate_expression(bam, reference, sample_name,
-                               strand_specific=False): 
+def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
+                               threads=1, strand_specific=False): 
     """
-    Esimate expression using RSEM.
+    Estimate expression using RSEM.
 
     Parameters
     ----------
@@ -749,6 +749,9 @@ def _rsem_calculate_expression(bam, reference, sample_name,
 
     reference : str
         RSEM reference.
+
+    rsem_path : str
+        Path to RSEM executables.
 
     sample_name : str
         Sample name for RSEM to name files.
@@ -768,13 +771,14 @@ def _rsem_calculate_expression(bam, reference, sample_name,
     """
     line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
             '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
-            '--estimate-rspd {} {} {}'.format(bam, reference, sample_name))
+            '--estimate-rspd {} {} {}'.format(rsem_path, threads, bam,
+                                              reference, sample_name))
     if strand_specific:
         line += ' --forward-prob 0'
     line += '\n'
     return line
 
-def rsem_expression(bam, outdir, sample_name, tempdir, r_env='',
+def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
                     threads=32, strand_specific=False, shell=False):
     """
     Make a PBS or shell script for estimating expression using RSEM.
@@ -792,6 +796,9 @@ def rsem_expression(bam, outdir, sample_name, tempdir, r_env='',
 
     tempdir : str
         Directory to store temporary files.
+
+    rsem_reference : str
+        RSEM reference.
 
     r_env : str
         If provided, this file will be sourced to set the environment for rpy2.
@@ -846,7 +853,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, r_env='',
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    lines = _rsem_calculate_expression(bam, reference, sample_name,
+    lines = _rsem_calculate_expression(bam, rsem_reference, sample_name,
                                        strand_specific=strand_specific)
     f.write(lines)
     f.write('wait\n\n')
