@@ -778,8 +778,9 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
     line += '\n'
     return line
 
-def rsem_expression(bam, outdir, sample_name, tempdir, rsem_reference, r_env='',
-                    threads=32, strand_specific=False, shell=False):
+def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
+                    rsem_reference, r_env='', threads=32, strand_specific=False,
+                    shell=False):
     """
     Make a PBS or shell script for estimating expression using RSEM.
 
