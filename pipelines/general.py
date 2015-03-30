@@ -847,7 +847,7 @@ def wasp_remap(
 
     return fn
 
-def _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
+def _mbased(infile, locus_outfile, snv_outfile, sample_name, 
             is_phased=False, num_sim=1000000, threads=1):
     """
     Make a PBS or shell script for running MBASED to determine allelic bias from
@@ -868,9 +868,6 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
     sample_name : str
         Sample name used for naming files etc.
 
-    rscript : str
-        Rscript executable to use.
-
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
         assumed to be in phase. Note that this only matter locus by locus.
@@ -890,7 +887,8 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
     from __init__ import scripts
     is_phased = str(is_phased).upper()
     script = os.path.join(scripts, 'mbased.R')
-    lines = ' '.join([rscript, script, infile, locus_outfile, snv_outfile,
+    lines = 'Rscript'
+    lines += ' '.join([script, infile, locus_outfile, snv_outfile,
                       sample_name, is_phased, str(num_sim), str(threads)])
     lines += '\n'
     return lines
@@ -899,7 +897,7 @@ def run_mbased(
     infile, 
     outdir, 
     sample_name, 
-    rscript, 
+    r_env=None, 
     is_phased=False,
     num_sim=1000000,
     threads=6, 
@@ -921,8 +919,8 @@ def run_mbased(
     sample_name : str
         Sample name used for naming files etc.
 
-    rscript : str
-        Rscript executable to use.
+    r_env : str
+        This file will be sourced to set PATH variables for R.
 
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
@@ -974,7 +972,9 @@ def run_mbased(
         job_name = '{}_mbased'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
-    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, rscript,
+    if r_env != '':
+        f.write('source {}\n'.format(r_env))
+    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
                     is_phased=is_phased, num_sim=num_sim, threads=threads)
     f.write(lines)
     f.write('wait\n\n')
