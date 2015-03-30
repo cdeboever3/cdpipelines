@@ -887,7 +887,7 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name,
     from __init__ import scripts
     is_phased = str(is_phased).upper()
     script = os.path.join(scripts, 'mbased.R')
-    lines = 'Rscript'
+    lines = 'Rscript '
     lines += ' '.join([script, infile, locus_outfile, snv_outfile,
                       sample_name, is_phased, str(num_sim), str(threads)])
     lines += '\n'
