@@ -738,7 +738,7 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
     return fn
 
 def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
-                               threads=1, strand_specific=False): 
+                               threads=1, ci_mem=1024, strand_specific=False): 
     """
     Estimate expression using RSEM.
 
@@ -756,6 +756,10 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
     sample_name : str
         Sample name for RSEM to name files.
 
+    ci_mem : int
+        Amount of memory in mb to give RSEM for calculating confidence
+        intervals. Passed to --ci-memory for RSEM.
+
     strand_specific : boolean
         True if the data is strand-specific. False otherwise. For now, this
         means that the R1 read is on the reverse strand.
@@ -771,16 +775,16 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
     """
     line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
             '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
-            '--estimate-rspd {} {} {}'.format(rsem_path, threads, bam,
-                                              reference, sample_name))
+            '--ci-memory {} --estimate-rspd {} {} {}'.format(
+                rsem_path, threads, ci_mem, bam, reference, sample_name))
     if strand_specific:
         line += ' --forward-prob 0'
     line += '\n'
     return line
 
 def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
-                    rsem_reference, r_env='', threads=32, strand_specific=False,
-                    shell=False):
+                    rsem_reference, ci_mem=1024, r_env='', threads=32,
+                    strand_specific=False, shell=False):
     """
     Make a PBS or shell script for estimating expression using RSEM.
 
@@ -803,6 +807,10 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
 
     rsem_reference : str
         RSEM reference.
+
+    ci_mem : int
+        Amount of memory in mb to give RSEM for calculating confidence
+        intervals. Passed to --ci-memory for RSEM.
 
     r_env : str
         If provided, this file will be sourced to set the environment for rpy2.
@@ -859,6 +867,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
 
     lines = _rsem_calculate_expression(temp_bam, rsem_reference, rsem_path,
                                        sample_name, threads=threads,
+                                       ci_mem=ci_mem,
                                        strand_specific=strand_specific)
     f.write(lines)
     f.write('wait\n\n')
