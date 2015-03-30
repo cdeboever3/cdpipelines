@@ -972,7 +972,7 @@ def run_mbased(
         job_name = '{}_mbased'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
-    if r_env != '':
+    if r_env:
         f.write('source {}\n'.format(r_env))
     lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
                     is_phased=is_phased, num_sim=num_sim, threads=threads)
