@@ -982,3 +982,141 @@ def run_mbased(
     f.close()
 
     return fn
+
+def convert_sra_to_fastq(
+    sra_files, 
+    outdir, 
+    sample_name, 
+    sra_toolkit_path,
+    remove_sra_files=False,
+    max_threads=32,
+    threads_per_sra=4,
+    shell=False,
+):
+    """
+    Make a PBS or shell script for converting one or more SRA files into fastq
+    files. All R1 and R2 files will be concatenated and gzipped into two single
+    output files.
+
+    Parameters
+    ----------
+    sra_files : str
+        List of SRA files to convert.
+
+    outdir : str
+        Directory to store PBS/shell file and gzipped fastq files.
+
+    sample_name : str
+        Sample name used for naming files etc.
+
+    sra_toolkit_path : str
+        Path to the SRA toolkit bin.
+
+    remove_sra_files : bool
+        Whether to remove original SRA files after conversion is complete.
+
+    max_threads : int
+        Maximum number of threads to request from PBS scheduler.
+
+    threads_per_sra : int
+        Request this many threads per SRA input file. max_threads /
+        threads_per_sra SRA files will be converted at a time. For instance, if
+        you provide 3 SRA files, threads_per_sra=4, and max_threads=10, then the
+        first two SRA files will be converted at the same time. After they are
+        done, the last file will be converted. This is done naively using
+        background processes (&).
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+    
+    Returns
+    -------
+    fn : str
+        Path to PBS/shell script.
+
+    """
+    threads = min(threads_per_sra * len(sra_files), max_threads)
+
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    tempdir = os.path.join(tempdir, '{}_sra_fastq'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_sra_fastq'.format(sample_name))
+
+    # I'm going to define some file names used later.
+    r1 = os.path.join(tempdir, '{}.R1.fastq.gz'.format(sample_name))
+    r2 = os.path.join(tempdir, '{}.R2.fsatq.gz'.format(sample_name))
+    temp_sra_files = [os.path.join(tempdir, os.path.split(x)[1]) for x in
+                      sra_files]
+    
+    # Files to copy to output directory.
+    files_to_copy = [r1, r2]
+    
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = temp_sra_files
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}_sra_fastq.sh'.format(sample_name))
+    else:
+        fn = os.path.join(outdir, '{}_sra_fastq.pbs'.format(sample_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}_sra_fastq.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_sra_fastq.err'.format(sample_name))
+        job_name = '{}_sra_fastq'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+        ' \\\n\t'.join(sra_files), tempdir))
+
+    def chunks(l, n):
+        """Yield successive n-sized chunks from l."""
+        for i in xrange(0, len(l), n):
+            yield l[i:i+n]
+    
+    c = chunks(temp_sra_files, threads / threads_per_sra)
+    while True:
+        try:
+            n = c.next()
+            for sra in n:
+                f.write('{} {} --split-files &\n'.format(
+                    os.path.join(sra_toolkit_path, 'fastq-dump'), sra))
+            f.write('\nwait\n\n')
+        except StopIteration:
+            continue
+        
+    # Concatenate files, pass through awk to remove unneeded stuff, gzip.
+    f.write('cat *_1.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'gzip -c > ' + r1 + ' &\n\n')
+    f.write('cat *_2.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'gzip -c > ' + r2 + '\n\n')
+    f.write('wait\n\n')
+
+    if remove_sra_files:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(sra_files)))
+            
+    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+        ' \\\n\t'.join(files_to_copy),
+        outdir))
+    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
