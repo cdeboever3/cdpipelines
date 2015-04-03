@@ -515,18 +515,8 @@ def install_bioconductor_dependencies():
     robjects.r('biocLite("DESeq2", ask=FALSE)')
     robjects.r('biocLite("DEXSeq", ask=FALSE)')
     robjects.r('biocLite("Gviz", ask=FALSE)')
-
-def install_r_dependencies():
-    try:
-        # Have to import readline due to some weirdness with installing rpy2 in
-        # a conda environment etc.
-        # See https://github.com/ContinuumIO/anaconda-issues/issues/152.
-        import readline
-        import rpy2.robjects as robjects
-    except ImportError:
-        sys.stderr.write('rpy2 not installed.\n')
-        sys.exit(1)
-    robjects.r('install.packages("GOseq")')
+    robjects.r('biocLite("goseq", ask=FALSE)')
+    robjects.r('biocLite("org.Hs.eg.db", ask=FALSE)')
 
 def make_dexseq_annotation(gtf, out_gff):
     try:
