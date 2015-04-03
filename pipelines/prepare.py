@@ -11,6 +11,11 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
+def _download_file(url, dest):
+    req = urlopen(url)
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+
 def _download_and_gunzip(url, dest):
     """
     Download a gzipped file url to dest and gunzip it.
@@ -576,6 +581,10 @@ def download_roadmap_25_state_chromatin_model(outdir):
     assert len(res) is 127
     res = [x[5:].strip('"') for x in res]
     to_download = ['{}/{}'.format(url, x) for x in res]
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_and_gunzip(src, dest)
+    to_download = []
     to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
                        'chromhmmSegmentations/ChmmModels/imputed12marks/'
                        'jointModel/final/EIDlegend.txt')
@@ -584,4 +593,4 @@ def download_roadmap_25_state_chromatin_model(outdir):
                        'jointModel/final/annotation_25_imputed12marks.txt')
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
-        _download_and_gunzip(src, dest)
+        _download_file(src, dest)
