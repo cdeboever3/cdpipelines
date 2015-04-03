@@ -596,11 +596,11 @@ def download_roadmap_25_state_chromatin_model(outdir):
     to_download = ['{}/{}'.format(url, x) for x in res]
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
-        sorted_dest = '{}_sorted.bed'.format(os.path.splitext(dest)[0])
+        sorted_dest = '{}_sorted.bed'.format(dest.strip('.bed.gz'))
         _download_and_gunzip(src, dest)
-        subprocess.check_call('sort -k 1,1 -k2,2n {} > {}'.format(dest,
-                                                                  sorted_dest))
-        os.remove(dest)
+        subprocess.check_call('sort -k 1,1 -k2,2n {} > {}'.format(
+            dest.strip('.gz'), sorted_dest), shell=True)
+        os.remove(dest.strip('.gz'))
     to_download = []
     to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
                        'chromhmmSegmentations/ChmmModels/imputed12marks/'
