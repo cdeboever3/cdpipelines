@@ -11,6 +11,54 @@ import subprocess
 import sys
 from urllib2 import urlopen
 
+def _download_and_gunzip(url, dest):
+    """
+    Download a gzipped file url to dest and gunzip it.
+
+    Parameters
+    ----------
+    url : str
+        URL for gzipped file to download.
+
+    dest : str
+        Full path to save gzipped file to. This file will be gunzipped.
+
+    """
+    try:
+        os.makedirs(os.path.split(dest)[0])
+    except OSError:
+        pass
+    req = urlopen(url)
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+    subprocess.check_call(['gunzip', dest])
+
+def _download_and_untar(url, dest, outdir, remove_tarball=False):
+    """
+    Download a tarball url to dest and decompress it in outdir.
+
+    Parameters
+    ----------
+    url : str
+        URL to tarball to download.
+
+    dest : str
+        Full path to save tarball to.
+
+    outdir : str
+        Directory to save tarball to and decompress to.
+
+    remove_tarball : bool
+        If True, remove tarball after decompressing.
+
+    """
+    req = urlopen(url)
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+    subprocess.check_call('tar -xf {} -C {}'.format(dest, outdir), shell=True)
+    if remove_tarball:
+        os.remove(dest)
+
 def download_rsem(outdir, lncurses=False):
     """
     Download RSEM.
@@ -73,27 +121,6 @@ def download_fastqc(outdir):
     with open(dest, 'w') as f:
         shutil.copyfileobj(req, f)
     subprocess.check_call(['unzip', '-d', outdir, dest])
-
-def _download_and_untar(url, dest, outdir):
-    """
-    Download a tarball req into outdir and decompress it in outdir.
-
-    Parameters
-    ----------
-    url : str
-        URL to tarball to download.
-
-    dest : str
-        Full path to save tarball to.
-
-    outdir : str
-        Directory to save tarball to and decompress to.
-
-    """
-    req = urlopen(url)
-    with open(dest, 'w') as d:
-        shutil.copyfileobj(req, d)
-    subprocess.check_call('tar -xf {} -C {}'.format(dest, outdir), shell=True)
 
 def download_vcftools(outdir):
     """
@@ -453,15 +480,7 @@ def download_gencode_gtf(outdir):
     src = ('ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/'
            'gencode.v19.annotation.gtf.gz')
     dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
-    try:
-        os.makedirs(os.path.split(dest)[0])
-    except OSError:
-        pass
-    req = urlopen(src)
-    with open(dest, 'w') as f:
-        shutil.copyfileobj(req, f)
-    subprocess.check_call(['gunzip', dest])
-
+    _download_and_gunzip(src, dest)
 
 def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
@@ -490,6 +509,18 @@ def install_bioconductor_dependencies():
     robjects.r('biocLite(ask=FALSE)')
     robjects.r('biocLite("DESeq2", ask=FALSE)')
     robjects.r('biocLite("DEXSeq", ask=FALSE)')
+
+def install_r_dependencies():
+    try:
+        # Have to import readline due to some weirdness with installing rpy2 in
+        # a conda environment etc.
+        # See https://github.com/ContinuumIO/anaconda-issues/issues/152.
+        import readline
+        import rpy2.robjects as robjects
+    except ImportError:
+        sys.stderr.write('rpy2 not installed.\n')
+        sys.exit(1)
+    robjects.r('install.packages("GOseq")')
 
 def make_dexseq_annotation(gtf, out_gff):
     try:
@@ -533,3 +564,24 @@ def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
     if gtf:
         command += ' --gtf {}'.format(gtf)
     subprocess.check_call(command, shell=True)
+
+def download_roadmap_25_state_chromatin_model(outdir):
+    import re
+    pattern = 'href="E\d\d\d_25_imputed12marks_mnemonics.bed.gz"'
+    compiled = re.compile(pattern)
+    url = ('http://egg2.wustl.edu/roadmap/data/byFileType'
+           '/chromhmmSegmentations/ChmmModels/imputed12marks/jointModel/final')
+    s = urlopen(url).read()
+    res = compiled.findall(s)
+    assert len(res) is 127
+    res = [x[5:].strip('"') for x in res]
+    to_download = ['{}/{}'.format(url, x) for x in res]
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/imputed12marks/'
+                       'jointModel/final/EIDlegend.txt')
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/imputed12marks/'
+                       'jointModel/final/annotation_25_imputed12marks.txt')
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_and_gunzip(src, dest)
