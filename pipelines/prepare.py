@@ -444,7 +444,7 @@ def download_install_rpy2(r_path, outdir):
     # Path to R shared library.
     s_path = os.path.join(os.path.split(os.path.split(r_path)[0])[0], 'lib64',
                          'R', 'lib')
-    lines = ('\n\n\nrpy3 has to be compiled against the version of R you\'ve \n'
+    lines = ('\n\n\nrpy2 has to be compiled against the version of R you\'ve \n'
              'installed here. Note that you have to set ld flags and library\n'
              'paths for installation. If you haven\'t already, paste the\n'
              'following at the command line:\n\n')
