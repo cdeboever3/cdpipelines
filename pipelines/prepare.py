@@ -514,6 +514,7 @@ def install_bioconductor_dependencies():
     robjects.r('biocLite(ask=FALSE)')
     robjects.r('biocLite("DESeq2", ask=FALSE)')
     robjects.r('biocLite("DEXSeq", ask=FALSE)')
+    robjects.r('biocLite("Gviz", ask=FALSE')
 
 def install_r_dependencies():
     try:
