@@ -323,6 +323,186 @@ def _make_softlink(fn, sample_name, link_dir):
     lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name))
     return lines, name
 
+class JobScriptInputFile:
+    def __init__(filename, copy_to_tempdir=False, delete_temp=False,
+                 tempdir=None):
+        """
+        Create an object for a file that will be used as input by a JobScript.
+        
+        Parameters
+        ----------
+        filename : str
+            Path to where file currently exists or where it will be made by the
+            JobScript.
+
+        copy_to_tempdir : bool
+            If True, copy this file to the tempdir at the beginning of the
+            PBS/shell script.
+
+        delete_temp : bool
+            If True, delete the temporary version of this file when the
+            PBS/shell script is complete. If a temporary version of this file is
+            not made, this will be set to False automatically.
+        """
+        self.filename = filename
+        self.copy_to_tempdir = copy_to_tempdir
+        self.delete_temp = delete_temp
+        if self.copy_to_tempdir and self.tempdir:
+            fn = os.path.split(self.filename)[1]
+            self.temp_filename = os.path.join(self.tempdir, fn)
+        else:
+            self.temp_filename = self.filename
+            # I will not delete the input file if I do not make a temporary
+            # version of it.
+            self.delete_temp = False
+
+class JobScriptOutputFile:
+    def __init__(filename, copy_to_outdir=False, tempdir=None):
+        """
+        Create an object for a file that will created by a JobScript.
+        
+        Parameters
+        ----------
+        filename : str
+            Path to where file currently exists or where it will be made by the
+            JobScript.
+
+        copy_to_outdir : bool
+            If True, copy this file to the output directory at the end of the
+            PBS/shell script.
+        """
+        self.filename = filename
+        self.copy_to_outdir = copy_to_outdir
+        if self.copy_to_outdir:
+            self.delete = True
+        else:
+            self.delete = False
+
+class JobScript:
+    def __init__(sample_name, job_suffix, tempdir, outdir, threads, shell=False,
+                 queue='high', conda_env=None): 
+        """
+        Create PBS/shell script object.
+
+        Parameters
+        ----------
+        sample_name : str
+            Sample name used for naming directories, files, etc.
+
+        job_suffix : str
+            This suffix will be used for naming directories, files, etc.
+
+        tempdir : str
+            Path to directory where temporary directory should be made.
+
+        outdir: str
+            Path to directory where final output files should be stored.
+
+        threads : int
+            Number of threads to request for PBS scripts and to use for
+            multi-threaded software.
+
+        shell : bool
+            True if making a shell script. False if making a PBS script.
+
+        queue : str
+            PBS queue to use if writing PBS script.
+
+        conda_env : str
+            Path to conda environment to load when job begins.
+        """
+        self.sample_name = sample_name
+        self.job_suffix = job_suffix
+        self.tempdir = os.path.realpath(os.path.join(tempdir, jobname))
+        self.outdir = os.path.realpath(os.path.join(outdir, jobname))
+        for d in tempdir, outdir:
+            try:
+                os.makedirs(d)
+            except OSError:
+                pass
+        assert type(threads) is int
+        self.threads = threads
+        self.shell = shell
+        self.pbs = not shell
+        self.queue = queue
+        self.conda_env = conda_env
+       
+        # self.files contains JobScriptFile objects.
+        self.files = []
+        self.files_to_copy = []
+        self.files_to_delete = []
+        self.jobname = '{}_{}'.format(sample_name, job_suffix)
+        self.set_filename()
+        self.write_header()
+
+    def set_filename(self):
+        """Make PBS/shell script filename."""
+        if self.pbs:
+            self.filename = os.path.join(outdir, '{}.pbs'.format(jobname))
+        else:
+            self.filename = os.path.join(outdir, '{}.sh'.format(jobname))
+
+    def write_header(self):
+        with open(self,filename, "a") as f:
+            f.write('#!/bin/bash\n\n')
+            if pbs:
+                out = os.path.join(self.outdir, '{}.out'.format(self.jobname))
+                err = os.path.join(self.outdir, '{}.err'.format(self.jobname))
+                f.write('#PBS -q {}\n'.format(self.queue))
+                f.write('#PBS -N {}\n'.format(name))
+                f.write('#PBS -l nodes=1:ppn={}\n'.format(threads))
+                f.write('#PBS -o {}\n'.format(out))
+                f.write('#PBS -e {}\n\n'.format(err))
+            if conda_env:
+                f.write('source activate {}\n\n'.format(conda_env))
+
+            f.write('mkdir -p {}\n'.format(tempdir))
+            f.write('cd {}\n\n'.format(tempdir))
+
+    def add_file(self, fn, copy_to_tempdir=True, delete_temp=True,
+                 copy_to_outdir=False):
+        f = JobScriptFile(fn, copy_to_tempdir=copy_to_tempdir,
+                          delete_temp=delete_temp,
+                          copy_to_outdir=copy_to_outdir, tempdir=self.tempdir)
+        self.files.append(f)
+        if copy_to_tempdir:
+            self.input_files_to_copy.append(f.filename)
+        if delete_temp:
+            self.files_to_delete.append(f.temp_filename)
+        if copy_to_outdir:
+            self.output_files_to_copy.append(f.temp_filename)
+        return f
+
+    def copy_input_files(self):
+        if len(self.input_files_to_copy) > 0:
+            with open(self,filename, "a") as f:
+                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+                    '\\\n\t'.join(self.input_files_to_copy),
+                    self.tempdir))
+
+    def copy_output_files(self):
+        if len(self.output_files_to_copy) > 0:
+            with open(self,filename, "a") as f:
+                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+                    '\\\n\t'.join(self.output_files_to_copy),
+                    self.outdir))
+
+    def delete_temp_files(self):
+        if len(self.files_to_delete) > 0:
+            with open(self,filename, "a") as f:
+                f.write('rm \\\n\t{}\n\n'.format(
+                    ' \\\n\t'.join(self.files_to_delete)))
+
+    def delete_tempdir(self):
+        if tempdir != outdir:
+            with open(self,filename, "a") as f:
+                f.write('rm -r {}\n'.format(tempdir))
+
+    def write_end(self):
+        self.copy_output_files()
+        self.delete_temp_files()
+        self.delete_tempdir()
+
 def _pbs_header(out, err, name, threads, queue='high'):
     """
     Write header for PBS script
@@ -429,7 +609,7 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
     return lines
 
 def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
-                     outdir, tempdir, conda_env='', shell=False, threads=6):
+                     outdir, tempdir, conda_env=None, shell=False, threads=6):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
@@ -465,73 +645,33 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
         Number of threads to request for PBS script.
 
     """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
+    job_suffix = 'wasp_allele_swap'
+    job = JobScript(sample_name, job_suffix, tempdir, outdir, shell=shell,
+                    conda_env=conda_env, threads=threads)
     
-    jobname = '{}_wasp_allele_swap'.format(sample_name)
-
-    tempdir = os.path.join(tempdir, jobname)
-    outdir = os.path.join(outdir, jobname)
-
-    # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+    bam = job.add_file(bam, copy_to_tempdir=True, delete_temp=True,
+                       copy_to_outdir=False)
     
     # Files to copy to output directory.
     prefix = os.path.splitext(os.path.split(bam)[1])[0]
-    files_to_copy = [
+    fns = [
         '{}.keep.bam'.format(prefix),
         '{}.remap.fq1.gz'.format(prefix),
         '{}.remap.fq2.gz'.format(prefix),
         '{}.to.remap.bam'.format(prefix),
         '{}.to.remap.num.gz'.format(prefix)
     ]
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = []
-    if os.path.realpath(temp_bam) != os.path.realpath(bam):
-        files_to_remove.append(temp_bam)
+    for fn in fns:
+        r = job.add_file(fn, copy_to_tempdir=False, delete_temp=True,
+                         copy_to_outdir=True)
+    job.copy_input_files(self)
 
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}.sh'.format(jobname))
-    else:
-        fn = os.path.join(outdir, '{}.pbs'.format(jobname))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}.out'.format(jobname))
-        err = os.path.join(outdir, '{}.err'.format(jobname))
-        f.write(_pbs_header(out, err, jobname, threads))
+    with open(job.filename, "a") as f:
+        f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
+                                                bam.temp_filename, snp_dir))
     
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n\t{} \\\n\t{} \n\n'.format(bam, temp_bam))
-    
-    f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
-                                            temp_bam, snp_dir))
-    
-    if len(files_to_copy) > 0:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy),
-            outdir))
-    if len(files_to_remove) > 0:
-        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
+    job.write_end()
+    return job.filename
 
 def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                            filter_remapped_reads_path, sample_name, outdir,
