@@ -64,6 +64,20 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
+def download_weblogo(outdir):
+    """
+    Download weblogo. 
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save weblogo to.
+
+    """
+    src = ('http://weblogo.berkeley.edu/release/weblogo.2.8.2.tar.gz')
+    dest = os.path.join(outdir, 'weblogo.2.8.2')
+    _download_and_untar(src, dest, outdir)
+
 def download_rsem(outdir, lncurses=False):
     """
     Download RSEM.

@@ -264,7 +264,7 @@ def align_and_call_peaks(
     conda_env='',
     rgpl='ILLUMINA',
     rgpu='',
-    temp_dir='/scratch', 
+    tempdir='/scratch', 
     threads=32, 
     picard_memory=58, 
     shell=False,
@@ -341,7 +341,7 @@ def align_and_call_peaks(
     rgpu : str
         Read Group platform unit (eg. run barcode). 
 
-    temp_dir : str
+    tempdir : str
         Directory to store files as STAR runs.
 
     threads : int
@@ -376,28 +376,28 @@ def align_and_call_peaks(
     if type(r2_fastqs) == str:
         r2_fastqs = [r2_fastqs]
 
-    temp_dir = os.path.join(temp_dir, '{}_peaks'.format(sample_name))
+    tempdir = os.path.join(tempdir, '{}_peaks'.format(sample_name))
     outdir = os.path.join(outdir, '{}_peaks'.format(sample_name))
 
     # I'm going to define some file names used later.
-    temp_r1_fastqs = _process_fastqs(r1_fastqs, temp_dir)
-    temp_r2_fastqs = _process_fastqs(r2_fastqs, temp_dir)
-    combined_r1 = os.path.join(temp_dir, 
+    temp_r1_fastqs = _process_fastqs(r1_fastqs, tempdir)
+    temp_r2_fastqs = _process_fastqs(r2_fastqs, tempdir)
+    combined_r1 = os.path.join(tempdir, 
                                '{}_combined_R1.fastq.gz'.format(sample_name))
-    combined_r2 = os.path.join(temp_dir, 
+    combined_r2 = os.path.join(tempdir, 
                                '{}_combined_R2.fastq.gz'.format(sample_name))
-    aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
+    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
     filtered_bam = os.path.join(tempdir, 
                                 '{}_atac_filtered.bam'.format(sample_name))
     coord_sorted_bam = os.path.join(
-        temp_dir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
-    no_dup_bam = os.path.join(temp_dir,
+        tempdir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
+    no_dup_bam = os.path.join(tempdir,
                               '{}_atac_no_dup.bam'.format(sample_name))
-    bam_index = os.path.join(temp_dir,
+    bam_index = os.path.join(tempdir,
                              '{}_atac_no_dup.bam.bai'.format(sample_name))
     qsorted_bam = os.path.join(
-        temp_dir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
-    out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
+        tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
+    out_bigwig = os.path.join(tempdir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(
         outdir, '{}_duplicate_metrics.txt'.format(sample_name))
@@ -449,8 +449,8 @@ def align_and_call_peaks(
     
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(temp_dir))
-    f.write('cd {}\n'.format(temp_dir))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in r1_fastqs]),
         ' \\\n'.join(['\t{}'.format(x) for x in r2_fastqs])))
@@ -475,9 +475,9 @@ def align_and_call_peaks(
     if trim:
         assert(type(trim) is int)
         trimmed_r1 = os.path.join(
-            temp_dir, '{}_trimmed_R1.fastq.gz'.format(sample_name))
+            tempdir, '{}_trimmed_R1.fastq.gz'.format(sample_name))
         trimmed_r2 = os.path.join(
-            temp_dir, '{}_trimmed_R2.fastq.gz'.format(sample_name))
+            tempdir, '{}_trimmed_R2.fastq.gz'.format(sample_name))
         files_to_remove.append(trimmed_r1)
         files_to_remove.append(trimmed_r2)
         lines = _cutadapt_trim(combined_r1, trim, trimmed_r1, bg=True)
@@ -504,22 +504,22 @@ def align_and_call_peaks(
         samtools_path, no_dup_bam, chrom_counts))
 
     # Remove mitochondrial reads and read pairs that are not uniquely aligned.
-    lines = ('{} view -q 255 {} | '.format(samtools_path, aligned_bam)
-             'awk \'{if ($3 != "chrM") {print} if (substr($1,1,1) == "@") '
-             '{print}}\' '
+    lines = ('{} view -q 255 {} | '.format(samtools_path, aligned_bam) + 
+             'awk \'{if ($3 != "chrM") {print} if (substr($1,1,1) == "@") ' + 
+             '{print}}\' ' + 
              '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
     # Coordinate sort bam file.
     lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                               picard_memory, samtools_path, temp_dir)
+                               picard_memory, samtools_path, tempdir)
     f.write(lines)
     f.write('wait\n\n')
 
     # Remove duplicates.
     lines = _picard_remove_duplicates(coord_sorted_bam, no_dup_bam,
                                       duplicate_metrics, picard_path,
-                                      picard_memory, temp_dir)
+                                      picard_memory, tempdir)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -552,7 +552,7 @@ def align_and_call_peaks(
     f.write(lines)
     f.write('wait\n\n')
 
-    if temp_dir != outdir:
+    if tempdir != outdir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
                             os.path.split(x)[1]]),
@@ -570,8 +570,8 @@ def align_and_call_peaks(
 
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
-    if temp_dir != outdir:
-        f.write('rm -r {}\n'.format(temp_dir))
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
     f.close()
 
     return fn
