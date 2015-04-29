@@ -75,7 +75,7 @@ def download_weblogo(outdir):
 
     """
     src = ('http://weblogo.berkeley.edu/release/weblogo.2.8.2.tar.gz')
-    dest = os.path.join(outdir, 'weblogo.2.8.2')
+    dest = os.path.join(outdir, 'weblogo')
     _download_and_untar(src, dest, outdir)
 
 def download_rsem(outdir, lncurses=False):
