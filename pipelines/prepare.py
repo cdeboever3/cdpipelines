@@ -68,6 +68,7 @@ def download_blat(outdir):
     src = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/blat/blat'
     dest = os.path.join(outdir, 'blat')
     _download_file(src, dest)
+    subprocess.check_call(['chmod', '755', '{}'.format(dest)])
 
 def download_weblogo(outdir):
     """
