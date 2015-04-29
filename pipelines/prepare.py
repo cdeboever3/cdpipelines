@@ -64,6 +64,11 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
+def download_blat(outdir):
+    src = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/blat/blat'
+    dest = os.path.join(outdir, 'blat')
+    _download_file(src, dest)
+
 def download_weblogo(outdir):
     """
     Download weblogo. 
