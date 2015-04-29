@@ -7,7 +7,8 @@ from general import _fastqc
 from general import _flagstat
 from general import _make_softlink
 from general import _pbs_header
-from general import _picard_coord_sort_primary
+from general import _picard_coord_sort
+from general import _picard_query_sort
 from general import _picard_remove_duplicates
 from general import _process_fastqs
 from general import _samtools_index
@@ -386,11 +387,16 @@ def align_and_call_peaks(
     combined_r2 = os.path.join(temp_dir, 
                                '{}_combined_R2.fastq.gz'.format(sample_name))
     aligned_bam = os.path.join(temp_dir, 'Aligned.out.bam')
-    coord_sorted_bam = os.path.join(temp_dir, 'Aligned.out.coord.sorted.bam')
+    filtered_bam = os.path.join(tempdir, 
+                                '{}_atac_filtered.bam'.format(sample_name))
+    coord_sorted_bam = os.path.join(
+        temp_dir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
     no_dup_bam = os.path.join(temp_dir,
                               '{}_atac_no_dup.bam'.format(sample_name))
     bam_index = os.path.join(temp_dir,
                              '{}_atac_no_dup.bam.bai'.format(sample_name))
+    qsorted_bam = os.path.join(
+        temp_dir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
     out_bigwig = os.path.join(temp_dir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(
@@ -414,8 +420,9 @@ def align_and_call_peaks(
         'fastqc_report.html')
     
     # Files to copy to output directory.
-    files_to_copy = [no_dup_bam, bam_index, 'Log.out', 'Log.final.out',
-                     'Log.progress.out', 'SJ.out.tab', out_bigwig]
+    files_to_copy = [aligned_bam, no_dup_bam, bam_index, qsorted_bam, 'Log.out',
+                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab',
+                     out_bigwig]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -492,10 +499,20 @@ def align_and_call_peaks(
     f.write(lines)
     f.write('wait\n\n')
 
+    # Count the number of primary alignments for each chromosome.
+    f.write('{} view -F 256 {} | cut -f 3 | uniq -c > {} &\n\n'.format(
+        samtools_path, no_dup_bam, chrom_counts))
+
+    # Remove mitochondrial reads and read pairs that are not uniquely aligned.
+    lines = ('{} view -q 255 {} | '.format(samtools_path, aligned_bam)
+             'awk \'{if ($3 != "chrM") {print} if (substr($1,1,1) == "@") '
+             '{print}}\' '
+             '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
+    f.write(lines)
+
     # Coordinate sort bam file.
-    lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
-                                       picard_path, picard_memory,
-                                       samtools_path, temp_dir)
+    lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
+                               picard_memory, samtools_path, temp_dir)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -506,22 +523,23 @@ def align_and_call_peaks(
     f.write(lines)
     f.write('wait\n\n')
 
-    # Index bam file and collect flagstats.
-    lines = _samtools_index(no_dup_bam, samtools_path)
-    f.write(lines)
-    lines = _flagstat(no_dup_bam, stats_file, samtools_path)
+    # Query sort.
+    lines = _picard_query_sort(no_dup_bam, qsorted_bam, picard_path,
+                               picard_memory, tempdir, bg=True)
     f.write(lines)
 
-    # Count the number of reads aligned to each chromosome.
-    f.write('{} view {} | cut -f 3 | uniq -c > {} &\n\n'.format(
-        samtools_path, no_dup_bam, chrom_counts))
+    # Index bam file and collect flagstats.
+    lines = _samtools_index(no_dup_bam, samtools_path, bg=True)
+    f.write(lines)
+    lines = _flagstat(no_dup_bam, stats_file, samtools_path, bg=True)
+    f.write(lines)
 
     # Make bigwig files for displaying coverage.
     lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
                           bedgraph_to_bigwig_path, bedtools_path)
     f.write(lines)
 
-    # Call peaks
+    # Call peaks with macs2.
     lines = _macs2(no_dup_bam, sample_name, outdir)
     f.write(lines)
     

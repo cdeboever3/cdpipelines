@@ -1,5 +1,39 @@
 import os
 
+def _picard_query_sort(in_bam, out_bam, picard_path, picard_memory, tempdir,
+                       bg=False):
+    """
+    Query sort using Picard Tools.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    out_bam : str
+        Path to output bam file.
+
+    bam_index : str
+        If provided, generate index file for input bam file.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} SortSam'.format(picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out_bam),
+                           '\tSO=queryname']))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
 def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
                        tempdir, bam_index=None):
     """
@@ -43,31 +77,31 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
 
     return lines
 
-def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
-                               samtools_path, tempdir): 
-    """
-    Coordinate sort using Picard Tools while only keeping primary alignments.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out_bam : str
-        Path to output bam file.
-
-    """
-    lines = (' \\\n'.join(['{} view -hu -F 256 {} | '.format(samtools_path,
-                                                             in_bam),
-                           '\tjava -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
-                           '\t-jar {} SortSam'.format(picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI=/dev/stdin',
-                           '\tO={}'.format(out_bam),
-                           '\tSO=coordinate\n']))
-    return lines
+# def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
+#                                samtools_path, tempdir): 
+#     """
+#     Coordinate sort using Picard Tools while only keeping primary alignments.
+# 
+#     Parameters
+#     ----------
+#     in_bam : str
+#         Path to input bam file.
+# 
+#     out_bam : str
+#         Path to output bam file.
+# 
+#     """
+#     lines = (' \\\n'.join(['{} view -hu -F 256 {} | '.format(samtools_path,
+#                                                              in_bam),
+#                            '\tjava -Xmx{}g -jar '.format(picard_memory),
+#                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+#                            '\t-Djava.io.tmpdir={}'.format(tempdir), 
+#                            '\t-jar {} SortSam'.format(picard_path),
+#                            '\tVALIDATION_STRINGENCY=SILENT',
+#                            '\tI=/dev/stdin',
+#                            '\tO={}'.format(out_bam),
+#                            '\tSO=coordinate\n']))
+#     return lines
 
 def _cutadapt_trim(fastq, length, out, bg=False):
     """
@@ -98,9 +132,9 @@ def _cutadapt_trim(fastq, length, out, bg=False):
     """
     line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
     if bg:
-        line += ' &\n'
+        line += ' &\n\n'
     else:
-        line += '\n'
+        line += '\n\n'
     return line
 
 def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
@@ -113,7 +147,7 @@ def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                        '{} &\n'.format(bigwig)])
     return lines
 
-def _flagstat(bam, stats_file, samtools_path):
+def _flagstat(bam, stats_file, samtools_path, bg=False):
     """
     Run flagstat for a bam file.
 
@@ -134,7 +168,11 @@ def _flagstat(bam, stats_file, samtools_path):
         Lines to be written to PBS/shell script.
 
     """
-    lines = '{} flagstat {} > {} &\n\n'.format(samtools_path, bam, stats_file)
+    lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
     return lines
 
 def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
@@ -374,7 +412,7 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
                           '\tO={} &\n\n'.format(index)]))
     return line
 
-def _samtools_index(in_bam, samtools_path, index=''):
+def _samtools_index(in_bam, samtools_path, index=None, bg=False):
     """
     Index bam file using samtools.
 
@@ -393,10 +431,14 @@ def _samtools_index(in_bam, samtools_path, index=''):
         Path to index file for input bam file.
 
     """
-    if index == '':
-        line = 'samtools index {} &\n\n'.format(in_bam)
+    if index: 
+        line = 'samtools index {} {} &'.format(in_bam, index)
     else:
-        line = 'samtools index {} {} &\n\n'.format(in_bam, index)
+        line = 'samtools index {} &'.format(in_bam)
+    if bg:
+        line += ' &\n'
+    else:
+        line += '\n'
     return line
 
 def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
