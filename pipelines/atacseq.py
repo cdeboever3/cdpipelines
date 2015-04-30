@@ -243,8 +243,8 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name {}_atac_homer'.format(
             homer_path, os.path.split(tagdir)[1], sample_name)) 
-    lines.append('{}/findPeaks {} -style histone -o auto'.format(homer_path,
-                                                                 tagdir))
+    lines.append('{}/findPeaks {} -style histone -minDist 200 '
+                 '-o auto'.format(homer_path,tagdir))
     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
         homer_path, os.path.join(tagdir, 'regions.txt')))
     track_line = ' '.join(['track', 'type=bed',
