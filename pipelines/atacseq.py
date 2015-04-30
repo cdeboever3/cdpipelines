@@ -426,8 +426,8 @@ def align_and_call_peaks(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [combined_r1, combined_r2, 'Aligned.out.bam',
-                       'Aligned.out.coord.sorted.bam', '_STARtmp']
+    files_to_remove = [combined_r1, combined_r2, aligned_bam, filtered_bam,
+                       coord_sorted_bam, '_STARtmp']
 
     try:
         os.makedirs(outdir)
