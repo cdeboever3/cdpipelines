@@ -258,7 +258,7 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bigwig=False):
     lines.append('cat <(echo {}) temp.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed')
     _make_softlink(bed, sample_name, link_dir)
-    '\n'.join(lines) + '\n\n'
+    lines = '\n'.join(lines) + '\n\n'
     return lines
 
 def _macs2(bam, sample_name, outdir):
@@ -596,14 +596,12 @@ def align_and_call_peaks(
     # Call peaks with macs2.
     lines = _macs2(no_dup_bam, sample_name, outdir)
     f.write(lines)
-    
     f.write('wait\n\n')
 
     # Run HOMER.
     lines = _homer(qsorted_bam, sample_name, outdir, homer_path, link_dir,
                    bigwig=True)
     f.write(lines)
-    
     f.write('wait\n\n')
 
     # Make softlinks and tracklines for genome browser.
