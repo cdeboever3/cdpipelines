@@ -474,8 +474,7 @@ def align_and_call_peaks(
     
     # Files to copy to output directory.
     files_to_copy = [aligned_bam, no_dup_bam, bam_index, qsorted_bam, 'Log.out',
-                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab',
-                     out_bigwig]
+                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab']
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
