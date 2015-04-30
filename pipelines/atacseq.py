@@ -212,6 +212,55 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
+def _homer(bam, sample_name, outdir, homer_path, link_dir, bigwig=False):
+    """
+    Make tag directory and call peaks with HOMER. Optionally make bigwig file.
+
+    Parameters
+    ----------
+    bam : str
+        Path to paired-end, coordinate sorted bam file.
+
+    outdir : str
+        Path to directory where tag directory will be stored.
+
+    link_dir : str
+        Path to directory where softlinks should be made. HOMER will put the
+        bigwig file in the directory specified when setting up HOMER but a
+        softlink to a bed file with the HOMER peaks will be made here.
+
+    bigwig : bool
+        If True, have HOMER make a bigwig file.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    tagdir = os.path.join(outdir, '{}_tags'.format(sample_name))
+    bed = os.path.join(outdir, '{}_homer_peaks.bed'.format(sample_name))
+    lines = []
+    lines.append('{}/makeTagDirectory {} {}'.format(homer_path, tagdir, bam))
+    if bigwig:
+        lines.append('{}/makeBigWig.pl {} hg19 -name {}_atac_homer'.format(
+            homer_path, tagdir, sample_name)) 
+    lines.append('{}/findPeaks {} -style histone -o auto'.format(homer_path,
+                                                                 tagdir))
+    lines.append('{}pos2bed.pl {} | grep -v \# > temp.bed'.format(
+        homer_path, os.path.join(tagdir, 'regions.txt')))
+    track_line = ' '.join(['track', 'type=bed',
+                           'name=\\"{}_homer_atac_peaks\\"'.format(sample_name),
+                           ('description=\\"HOMER ATAC-seq peaks for '
+                            '{}\\"'.format(sample_name)),
+                           'visibility=0',
+                           'db=hg19'])
+    lines.append('cat <(echo {}) temp.bed > {}'.format(track_line, bed))
+    lines.append('rm temp.bed')
+    _make_softlink(bed, sample_name, link_dir)
+    '\n'.join(lines) + '\n'
+    return lines
+
 def _macs2(bam, sample_name, outdir):
     """
     Call peaks with MACS2. The macs2 executable is assumed to be in your path
@@ -237,8 +286,8 @@ def _macs2(bam, sample_name, outdir):
     out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
     temp = os.path.join(outdir, 'temp.narrowPeak')
     track_line = ' '.join(['track', 'type=narrowPeak',
-                           'name=\\"{}_peaks\\"'.format(sample_name),
-                           ('description=\\"ATAC-seq peaks for '
+                           'name=\\"{}_macs2_atac_peaks\\"'.format(sample_name),
+                           ('description=\\"macs2 ATAC-seq peaks for '
                             '{}\\"'.format(sample_name)),
                            'visibility=0',
                            'db=hg19'])
@@ -261,6 +310,7 @@ def align_and_call_peaks(
     bedgraph_to_bigwig_path,
     fastqc_path,
     samtools_path,
+    homer_path,
     conda_env='',
     rgpl='ILLUMINA',
     rgpu='',
@@ -330,6 +380,9 @@ def align_and_call_peaks(
 
     samtools_path : str
         Path to samtools executable.
+
+    homer_path : str
+        Path to HOMER bin.
 
     conda_env : str
         If provided, load conda environment with this name. This will control
@@ -535,16 +588,19 @@ def align_and_call_peaks(
     lines = _flagstat(no_dup_bam, stats_file, samtools_path, bg=True)
     f.write(lines)
 
-    # Make bigwig files for displaying coverage.
-    lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
-                          bedgraph_to_bigwig_path, bedtools_path)
-    f.write(lines)
+    # # Make bigwig files for displaying coverage.
+    # lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
+    #                       bedgraph_to_bigwig_path, bedtools_path)
+    # f.write(lines)
 
     # Call peaks with macs2.
     lines = _macs2(no_dup_bam, sample_name, outdir)
     f.write(lines)
     
     f.write('wait\n\n')
+
+    # Run HOMER.
+    _homer(qsorted_bam, sample_name, outdir, homer_path, link_dir, bigwig=True)
 
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
