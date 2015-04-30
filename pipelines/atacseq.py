@@ -504,9 +504,9 @@ def align_and_call_peaks(
         samtools_path, no_dup_bam, chrom_counts))
 
     # Remove mitochondrial reads and read pairs that are not uniquely aligned.
-    lines = ('{} view -q 255 {} | '.format(samtools_path, aligned_bam) + 
+    lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
              'awk \'{if ($3 != "chrM") {print} if (substr($1,1,1) == "@") ' + 
-             '{print}}\' ' + 
+             '{print}}\' | ' + 
              '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
