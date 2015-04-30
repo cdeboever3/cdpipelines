@@ -604,7 +604,7 @@ def align_and_call_peaks(
 
     # Run HOMER.
     lines = _homer(qsorted_bam, sample_name, outdir, homer_path, link_dir,
-                   bigwig=True)
+                   bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
