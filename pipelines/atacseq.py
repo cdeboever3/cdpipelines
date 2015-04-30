@@ -212,7 +212,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
-def _homer(bam, sample_name, outdir, homer_path, link_dir, bigwig=False):
+def _homer(bam, sample_name, outdir, homer_path, link_dir, bedtools_path, 
+           bigwig=False):
     """
     Make tag directory and call peaks with HOMER. Optionally make bigwig file.
 
@@ -255,8 +256,9 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bigwig=False):
                             '{}\\"'.format(sample_name)),
                            'visibility=0',
                            'db=hg19'])
-    lines.append('cat <(echo {}) temp.bed > {}'.format(track_line, bed))
-    lines.append('rm temp.bed')
+    lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
+    lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
+    lines.append('rm temp.bed temp2.bed')
     _make_softlink(bed, sample_name, link_dir)
     lines = '\n'.join(lines) + '\n\n'
     return lines
