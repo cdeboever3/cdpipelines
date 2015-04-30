@@ -69,7 +69,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
     return line
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                          coord_sorted_bam, bam_index, bigwig, r1_fastqc,
+                          coord_sorted_bam, bam_index, r1_fastqc,
                           r2_fastqc, narrow_peak, sample_name, outdir):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
@@ -101,9 +101,6 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
 
     bam_index : str
         Path to index file for coordinate sorted bam file.
-
-    bigwig : str
-        Path to bigwig file. 
 
     r1_fastqc : str
         Path to fastqc_report.html for R1 reads.
@@ -180,18 +177,18 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(outdir, os.path.split(bigwig)[1])
-    new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
-    lines += new_lines
+    # fn = os.path.join(outdir, os.path.split(bigwig)[1])
+    # new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
+    # lines += new_lines
 
-    tf_lines += ' '.join(['track', 'type=bigWig',
-                          'name="{}_cov"'.format(sample_name),
-                          ('description="ATAC-seq coverage for '
-                           '{}"'.format(sample_name)),
-                          'visibility=0',
-                          'db=hg19',
-                          'bigDataUrl={}/{}\n'.format(temp_web_path,
-                                                      bigwig_name)])
+    # tf_lines += ' '.join(['track', 'type=bigWig',
+    #                       'name="{}_cov"'.format(sample_name),
+    #                       ('description="ATAC-seq coverage for '
+    #                        '{}"'.format(sample_name)),
+    #                       'visibility=0',
+    #                       'db=hg19',
+    #                       'bigDataUrl={}/{}\n'.format(temp_web_path,
+    #                                                   bigwig_name)])
    
     # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
     # we don't provide a trackline but rather just a URL to UCSC.
@@ -202,7 +199,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     except OSError:
         pass
     fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
-    new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
+    new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
     tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
 
@@ -610,7 +607,7 @@ def align_and_call_peaks(
 
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                  no_dup_bam, bam_index, out_bigwig, r1_fastqc,
+                                  no_dup_bam, bam_index, r1_fastqc,
                                   r2_fastqc, narrow_peak, sample_name, outdir)
     f.write(lines)
     f.write('wait\n\n')
