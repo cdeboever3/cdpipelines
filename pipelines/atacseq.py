@@ -237,7 +237,7 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
 
     """
     tagdir = os.path.realpath(tagdir)
-    bed = os.path.join(outdir, '{}_homer_peaks.bed'.format(sample_name))
+    bed = os.path.join(tagdir, '{}_homer_peaks.bed'.format(sample_name))
     lines = []
     lines.append('{}/makeTagDirectory {} {}'.format(homer_path, tagdir, bam))
     if bigwig:
