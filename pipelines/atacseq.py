@@ -247,7 +247,7 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bigwig=False):
             homer_path, tagdir, sample_name)) 
     lines.append('{}/findPeaks {} -style histone -o auto'.format(homer_path,
                                                                  tagdir))
-    lines.append('{}pos2bed.pl {} | grep -v \# > temp.bed'.format(
+    lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
         homer_path, os.path.join(tagdir, 'regions.txt')))
     track_line = ' '.join(['track', 'type=bed',
                            'name=\\"{}_homer_atac_peaks\\"'.format(sample_name),
@@ -507,6 +507,9 @@ def align_and_call_peaks(
     f.write('rsync -avz \\\n{} \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in r1_fastqs]),
         ' \\\n'.join(['\t{}'.format(x) for x in r2_fastqs])))
+
+    # Add HOMER executables to path because HOMER expects them there.
+    f.write('export PATH="{}:$PATH"\n\n'.format(homer_path))
     
     # Combine fastq files and run FastQC.
     f.write('cat \\\n{} \\\n\t> {} &\n'.format(
