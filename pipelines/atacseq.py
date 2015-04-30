@@ -501,7 +501,7 @@ def align_and_call_peaks(
 
     # Count the number of primary alignments for each chromosome.
     f.write('{} view -F 256 {} | cut -f 3 | uniq -c > {} &\n\n'.format(
-        samtools_path, no_dup_bam, chrom_counts))
+        samtools_path, aligned_bam, chrom_counts))
 
     # Remove mitochondrial reads and read pairs that are not uniquely aligned.
     lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
