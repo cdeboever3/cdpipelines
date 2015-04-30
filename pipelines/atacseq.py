@@ -209,7 +209,7 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
-def _homer(bam, sample_name, outdir, homer_path, link_dir, bedtools_path, 
+def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path, 
            bigwig=False):
     """
     Make tag directory and call peaks with HOMER. Optionally make bigwig file.
@@ -219,8 +219,8 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bedtools_path,
     bam : str
         Path to paired-end, coordinate sorted bam file.
 
-    outdir : str
-        Path to directory where tag directory will be stored.
+    tagdir : str
+        Path to tag directory that HOMER will create.
 
     link_dir : str
         Path to directory where softlinks should be made. HOMER will put the
@@ -236,7 +236,7 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bedtools_path,
         Lines to be printed to shell/PBS script.
 
     """
-    tagdir = os.path.join(outdir, '{}_tags'.format(sample_name))
+    tagdir = os.path.realpath(tagdir)
     bed = os.path.join(outdir, '{}_homer_peaks.bed'.format(sample_name))
     lines = []
     lines.append('{}/makeTagDirectory {} {}'.format(homer_path, tagdir, bam))
@@ -459,6 +459,7 @@ def align_and_call_peaks(
                                '{}_chrM_counts.txt'.format(sample_name))
     narrow_peak = os.path.join(outdir,
                                '{}_peaks.narrowPeak'.format(sample_name))
+    tagdir = os.path.join(tempdir, '{}_tags'.format(sample_name))
     
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
@@ -473,7 +474,7 @@ def align_and_call_peaks(
     
     # Files to copy to output directory.
     files_to_copy = [aligned_bam, no_dup_bam, bam_index, qsorted_bam, 'Log.out',
-                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab']
+                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab', tagdir]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -600,7 +601,7 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Run HOMER.
-    lines = _homer(qsorted_bam, sample_name, outdir, homer_path, link_dir,
+    lines = _homer(qsorted_bam, sample_name, tagdir, homer_path, link_dir,
                    bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
