@@ -245,7 +245,7 @@ def _homer(bam, sample_name, outdir, homer_path, link_dir, bedtools_path,
     lines.append('{}/makeTagDirectory {} {}'.format(homer_path, tagdir, bam))
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name {}_atac_homer'.format(
-            homer_path, tagdir, sample_name)) 
+            homer_path, os.path.split(tagdir)[1], sample_name)) 
     lines.append('{}/findPeaks {} -style histone -o auto'.format(homer_path,
                                                                  tagdir))
     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
@@ -452,7 +452,7 @@ def align_and_call_peaks(
                              '{}_atac_no_dup.bam.bai'.format(sample_name))
     qsorted_bam = os.path.join(
         tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
-    out_bigwig = os.path.join(tempdir, '{}_atac.bw'.format(sample_name))
+    # out_bigwig = os.path.join(tempdir, '{}_atac.bw'.format(sample_name))
     
     duplicate_metrics = os.path.join(
         outdir, '{}_duplicate_metrics.txt'.format(sample_name))
