@@ -403,8 +403,8 @@ def align_and_call_peaks(
         outdir, '{}_duplicate_metrics.txt'.format(sample_name))
     stats_file = os.path.join(outdir,
                               '{}_atac_no_dup.bam.flagstat'.format(sample_name))
-    chrom_counts = os.path.join(outdir,
-                                '{}_chrom_counts.txt'.format(sample_name))
+    chrM_counts = os.path.join(outdir,
+                               '{}_chrM_counts.txt'.format(sample_name))
     narrow_peak = os.path.join(outdir,
                                '{}_peaks.narrowPeak'.format(sample_name))
     
@@ -500,13 +500,14 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Count the number of primary alignments for each chromosome.
-    f.write('{} view -F 256 {} | cut -f 3 | uniq -c > {} &\n\n'.format(
-        samtools_path, aligned_bam, chrom_counts))
+    f.write('{} view -F 256 {} | cut -f 3 | grep chrM '
+            '| uniq -c > {} &\n\n'.format(
+        samtools_path, aligned_bam, chrM_counts))
 
     # Remove mitochondrial reads and read pairs that are not uniquely aligned.
     lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
-             'awk \'{if ($3 != "chrM") {print} if (substr($1,1,1) == "@") ' + 
-             '{print}}\' | ' + 
+             'awk \'{if ($3 != "chrM") {print} ' + 
+             'else if (substr($1,1,1) == "@") {print}}\' | ' + 
              '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
