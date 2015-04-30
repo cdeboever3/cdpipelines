@@ -511,7 +511,7 @@ def align_and_call_peaks(
     f.write(lines)
 
     # Coordinate sort bam file.
-    lines = _picard_coord_sort(qsorted_bam, coord_sorted_bam, picard_path,
+    lines = _picard_coord_sort(filtered_bam, coord_sorted_bam, picard_path,
                                picard_memory, tempdir)
     f.write(lines)
     f.write('wait\n\n')
