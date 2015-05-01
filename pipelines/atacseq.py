@@ -256,7 +256,7 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
-    _make_softlink(bed, sample_name, link_dir)
+    lines.append(_make_softlink(bed, sample_name, link_dir))
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
