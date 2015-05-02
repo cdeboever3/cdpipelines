@@ -786,7 +786,7 @@ def combined_homer_peaks(
     outdir = os.path.join(outdir, '{}_combined_peaks'.format(combined_name))
 
     # I'm going to define some file names used later.
-    tagdir = os.path.join(tempdir, '{}_combined_tags'.format(sample_name))
+    tagdir = os.path.join(tempdir, '{}_combined_tags'.format(combined_name))
     
     # Files to copy to output directory.
     files_to_copy = [tagdir]
@@ -801,16 +801,18 @@ def combined_homer_peaks(
         pass
 
     if shell:
-        fn = os.path.join(outdir, '{}_combined_peaks.sh'.format(sample_name))
+        fn = os.path.join(outdir, '{}_combined_peaks.sh'.format(combined_name))
     else:
-        fn = os.path.join(outdir, '{}_combined_peaks.pbs'.format(sample_name))
+        fn = os.path.join(outdir, '{}_combined_peaks.pbs'.format(combined_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
-        out = os.path.join(outdir, '{}_combined_peaks.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_combined_peaks.err'.format(sample_name))
-        job_name = '{}_combined_peaks'.format(sample_name)
+        out = os.path.join(outdir,
+                           '{}_combined_peaks.out'.format(combined_name))
+        err = os.path.join(outdir,
+                           '{}_combined_peaks.err'.format(combined_name))
+        job_name = '{}_combined_peaks'.format(combined_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
     if conda_env != '':
