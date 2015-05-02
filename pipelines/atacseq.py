@@ -318,7 +318,8 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     lines.append(_convert_homer_pos_to_bed(
         posfile, bed, name, homer_path, bedtools_path))
     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    softlink, name = _make_softlink(bed, name, link_dir)
+    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+                                                            'peak'))
     softlink_lines.append(softlink)
 
     posfile = os.path.join(temp_tagdir, 'superEnhancers.txt')
@@ -327,7 +328,8 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     lines.append(_convert_homer_pos_to_bed(
         posfile, bed, name, homer_path, bedtools_path))
     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    softlink, name = _make_softlink(bed, name, link_dir)
+    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+                                                            'peak'))
     softlink_lines.append(softlink)
     lines = '\n'.join(lines) + '\n\n'
     softlink_lines = '\n'.join(softlink_lines)
