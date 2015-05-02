@@ -307,12 +307,12 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
                      homer_path, tagdir, os.path.join(tagdir, 'regions.txt')))
     posfile = os.path.join(tagdir, 'regions.txt')
     lines.append(_convert_homer_pos_to_bed(
-        posfile, '{}_combined'.format(combined_name), homer_path,
+        posfile, '{}_combined'.format(combined_name), link_dir, homer_path,
         bedtools_path))
     posfile = os.path.join(tagdir, 'superEnhancers.txt')
     lines.append(_convert_homer_pos_to_bed(
         posfile, '{}_combined_super_enhancers'.format(combined_name),
-        homer_path, bedtools_path))
+        link_dir, homer_path, bedtools_path))
     lines.append(ls)
     lines = '\n'.join(lines) + '\n\n'
     return lines
