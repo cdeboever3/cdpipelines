@@ -882,7 +882,7 @@ def combined_homer_peaks(
     
     # Run HOMER.
     td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
-    softlink_lines, lines = _combined_homer(td, combined_name, temp_tagdir,
+    lines, softlink_lines = _combined_homer(td, combined_name, temp_tagdir,
                                             final_tagdir, homer_path, link_dir,
                                             bedtools_path, bigwig=True)
     f.write(lines)
