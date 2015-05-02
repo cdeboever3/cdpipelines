@@ -256,7 +256,8 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
-    lines.append(_make_softlink(bed, sample_name, link_dir))
+    ls, name = _make_softlink(bed, sample_name, link_dir)
+    lines.append(ls)
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
@@ -301,8 +302,8 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
         lines.append('{}/makeBigWig.pl {} hg19 -name '
                      '{}_combined_atac_homer'.format(
             homer_path, os.path.split(tagdir)[1], combined_name)) 
-    lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
-                 '-o auto'.format(homer_path,tagdir))
+    lines.append('{}/findPeaks {} -style super -size 75 -minDist 75 '
+                 '-typical regions.txt -o auto'.format(homer_path,tagdir))
     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
         homer_path, os.path.join(tagdir, 'regions.txt')))
     track_line = ' '.join(['track', 'type=bed',
@@ -315,7 +316,8 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
-    lines.append(_make_softlink(bed, combined_name + '_combined', link_dir))
+    ls, name = _make_softlink(bed, combined_name + '_combined', link_dir)
+    lines.append(ls)
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
