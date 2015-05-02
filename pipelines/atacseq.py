@@ -316,7 +316,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     name = '{}_combined'.format(combined_name)
     bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
     lines.append(_convert_homer_pos_to_bed(
-        posfile, name, link_dir, homer_path, bedtools_path))
+        posfile, bed, name, homer_path, bedtools_path))
     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
     softlink, name = _make_softlink(bed, name, link_dir)
     softlink_lines.append(softlink)
@@ -325,7 +325,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     name = '{}_combined_super_enhancers'.format(combined_name)
     bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
     lines.append(_convert_homer_pos_to_bed(
-        posfile, name, link_dir, homer_path, bedtools_path))
+        posfile, bed, name, homer_path, bedtools_path))
     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
     softlink, name = _make_softlink(bed, name, link_dir)
     softlink_lines.append(softlink)
