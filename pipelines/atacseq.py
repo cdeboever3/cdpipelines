@@ -859,6 +859,7 @@ def combined_homer_peaks(
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('mkdir -p {}\n'.format(tagdir))
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
