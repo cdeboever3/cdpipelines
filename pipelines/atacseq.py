@@ -832,7 +832,7 @@ def combined_homer_peaks(
 
     if tempdir != outdir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy), 
+            ' \\\n\t'.join(files_to_copy), outdir))
 
     if len(files_to_remove) > 0:
         f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
