@@ -313,7 +313,6 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
     lines.append(_convert_homer_pos_to_bed(
         posfile, '{}_combined_super_enhancers'.format(combined_name),
         link_dir, homer_path, bedtools_path))
-    lines.append(ls)
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
@@ -358,6 +357,7 @@ def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
     ls, name = _make_softlink(bed, sample_name, link_dir)
+    lines.append(ls)
     return '\n'.join(lines) + '\n'
 
 def _macs2(bam, sample_name, outdir):
