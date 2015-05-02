@@ -261,8 +261,8 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
-def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
-                    bedtools_path, bigwig=False):
+def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
+                    homer_path, link_dir, bedtools_path, bigwig=False):
     """
     Combine tag directories and call peaks with HOMER. Optionally make bigwig
     file.
@@ -275,8 +275,11 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
     combined_name : str
         Used for naming output files and directories.
 
-    tagdir : str
-        Path to tag directory that HOMER will create.
+    temp_tagdir : str
+        Path to temporary tag directory that HOMER will create.
+
+    final_tagdir : str
+        Path to final tag directory (what the temp_tagdir will be copied to).
 
     link_dir : str
         Path to directory where softlinks should be made. HOMER will put the
@@ -292,31 +295,45 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
         Lines to be printed to shell/PBS script.
 
     """
-    tagdir = os.path.realpath(tagdir)
-    bed = os.path.join(tagdir,
+    temp_tagdir = os.path.realpath(temp_tagdir)
+    final_tagdir = os.path.realpath(final_tagdir)
+    bed = os.path.join(temp_tagdir,
                        '{}_combined_homer_peaks.bed'.format(combined_name))
     lines = []
-    lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, tagdir, 
+    lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, temp_tagdir, 
                                                       ' '.join(input_tagdirs)))
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name '
                      '{}_combined_atac_homer'.format(
-            homer_path, os.path.split(tagdir)[1], combined_name)) 
+            homer_path, os.path.split(temp_tagdir)[1], combined_name)) 
     lines.append('{}/findPeaks {} -style super -size 75 -minDist 75 '
                  '-typical {} -o auto'.format(
-                     homer_path, tagdir, os.path.join(tagdir, 'regions.txt')))
-    posfile = os.path.join(tagdir, 'regions.txt')
+                     homer_path, temp_tagdir, os.path.join(tagdir,
+                                                           'regions.txt')))
+   
+    softlink_lines = []
+    posfile = os.path.join(temp_tagdir, 'regions.txt')
+    name = '{}_combined'.format(combined_name)
+    bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
     lines.append(_convert_homer_pos_to_bed(
-        posfile, '{}_combined'.format(combined_name), link_dir, homer_path,
-        bedtools_path))
-    posfile = os.path.join(tagdir, 'superEnhancers.txt')
-    lines.append(_convert_homer_pos_to_bed(
-        posfile, '{}_combined_super_enhancers'.format(combined_name),
-        link_dir, homer_path, bedtools_path))
-    lines = '\n'.join(lines) + '\n\n'
-    return lines
+        posfile, name, link_dir, homer_path, bedtools_path))
+    bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+    softlink, name = _make_softlink(bed, name, link_dir)
+    softlink_lines.append(softlink)
 
-def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
+    posfile = os.path.join(temp_tagdir, 'superEnhancers.txt')
+    name = '{}_combined_super_enhancers'.format(combined_name)
+    bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+    lines.append(_convert_homer_pos_to_bed(
+        posfile, name, link_dir, homer_path, bedtools_path))
+    bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+    softlink, name = _make_softlink(bed, name, link_dir)
+    softlink_lines.append(softlink)
+    lines = '\n'.join(lines) + '\n\n'
+    softlink_lines = '\n'.join(softlink_lines)
+    return lines, softlink_lines
+
+def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
                               bedtools_path):
     """
     Convert HOMER results file to bed file.
@@ -327,13 +344,11 @@ def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
         Full path to HOMER results file (i.e. regions.txt or
         superEnhancers.txt).
 
+    bed : str
+        Name of output bed file.
+
     sample_name : str
         Used for naming output files.
-
-    link_dir : str
-        Path to directory where softlinks should be made. HOMER will put the
-        bigwig file in the directory specified when setting up HOMER but a
-        softlink to a bed file with the HOMER peaks will be made here.
 
     Returns
     -------
@@ -343,7 +358,6 @@ def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
     """
     lines = []
     tagdir = os.path.split(posfile)[0]
-    bed = os.path.join(tagdir, '{}_homer_atac_peaks.bed'.format(sample_name))
     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
         homer_path, posfile))
     track_line = ' '.join(['track', 'type=bed',
@@ -356,8 +370,6 @@ def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
-    ls, name = _make_softlink(bed, sample_name, link_dir)
-    lines.append(ls)
     return '\n'.join(lines) + '\n'
 
 def _macs2(bam, sample_name, outdir):
@@ -829,6 +841,7 @@ def combined_homer_peaks(
     # I'm going to define some file names used later.
     local_tagdir = '{}_combined_tags'.format(combined_name)
     tagdir = os.path.join(tempdir, local_tagdir)
+    final_tagdir = os.path.join(outdir, local_tagdir)
     
     # Files to copy to output directory.
     files_to_copy = [tagdir]
@@ -871,8 +884,8 @@ def combined_homer_peaks(
     
     # Run HOMER.
     td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
-    lines = _combined_homer(td, combined_name, tagdir, homer_path,
-                            link_dir, bedtools_path, bigwig=True)
+    lines = _combined_homer(td, combined_name, temp_tagdir, final_tagdir,
+                            homer_path, link_dir, bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
