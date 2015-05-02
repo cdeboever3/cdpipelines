@@ -260,6 +260,65 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     lines = '\n'.join(lines) + '\n\n'
     return lines
 
+def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
+                    bedtools_path, bigwig=False):
+    """
+    Combine tag directories and call peaks with HOMER. Optionally make bigwig
+    file.
+
+    Parameters
+    ----------
+    input_tagdirs : list 
+        A list of paths to the tagdirs to be combined for calling peaks.
+
+    combined_name : str
+        Used for naming output files and directories.
+
+    tagdir : str
+        Path to tag directory that HOMER will create.
+
+    link_dir : str
+        Path to directory where softlinks should be made. HOMER will put the
+        bigwig file in the directory specified when setting up HOMER but a
+        softlink to a bed file with the HOMER peaks will be made here.
+
+    bigwig : bool
+        If True, have HOMER make a bigwig file.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    tagdir = os.path.realpath(tagdir)
+    bed = os.path.join(tagdir,
+                       '{}_combined_homer_peaks.bed'.format(combined_name))
+    lines = []
+    lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, tagdir, 
+                                                      ' '.join(input_tagdirs)))
+    if bigwig:
+        lines.append('{}/makeBigWig.pl {} hg19 -name '
+                     '{}_combined_atac_homer'.format(
+            homer_path, os.path.split(tagdir)[1], combined_name)) 
+    lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
+                 '-o auto'.format(homer_path,tagdir))
+    lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
+        homer_path, os.path.join(tagdir, 'regions.txt')))
+    track_line = ' '.join(['track', 'type=bed',
+                           'name=\\"{}_combined_homer_atac_peaks\\"'.format(
+                               combined_name),
+                           ('description=\\"HOMER ATAC-seq peaks for combined '
+                            '{}\\"'.format(combined_name)),
+                           'visibility=0',
+                           'db=hg19'])
+    lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
+    lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
+    lines.append('rm temp.bed temp2.bed')
+    lines.append(_make_softlink(bed, combined_name + '_combined', link_dir))
+    lines = '\n'.join(lines) + '\n\n'
+    return lines
+
 def _macs2(bam, sample_name, outdir):
     """
     Call peaks with MACS2. The macs2 executable is assumed to be in your path
@@ -630,6 +689,153 @@ def align_and_call_peaks(
                 y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
 
     f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
+
+def combined_homer_peaks(
+    tagdirs, 
+    outdir, 
+    combined_name, 
+    tracklines_file,
+    link_dir,
+    web_path_file,
+    bedtools_path,
+    homer_path,
+    environment,
+    conda_env='',
+    tempdir='/scratch', 
+    threads=6, 
+    shell=False,
+):
+    """
+    Make a PBS or shell script for combining together HOMER tag directories and
+    calling peaks on the combined tags.
+
+    Parameters
+    ----------
+    tagdirs : list 
+        A list of paths to the tagdirs to be combined for calling peaks.
+
+    outdir : str
+        Directory to store PBS/shell file and results.
+
+    combined_name : str
+        Name used for naming files and directories for combined data.
+
+    tracklines_file : str
+        Path to file for writing tracklines. The tracklines will be added to the
+        file; the contents of the file will not be overwritten. These tracklines
+        can be pasted into the genome browser upload for custom data.
+
+    link_dir : str
+        Path to directory where softlinks for genome browser should be made.
+
+    web_path_file : str
+        File whose first line is the URL that points to link_dir. For example,
+        if we make a link to the file s1_coord_sorted.bam in link_dir and
+        web_path_file has http://site.com/files on its first line, then
+        http://site.com/files/s1_coord_sorted.bam should be available on the
+        web. If the web directory is password protected (it probably should be),
+        then the URL should look like http://username:password@site.com/files.
+        This is a file so you don't have to make the username/password combo
+        public (although I'd recommend not using a sensitive password). You can
+        just put the web_path_file in a directory that isn't tracked by git, 
+        figshare, etc.
+
+    bedtools_path : str
+        Path to bedtools.
+
+    homer_path : str
+        Path to HOMER bin.
+
+    environment : str
+        Bash file with PATH information that can be sourced. This should include
+        the paths to executables HOMER will need like bedGraphToBigWig.
+
+    conda_env : str
+        If provided, load conda environment with this name. This will control
+        which version of MACS2 is used.
+
+    tempdir : str
+        Directory to store files as STAR runs.
+
+    threads : int
+        Number of threads to reserve using PBS scheduler. 
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+    
+    Returns
+    -------
+    fn : str
+        Path to PBS/shell script.
+
+    """
+    assert threads >= 3
+
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    tempdir = os.path.join(tempdir, '{}_combined_peaks'.format(combined_name))
+    outdir = os.path.join(outdir, '{}_combined_peaks'.format(combined_name))
+
+    # I'm going to define some file names used later.
+    tagdir = os.path.join(tempdir, '{}_combined_tags'.format(sample_name))
+    
+    # Files to copy to output directory.
+    files_to_copy = [tagdir]
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = [os.path.split(os.path.realpath(x)) for x in tagdirs]
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}_combined_peaks.sh'.format(sample_name))
+    else:
+        fn = os.path.join(outdir, '{}_combined_peaks.pbs'.format(sample_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}_combined_peaks.out'.format(sample_name))
+        err = os.path.join(outdir, '{}_combined_peaks.err'.format(sample_name))
+        job_name = '{}_combined_peaks'.format(sample_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+    
+    if conda_env != '':
+        f.write('source activate {}\n'.format(conda_env))
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
+        ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
+
+    # Add executables to path because HOMER expects them there.
+    f.write('source {}\n\n'.format(environment))
+    
+    # Run HOMER.
+    td = [os.path.split(os.path.realpath(x)) for x in tagdirs]
+    lines = _combined_homer(tagdirs, combined_name, tagdir, homer_path,
+                            link_dir, bedtools_path, bigwig=True)
+    f.write(lines)
+    f.write('wait\n\n')
+
+    if tempdir != outdir:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(files_to_copy), 
+
+    if len(files_to_remove) > 0:
+        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
