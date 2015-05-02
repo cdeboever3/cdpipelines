@@ -840,11 +840,11 @@ def combined_homer_peaks(
 
     # I'm going to define some file names used later.
     local_tagdir = '{}_combined_tags'.format(combined_name)
-    tagdir = os.path.join(tempdir, local_tagdir)
+    temp_tagdir = os.path.join(tempdir, local_tagdir)
     final_tagdir = os.path.join(outdir, local_tagdir)
     
     # Files to copy to output directory.
-    files_to_copy = [tagdir]
+    files_to_copy = [temp_tagdir]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -873,8 +873,6 @@ def combined_homer_peaks(
     if conda_env != '':
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('mkdir -p {}\n'.format(os.path.join(outdir,
-                                                os.path.split(tagdir)[1])))
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
@@ -884,8 +882,9 @@ def combined_homer_peaks(
     
     # Run HOMER.
     td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
-    lines = _combined_homer(td, combined_name, temp_tagdir, final_tagdir,
-                            homer_path, link_dir, bedtools_path, bigwig=True)
+    softlink_lines, lines = _combined_homer(td, combined_name, temp_tagdir,
+                                            final_tagdir, homer_path, link_dir,
+                                            bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -898,6 +897,8 @@ def combined_homer_peaks(
 
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
-    f.close()
 
+    f.write(softlink_lines)
+
+    f.close()
     return fn
