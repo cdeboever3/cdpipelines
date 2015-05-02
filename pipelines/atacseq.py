@@ -308,7 +308,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
             homer_path, os.path.split(temp_tagdir)[1], combined_name)) 
     lines.append('{}/findPeaks {} -style super -size 75 -minDist 75 '
                  '-typical {} -o auto'.format(
-                     homer_path, temp_tagdir, os.path.join(tagdir,
+                     homer_path, temp_tagdir, os.path.join(temp_tagdir,
                                                            'regions.txt')))
    
     softlink_lines = []
