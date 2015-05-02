@@ -795,7 +795,7 @@ def combined_homer_peaks(
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
-    files_to_remove = [os.path.split(os.path.realpath(x)) for x in tagdirs]
+    files_to_remove = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
 
     try:
         os.makedirs(outdir)
@@ -828,7 +828,7 @@ def combined_homer_peaks(
     f.write('source {}\n\n'.format(environment))
     
     # Run HOMER.
-    td = [os.path.split(os.path.realpath(x)) for x in tagdirs]
+    td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
     lines = _combined_homer(tagdirs, combined_name, tagdir, homer_path,
                             link_dir, bedtools_path, bigwig=True)
     f.write(lines)
