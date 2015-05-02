@@ -827,7 +827,8 @@ def combined_homer_peaks(
     outdir = os.path.join(outdir, '{}_combined_peaks'.format(combined_name))
 
     # I'm going to define some file names used later.
-    tagdir = os.path.join(tempdir, '{}_combined_tags'.format(combined_name))
+    local_tagdir = '{}_combined_tags'.format(combined_name)
+    tagdir = os.path.join(tempdir, local_tagdir)
     
     # Files to copy to output directory.
     files_to_copy = [tagdir]
