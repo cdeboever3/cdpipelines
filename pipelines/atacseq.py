@@ -303,23 +303,62 @@ def _combined_homer(input_tagdirs, combined_name, tagdir, homer_path, link_dir,
                      '{}_combined_atac_homer'.format(
             homer_path, os.path.split(tagdir)[1], combined_name)) 
     lines.append('{}/findPeaks {} -style super -size 75 -minDist 75 '
-                 '-typical regions.txt -o auto'.format(homer_path,tagdir))
+                 '-typical {} -o auto'.format(
+                     homer_path, tagdir, os.path.join(tagdir, 'regions.txt')))
+    posfile = os.path.join(tagdir, 'regions.txt')
+    lines.append(_convert_homer_pos_to_bed(
+        posfile, '{}_combined'.format(combined_name), homer_path,
+        bedtools_path))
+    posfile = os.path.join(tagdir, 'superEnhancers.txt')
+    lines.append(_convert_homer_pos_to_bed(
+        posfile, '{}_combined_super_enhancers'.format(combined_name),
+        homer_path, bedtools_path))
+    lines.append(ls)
+    lines = '\n'.join(lines) + '\n\n'
+    return lines
+
+def _convert_homer_pos_to_bed(posfile, sample_name, link_dir, homer_path,
+                              bedtools_path):
+    """
+    Convert HOMER results file to bed file.
+
+    Parameters
+    ----------
+    posfile : str
+        Full path to HOMER results file (i.e. regions.txt or
+        superEnhancers.txt).
+
+    sample_name : str
+        Used for naming output files.
+
+    link_dir : str
+        Path to directory where softlinks should be made. HOMER will put the
+        bigwig file in the directory specified when setting up HOMER but a
+        softlink to a bed file with the HOMER peaks will be made here.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    lines = []
+    tagdir = os.path.split(posfile)[0]
+    bed = os.path.join(tagdir, '{}_homer_atac_peaks.bed'.format(sample_name))
     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
-        homer_path, os.path.join(tagdir, 'regions.txt')))
+        homer_path, posfile))
     track_line = ' '.join(['track', 'type=bed',
-                           'name=\\"{}_combined_homer_atac_peaks\\"'.format(
-                               combined_name),
-                           ('description=\\"HOMER ATAC-seq peaks for combined '
-                            '{}\\"'.format(combined_name)),
+                           'name=\\"{}_homer_atac_peaks\\"'.format(
+                               sample_name),
+                           ('description=\\"HOMER ATAC-seq peaks for '
+                            '{}\\"'.format(sample_name)),
                            'visibility=0',
                            'db=hg19'])
     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
-    ls, name = _make_softlink(bed, combined_name + '_combined', link_dir)
-    lines.append(ls)
-    lines = '\n'.join(lines) + '\n\n'
-    return lines
+    ls, name = _make_softlink(bed, sample_name, link_dir)
+    return '\n'.join(lines) + '\n'
 
 def _macs2(bam, sample_name, outdir):
     """
