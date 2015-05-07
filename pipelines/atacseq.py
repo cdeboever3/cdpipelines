@@ -309,8 +309,8 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     lines.append('{}/findPeaks {} -style super -size 75 '
                  ' -o auto'.format(
                      homer_path, temp_tagdir))
-    lines.append('{}/findPeaks {} -style histone -minDist 200 '
-                 '-o auto'.format(homer_path,tagdir))
+    lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
+                 '-o auto'.format(homer_path, temp_tagdir))
    
     softlink_lines = []
     posfile = os.path.join(temp_tagdir, 'regions.txt')
