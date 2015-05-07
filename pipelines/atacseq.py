@@ -306,10 +306,11 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
         lines.append('{}/makeBigWig.pl {} hg19 -name '
                      '{}_combined_atac_homer'.format(
             homer_path, os.path.split(temp_tagdir)[1], combined_name)) 
-    lines.append('{}/findPeaks {} -style super -size 75 -minDist 75 '
-                 '-typical {} -o auto'.format(
-                     homer_path, temp_tagdir, os.path.join(temp_tagdir,
-                                                           'regions.txt')))
+    lines.append('{}/findPeaks {} -style super -size 75 '
+                 ' -o auto'.format(
+                     homer_path, temp_tagdir))
+    lines.append('{}/findPeaks {} -style histone -minDist 200 '
+                 '-o auto'.format(homer_path,tagdir))
    
     softlink_lines = []
     posfile = os.path.join(temp_tagdir, 'regions.txt')
