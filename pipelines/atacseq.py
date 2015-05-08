@@ -670,7 +670,7 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Count the number of primary alignments for each chromosome.
-    f.write('{} view -F 256 {} | cut -f 3 | grep chrM '
+    f.write('{} view -q 255 {} | cut -f 3 | grep chrM '
             '| uniq -c > {} &\n\n'.format(
         samtools_path, aligned_bam, chrM_counts))
 
