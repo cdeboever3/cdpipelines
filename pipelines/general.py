@@ -432,9 +432,9 @@ def _samtools_index(in_bam, samtools_path, index=None, bg=False):
 
     """
     if index: 
-        line = 'samtools index {} {}'.format(in_bam, index)
+        line = '{} index {} {}'.format(samtools_path, in_bam, index)
     else:
-        line = 'samtools index {}'.format(in_bam)
+        line = '{} index {}'.format(samtools_path, in_bam)
     if bg:
         line += ' &\n'
     else:
