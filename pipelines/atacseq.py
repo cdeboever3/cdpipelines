@@ -187,26 +187,6 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                  '{1}/{0}_tags.ucsc.bigWig\n'.format(sample_name,
                                                      temp_web_path))
 
-    # Bigwig file(s).
-    # temp_link_dir = os.path.join(link_dir, 'bw')
-    # temp_web_path = web_path + '/bw'
-    # try:
-    #     os.makedirs(temp_link_dir)
-    # except OSError:
-    #     pass
-    # fn = os.path.join(outdir, os.path.split(bigwig)[1])
-    # new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
-    # lines += new_lines
-
-    # tf_lines += ' '.join(['track', 'type=bigWig',
-    #                       'name="{}_cov"'.format(sample_name),
-    #                       ('description="ATAC-seq coverage for '
-    #                        '{}"'.format(sample_name)),
-    #                       'visibility=0',
-    #                       'db=hg19',
-    #                       'bigDataUrl={}/{}\n'.format(temp_web_path,
-    #                                                   bigwig_name)])
-   
     # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
     # we don't provide a trackline but rather just a URL to UCSC.
     temp_link_dir = os.path.join(link_dir, 'peak')
@@ -259,27 +239,15 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
     temp_tagdir = os.path.realpath(temp_tagdir)
     final_tagdir = os.path.realpath(final_tagdir)
     name = '{}_atac_homer'.format(sample_name)
-    # bed = os.path.join(tagdir, '{}_homer_peaks.bed'.format(sample_name))
     lines = []
     lines.append('{}/makeTagDirectory {} {}'.format(homer_path, temp_tagdir,
                                                     bam))
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name {}'
-                     '-url www.fake.com/ -webdir {}'.format(
+                     ' -url www.fake.com/ -webdir {}'.format(
             homer_path, os.path.split(temp_tagdir)[1], name, temp_tagdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
                  '-o auto'.format(homer_path, temp_tagdir))
-    # lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
-    #     homer_path, os.path.join(tagdir, 'regions.txt')))
-    # track_line = ' '.join(['track', 'type=bed',
-    #                        'name=\\"{}_homer_atac_peaks\\"'.format(sample_name),
-    #                        ('description=\\"HOMER ATAC-seq peaks for '
-    #                         '{}\\"'.format(sample_name)),
-    #                        'visibility=0',
-    #                        'db=hg19'])
-    # lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
-    # lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
-    # lines.append('rm temp.bed temp2.bed')
     softlink_lines = []
     posfile = os.path.join(temp_tagdir, 'regions.txt')
     bed = os.path.join(temp_tagdir, '{}_peaks.bed'.format(name))
@@ -748,11 +716,6 @@ def align_and_call_peaks(
                                         picard_path, picard_memory, tempdir,
                                         bg=True)
     f.write(lines)
-
-    # # Make bigwig files for displaying coverage.
-    # lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
-    #                       bedgraph_to_bigwig_path, bedtools_path)
-    # f.write(lines)
 
     # Call peaks with macs2.
     lines = _macs2(no_dup_bam, sample_name, outdir)
