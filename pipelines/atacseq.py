@@ -250,7 +250,7 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name {}'
                      '-url www.fake.com/ -webdir {}'.format(
-            homer_path, os.path.split(temp_tagdir)[1], name, outdir))
+            homer_path, os.path.split(temp_tagdir)[1], name, temp_tagdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
                  '-o auto'.format(homer_path, temp_tagdir))
     # lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
@@ -595,7 +595,9 @@ def align_and_call_peaks(
                                '{}_chrM_counts.txt'.format(sample_name))
     narrow_peak = os.path.join(outdir,
                                '{}_peaks.narrowPeak'.format(sample_name))
-    tagdir = os.path.join(tempdir, '{}_tags'.format(sample_name))
+    local_tagdir = '{}_tags'.format(sample_name)
+    temp_tagdir = os.path.join(tempdir, local_tagdir)
+    final_tagdir = os.path.join(outdir, local_tagdir)
     
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
@@ -610,7 +612,8 @@ def align_and_call_peaks(
     
     # Files to copy to output directory.
     files_to_copy = [aligned_bam, no_dup_bam, bam_index, qsorted_bam, 'Log.out',
-                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab', tagdir]
+                     'Log.final.out', 'Log.progress.out', 'SJ.out.tab',
+                     temp_tagdir]
     # Temporary files that can be deleted at the end of the job. We may not want
     # to delete the temp directory if the temp and output directory are the
     # same.
@@ -741,8 +744,9 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Run HOMER.
-    lines, softlink_lines = _homer(qsorted_bam, sample_name, tagdir, homer_path,
-                                   link_dir, bedtools_path, bigwig=True)
+    lines, softlink_lines = _homer(qsorted_bam, sample_name, temp_tagdir,
+                                   final_tagdir, homer_path, link_dir,
+                                   bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
