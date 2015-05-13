@@ -71,7 +71,8 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
 
 def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           coord_sorted_bam, bam_index, r1_fastqc,
-                          r2_fastqc, narrow_peak, sample_name, outdir):
+                          r2_fastqc, narrow_peak, broad_peak, sample_name,
+                          outdir):
     """
     Make files and softlinks for displaying results on UCSC genome browser.
 
@@ -196,6 +197,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     except OSError:
         pass
     fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
+    new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+    fn = os.path.join(outdir, os.path.split(broad_peak)[1])
     new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
     tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
@@ -397,9 +401,9 @@ def _macs2(bam, sample_name, outdir):
         Lines to be printed to shell/PBS script.
 
     """
-    lines = ('macs2 callpeak -t {} -f BAMPE '.format(bam) + 
-             '-g hs -n {} --outdir {} '.format(sample_name, outdir) + 
-             '--keep-dup all --call-summits\n')
+    lines = ('macs2 callpeak -t {} -f BAMPE -g hs -n {} --outdir {} '
+             '--keep-dup all --call-summits --broad\n'.format(
+                 bam, sample_name, outdir))
     
     # Add trackline to narrowPeak file from macs.
     out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
@@ -407,6 +411,18 @@ def _macs2(bam, sample_name, outdir):
     track_line = ' '.join(['track', 'type=narrowPeak',
                            'name=\\"{}_macs2_atac_peaks\\"'.format(sample_name),
                            ('description=\\"macs2 ATAC-seq peaks for '
+                            '{}\\"'.format(sample_name)),
+                           'visibility=0',
+                           'db=hg19'])
+    lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
+    lines += 'mv {} {}\n\n'.format(temp, out)
+    # Add trackline to broadPeak file from macs.
+    out = os.path.join(outdir, '{}_peaks.broadPeak'.format(sample_name))
+    temp = os.path.join(outdir, 'temp.broadPeak')
+    track_line = ' '.join(['track', 'type=broadPeak',
+                           'name=\\"{}_macs2_atac_broad_peaks\\"'.format(
+                               sample_name),
+                           ('description=\\"macs2 ATAC-seq broad peaks for '
                             '{}\\"'.format(sample_name)),
                            'visibility=0',
                            'db=hg19'])
@@ -582,6 +598,8 @@ def align_and_call_peaks(
                                '{}_chrM_counts.txt'.format(sample_name))
     narrow_peak = os.path.join(outdir,
                                '{}_peaks.narrowPeak'.format(sample_name))
+    broad_peak = os.path.join(outdir,
+                               '{}_peaks.broadPeak'.format(sample_name))
     local_tagdir = '{}_tags'.format(sample_name)
     temp_tagdir = os.path.join(tempdir, local_tagdir)
     final_tagdir = os.path.join(outdir, local_tagdir)
@@ -757,7 +775,8 @@ def align_and_call_peaks(
     # Make softlinks and tracklines for genome browser.
     lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                   no_dup_bam, bam_index, r1_fastqc,
-                                  r2_fastqc, narrow_peak, sample_name, outdir)
+                                  r2_fastqc, narrow_peak, broad_peak,
+                                  sample_name, outdir)
     f.write(lines)
     f.write('wait\n\n')
 
