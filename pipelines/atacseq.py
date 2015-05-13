@@ -245,7 +245,9 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name {}'
                      ' -url www.fake.com/ -webdir {}'.format(
-            homer_path, os.path.split(temp_tagdir)[1], name, temp_tagdir))
+            homer_path, os.path.split(temp_tagdir)[0], name, temp_tagdir))
+        lines.append('mv {}/{}_tags.ucsc.bigWig {}'.format(
+                         os.path.split(temp_tagdir)[0], temp_tagdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
                  '-o auto'.format(homer_path, temp_tagdir))
     softlink_lines = []
