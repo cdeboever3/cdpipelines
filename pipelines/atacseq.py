@@ -5,6 +5,7 @@ from general import _bigwig_files
 from general import _cutadapt_trim
 from general import _fastqc
 from general import _flagstat
+from general import _picard_insert_size_metrics
 from general import _make_softlink
 from general import _pbs_header
 from general import _picard_coord_sort
