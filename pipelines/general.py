@@ -1,5 +1,42 @@
 import os
 
+def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
+                                picard_memory, tempdir, bg=False):
+    """
+    Collect insert size metrics using Picard. The input bam file is assumed to
+    be sorted.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    out_metrics : str
+        Path to output metrics file.
+
+    out_hist : str
+        Path to output histogram PDF.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} CollectInsertSizeMetrics'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out_metrics),
+                           '\tHISTOGRAM={}'.format(out_hist),
+                           '\tASSUME_SORTED=true']))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
 def _picard_query_sort(in_bam, out_bam, picard_path, picard_memory, tempdir,
                        bg=False):
     """

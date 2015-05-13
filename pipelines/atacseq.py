@@ -565,7 +565,10 @@ def align_and_call_peaks(
     qsorted_bam = os.path.join(
         tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
     # out_bigwig = os.path.join(tempdir, '{}_atac.bw'.format(sample_name))
-    
+    insert_metrics = os.path.join(
+        outdir, '{}_insert_metrics.txt'.format(sample_name))
+    insert_hist = os.path.join(
+        outdir, '{}_insert_histogram.pdf'.format(sample_name))
     duplicate_metrics = os.path.join(
         outdir, '{}_duplicate_metrics.txt'.format(sample_name))
     stats_file = os.path.join(outdir,
@@ -703,6 +706,10 @@ def align_and_call_peaks(
     lines = _samtools_index(no_dup_bam, samtools_path, bg=True)
     f.write(lines)
     lines = _flagstat(no_dup_bam, stats_file, samtools_path, bg=True)
+    f.write(lines)
+    lines = _picard_insert_size_metrics(no_dup_bam, insert_metrics, insert_hist,
+                                        picard_path, picard_memory, tempdir,
+                                        bg=True)
     f.write(lines)
 
     # # Make bigwig files for displaying coverage.
