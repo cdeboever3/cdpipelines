@@ -171,12 +171,12 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
     
     # Bigwig file(s).
-    temp_link_dir = os.path.join(link_dir, 'bw')
-    temp_web_path = web_path + '/bw'
-    try:
-        os.makedirs(temp_link_dir)
-    except OSError:
-        pass
+    # temp_link_dir = os.path.join(link_dir, 'bw')
+    # temp_web_path = web_path + '/bw'
+    # try:
+    #     os.makedirs(temp_link_dir)
+    # except OSError:
+    #     pass
     # fn = os.path.join(outdir, os.path.split(bigwig)[1])
     # new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
     # lines += new_lines
@@ -209,8 +209,8 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     lines += '\n'
     return lines
 
-def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path, 
-           bigwig=False):
+def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
+           bedtools_path, bigwig=False):
     """
     Make tag directory and call peaks with HOMER. Optionally make bigwig file.
 
@@ -219,8 +219,11 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
     bam : str
         Path to paired-end, coordinate sorted bam file.
 
-    tagdir : str
-        Path to tag directory that HOMER will create.
+    temp_tagdir : str
+        Path to temporary tag directory that HOMER will create.
+
+    final_tagdir : str
+        Path to final tag directory (what the temp_tagdir will be copied to).
 
     link_dir : str
         Path to directory where softlinks should be made. HOMER will put the
@@ -236,30 +239,43 @@ def _homer(bam, sample_name, tagdir, homer_path, link_dir, bedtools_path,
         Lines to be printed to shell/PBS script.
 
     """
-    tagdir = os.path.realpath(tagdir)
-    bed = os.path.join(tagdir, '{}_homer_peaks.bed'.format(sample_name))
+    temp_tagdir = os.path.realpath(temp_tagdir)
+    final_tagdir = os.path.realpath(final_tagdir)
+    name = '{}_atac_homer'.format(sample_name)
+    # bed = os.path.join(tagdir, '{}_homer_peaks.bed'.format(sample_name))
     lines = []
-    lines.append('{}/makeTagDirectory {} {}'.format(homer_path, tagdir, bam))
+    lines.append('{}/makeTagDirectory {} {}'.format(homer_path, temp_tagdir,
+                                                    bam))
     if bigwig:
-        lines.append('{}/makeBigWig.pl {} hg19 -name {}_atac_homer'.format(
-            homer_path, os.path.split(tagdir)[1], sample_name)) 
+        lines.append('{}/makeBigWig.pl {} hg19 -name {}'
+                     '-url www.fake.com/ -webdir {}'.format(
+            homer_path, os.path.split(temp_tagdir)[1], name, outdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
-                 '-o auto'.format(homer_path,tagdir))
-    lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
-        homer_path, os.path.join(tagdir, 'regions.txt')))
-    track_line = ' '.join(['track', 'type=bed',
-                           'name=\\"{}_homer_atac_peaks\\"'.format(sample_name),
-                           ('description=\\"HOMER ATAC-seq peaks for '
-                            '{}\\"'.format(sample_name)),
-                           'visibility=0',
-                           'db=hg19'])
-    lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
-    lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
-    lines.append('rm temp.bed temp2.bed')
-    ls, name = _make_softlink(bed, sample_name, link_dir)
-    lines.append(ls)
+                 '-o auto'.format(homer_path, temp_tagdir))
+    # lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
+    #     homer_path, os.path.join(tagdir, 'regions.txt')))
+    # track_line = ' '.join(['track', 'type=bed',
+    #                        'name=\\"{}_homer_atac_peaks\\"'.format(sample_name),
+    #                        ('description=\\"HOMER ATAC-seq peaks for '
+    #                         '{}\\"'.format(sample_name)),
+    #                        'visibility=0',
+    #                        'db=hg19'])
+    # lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
+    # lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
+    # lines.append('rm temp.bed temp2.bed')
+    softlink_lines = []
+    posfile = os.path.join(temp_tagdir, 'regions.txt')
+    bed = os.path.join(temp_tagdir, '{}_peaks.bed'.format(name))
+    lines.append(_convert_homer_pos_to_bed(
+        posfile, bed, name, homer_path, bedtools_path))
+    bed = os.path.join(final_tagdir, '{}_peaks.bed'.format(name))
+    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+                                                            'peak'))
+    softlink_lines.append(softlink)
+    
     lines = '\n'.join(lines) + '\n\n'
-    return lines
+    softlink_lines = '\n'.join(softlink_lines)
+    return lines, softlink_lines
 
 def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                     homer_path, link_dir, bedtools_path, bigwig=False):
@@ -304,8 +320,9 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                                                       ' '.join(input_tagdirs)))
     if bigwig:
         lines.append('{}/makeBigWig.pl {} hg19 -name '
-                     '{}_combined_atac_homer'.format(
-            homer_path, os.path.split(temp_tagdir)[1], combined_name)) 
+                     '{}_combined_atac_homer -url www.fake.com/'
+                     '-webdir {}'.format(
+            homer_path, os.path.split(temp_tagdir)[1], combined_name, outdir))
     lines.append('{}/findPeaks {} -style super -size 75 '
                  ' -o auto'.format(
                      homer_path, temp_tagdir))
@@ -723,8 +740,8 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Run HOMER.
-    lines = _homer(qsorted_bam, sample_name, tagdir, homer_path, link_dir,
-                   bedtools_path, bigwig=True)
+    lines, softlink_lines = _homer(qsorted_bam, sample_name, tagdir, homer_path,
+                                   link_dir, bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -755,8 +772,9 @@ def align_and_call_peaks(
 
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
+    
+    f.write(softlink_lines)
     f.close()
-
     return fn
 
 def combined_homer_peaks(
