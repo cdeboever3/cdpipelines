@@ -174,6 +174,10 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     # HOMER bigwig.
     temp_link_dir = os.path.join(link_dir, 'bigwig')
     temp_web_path = web_path + '/bigwig'
+    try:
+        os.makedirs(temp_link_dir)
+    except OSError:
+        pass
     fn = os.path.join(outdir, '{}_tags'.format(sample_name),
                       '{}_tags.ucsc.bigWig'.format(sample_name))
     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
