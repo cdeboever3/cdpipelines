@@ -29,7 +29,7 @@ def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
                            '\tVALIDATION_STRINGENCY=SILENT',
                            '\tI={}'.format(in_bam), 
                            '\tO={}'.format(out_metrics),
-                           '\tHISTOGRAM={}'.format(out_hist),
+                           '\tHISTOGRAM_FILE={}'.format(out_hist),
                            '\tASSUME_SORTED=true']))
     if bg:
         lines += ' &\n\n'
