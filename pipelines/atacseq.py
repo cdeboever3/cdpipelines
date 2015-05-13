@@ -113,6 +113,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     narrow_peak : str
         Path to narrowPeak file from MACS2.
 
+    narrow_peak : str
+        Path to broadPeak file from MACS2.
+
     sample_name : str
         Sample name used for naming files.
 
@@ -196,9 +199,9 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
         os.makedirs(temp_link_dir)
     except OSError:
         pass
-    fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
-    new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
-    lines += new_lines
+    # fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
+    # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
+    # lines += new_lines
     fn = os.path.join(outdir, os.path.split(broad_peak)[1])
     new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
     lines += new_lines
@@ -405,17 +408,17 @@ def _macs2(bam, sample_name, outdir):
              '--keep-dup all --call-summits --broad\n'.format(
                  bam, sample_name, outdir))
     
-    # Add trackline to narrowPeak file from macs.
-    out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
-    temp = os.path.join(outdir, 'temp.narrowPeak')
-    track_line = ' '.join(['track', 'type=narrowPeak',
-                           'name=\\"{}_macs2_atac_peaks\\"'.format(sample_name),
-                           ('description=\\"macs2 ATAC-seq peaks for '
-                            '{}\\"'.format(sample_name)),
-                           'visibility=0',
-                           'db=hg19'])
-    lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
-    lines += 'mv {} {}\n\n'.format(temp, out)
+    # # Add trackline to narrowPeak file from macs.
+    # out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
+    # temp = os.path.join(outdir, 'temp.narrowPeak')
+    # track_line = ' '.join(['track', 'type=narrowPeak',
+    #                        'name=\\"{}_macs2_atac_peaks\\"'.format(sample_name),
+    #                        ('description=\\"macs2 ATAC-seq peaks for '
+    #                         '{}\\"'.format(sample_name)),
+    #                        'visibility=0',
+    #                        'db=hg19'])
+    # lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
+    # lines += 'mv {} {}\n\n'.format(temp, out)
     # Add trackline to broadPeak file from macs.
     out = os.path.join(outdir, '{}_peaks.broadPeak'.format(sample_name))
     temp = os.path.join(outdir, 'temp.broadPeak')
