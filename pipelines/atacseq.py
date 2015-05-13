@@ -170,7 +170,19 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                           'visibility=0',
                           'db=hg19',
                           'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
-    
+   
+    # HOMER bigwig.
+    temp_link_dir = os.path.join(link_dir, 'bigwig')
+    temp_web_path = web_path + '/bigwig'
+    fn = os.path.join(outdir, '{}_tags'.format(sample_name),
+                      '{}_tags.ucsc.bigWig'.format(sample_name))
+    new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+    tf_lines += ('track type=bigWig name="{0}_atac_cov" description="ATAC-seq '
+                 'coverage for {0}" visibility=0 db=hg19 bigDataUrl='
+                 '{1}/{0}_tags.ucsc.bigWig\n'.format(sample_name,
+                                                     temp_web_path))
+
     # Bigwig file(s).
     # temp_link_dir = os.path.join(link_dir, 'bw')
     # temp_web_path = web_path + '/bw'
@@ -750,13 +762,6 @@ def align_and_call_peaks(
     f.write(lines)
     f.write('wait\n\n')
 
-    # Make softlinks and tracklines for genome browser.
-    lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                  no_dup_bam, bam_index, r1_fastqc,
-                                  r2_fastqc, narrow_peak, sample_name, outdir)
-    f.write(lines)
-    f.write('wait\n\n')
-
     if tempdir != outdir:
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
@@ -778,6 +783,13 @@ def align_and_call_peaks(
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
     
+    # Make softlinks and tracklines for genome browser.
+    lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
+                                  no_dup_bam, bam_index, r1_fastqc,
+                                  r2_fastqc, narrow_peak, sample_name, outdir)
+    f.write(lines)
+    f.write('wait\n\n')
+
     f.write(softlink_lines)
     f.close()
     return fn
