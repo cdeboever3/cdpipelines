@@ -712,6 +712,7 @@ def align_and_call_peaks(
     f.write(lines)
     lines = _flagstat(no_dup_bam, stats_file, samtools_path, bg=True)
     f.write(lines)
+    f.write('wait\n\n')
     lines = _picard_insert_size_metrics(no_dup_bam, insert_metrics, insert_hist,
                                         picard_path, picard_memory, tempdir,
                                         bg=True)
