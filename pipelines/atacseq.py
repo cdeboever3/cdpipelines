@@ -316,6 +316,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     """
     temp_tagdir = os.path.realpath(temp_tagdir)
     final_tagdir = os.path.realpath(final_tagdir)
+    name = '{}_combined_peak'.format(combined_name)
     bed = os.path.join(temp_tagdir,
                        '{}_combined_homer_peaks.bed'.format(combined_name))
     lines = []
