@@ -322,10 +322,12 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, temp_tagdir, 
                                                       ' '.join(input_tagdirs)))
     if bigwig:
-        lines.append('{}/makeBigWig.pl {} hg19 -name '
-                     '{}_combined_atac_homer -url www.fake.com/'
-                     '-webdir {}'.format(
-            homer_path, os.path.split(temp_tagdir)[1], combined_name, outdir))
+        lines.append('{}/makeBigWig.pl {} hg19 -name {}'
+                     ' -url www.fake.com/ -webdir {}'.format(
+                         homer_path, os.path.split(temp_tagdir)[1], name, 
+                         os.path.split(temp_tagdir)[0]))
+        lines.append('mv {}/{}_tags.ucsc.bigWig {}'.format(
+            os.path.split(temp_tagdir)[0], sample_name, temp_tagdir))
     lines.append('{}/findPeaks {} -style super -size 75 '
                  ' -o auto'.format(
                      homer_path, temp_tagdir))
