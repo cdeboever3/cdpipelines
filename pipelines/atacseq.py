@@ -191,14 +191,21 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
                  '{1}/{0}_tags.ucsc.bigWig\n'.format(sample_name,
                                                      temp_web_path))
 
-    # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
-    # we don't provide a trackline but rather just a URL to UCSC.
+    # HOMER peaks.
     temp_link_dir = os.path.join(link_dir, 'peak')
     temp_web_path = web_path + '/peak'
     try:
         os.makedirs(temp_link_dir)
     except OSError:
         pass
+    fn = os.path.join(outdir, '{}_tags'.format(sample_name),
+                      '{}_atac_homer_peaks.bed'.format(sample_name))
+    new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
+    lines += new_lines
+    tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
+
+    # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
+    # we don't provide a trackline but rather just a URL to UCSC.
     # fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
     # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
     # lines += new_lines
@@ -258,19 +265,20 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
             os.path.split(temp_tagdir)[0], sample_name, temp_tagdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
                  '-o auto'.format(homer_path, temp_tagdir))
-    softlink_lines = []
+    # softlink_lines = []
     posfile = os.path.join(temp_tagdir, 'regions.txt')
     bed = os.path.join(temp_tagdir, '{}_peaks.bed'.format(name))
     lines.append(_convert_homer_pos_to_bed(
         posfile, bed, name, homer_path, bedtools_path))
     bed = os.path.join(final_tagdir, '{}_peaks.bed'.format(name))
-    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
-                                                            'peak'))
-    softlink_lines.append(softlink)
+    # softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+    #                                                         'peak'))
+    # softlink_lines.append(softlink)
     
     lines = '\n'.join(lines) + '\n\n'
-    softlink_lines = '\n'.join(softlink_lines)
-    return lines, softlink_lines
+    # softlink_lines = '\n'.join(softlink_lines)
+    # return lines, softlink_lines
+    return lines
 
 def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                     homer_path, link_dir, bedtools_path, bigwig=False):
@@ -748,9 +756,8 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Run HOMER.
-    lines, softlink_lines = _homer(qsorted_bam, sample_name, temp_tagdir,
-                                   final_tagdir, homer_path, link_dir,
-                                   bedtools_path, bigwig=True)
+    lines = _homer(qsorted_bam, sample_name, temp_tagdir, final_tagdir,
+                   homer_path, link_dir, bedtools_path, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
@@ -781,9 +788,7 @@ def align_and_call_peaks(
                                   r2_fastqc, narrow_peak, broad_peak,
                                   sample_name, outdir)
     f.write(lines)
-    f.write('wait\n\n')
 
-    f.write(softlink_lines)
     f.close()
     return fn
 
