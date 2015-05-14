@@ -328,7 +328,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                          homer_path, os.path.split(temp_tagdir)[1], name, 
                          os.path.split(temp_tagdir)[0]))
         lines.append('mv {}/{}_tags.ucsc.bigWig {}'.format(
-            os.path.split(temp_tagdir)[0], sample_name, temp_tagdir))
+            os.path.split(temp_tagdir)[0], combined_name, temp_tagdir))
     lines.append('{}/findPeaks {} -style super -size 75 '
                  ' -o auto'.format(
                      homer_path, temp_tagdir))
