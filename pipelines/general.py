@@ -451,7 +451,7 @@ def _picard_merge(bams, out_bam, picard_memory, picard_path, tempdir, bg=False):
              '\tUSE_THREADING=true']
     for bam in bams:
         lines.append('\tI={}'.format(bam))
-    lines.append('\tO={}'.format(out_bam)]))
+    lines.append('\tO={}'.format(out_bam))
     line = (' \\\n'.join(lines))
     if bg:
         line += ' &\n\n'
