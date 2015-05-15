@@ -755,20 +755,22 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Count the number of primary alignments for each chromosome.
-    f.write('{} view -q 255 {} | cut -f 3 | grep chrM '
-            '| uniq -c > {} &\n\n'.format(
+    f.write('{} view -q 255 {} | \\\n\tcut -f 3 | \\\n\tgrep chrM '
+            '| \\\n\tuniq -c > {} &\n\n'.format(
         samtools_path, aligned_bam, chrM_counts))
 
     # Remove mitochondrial reads, read pairs that are not uniquely aligned, and
     # reads where one or both of the reads were in the ENCODE blacklist regions.
-    lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
-             'awk \'{if ($3 != "chrM") {print} ' + 
-             'else if (substr($1,1,1) == "@") {print}}\' | ' + 
-             '{} intersect -v -abam stdin -b {} | '.format(bedtools_path,
-                                                           blacklist_bed) + 
-             'awk \'{if (substr($1,1,1) == "@") {print} ' + 
-             'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | ' + 
-             '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
+    lines = (
+        '{} view -h -q 255 {} | \\\n'.format(samtools_path, aligned_bam) + 
+        '\tawk \'{if ($3 != "chrM") {print} ' + 
+        'else if (substr($1,1,1) == "@") {print}}\' | \\\n' + 
+        '\t{} intersect -v -abam stdin -b {} | \\\n'.format(
+            bedtools_path, blacklist_bed) + 
+        '\tawk \'{if (substr($1,1,1) == "@") {print} ' + 
+        'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | \\\n' + 
+        '\t{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam)
+    )
     f.write(lines)
 
     # Coordinate sort bam file.
