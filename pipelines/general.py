@@ -1213,6 +1213,7 @@ def convert_sra_to_fastq(
 def merge_bams(
     bams, 
     outdir, 
+    tempdir,
     merged_name, 
     picard_path,
     picard_memory,
