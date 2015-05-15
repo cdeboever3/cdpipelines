@@ -768,7 +768,7 @@ def align_and_call_peaks(
                                                            blacklist_bed) + 
              'awk \'{if (substr($1,1,1) == "@") {print} ' + 
              'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | ' + 
-             '{0} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
+             '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
     # Coordinate sort bam file.
