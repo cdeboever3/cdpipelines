@@ -766,7 +766,7 @@ def align_and_call_peaks(
         '\tawk \'{if ($3 != "chrM") {print} ' + 
         'else if (substr($1,1,1) == "@") {print}}\' | \\\n' + 
         '\t{} view -Su - | \\\n'.format(samtools_path) + 
-        '\t{} intersect -v -abam stdin -b {} | \\\n'.format(
+        '\t{} intersect -v -ubam -abam stdin -b {} | \\\n'.format(
             bedtools_path, blacklist_bed) + 
         '\t{} view -h - | \\\n'.format(samtools_path) + 
         '\tawk \'{if (substr($1,1,1) == "@") {print} ' + 
