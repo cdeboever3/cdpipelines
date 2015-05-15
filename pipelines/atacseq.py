@@ -765,7 +765,7 @@ def align_and_call_peaks(
              'awk \'{if ($3 != "chrM") {print} '
              'else if (substr($1,1,1) == "@") {print}}\' | '
              '{} intersect -v -abam stdin -b {} | '.format(bedtools_path,
-                                                           blacklist) + 
+                                                           blacklist_bed) + 
              'awk \'{if (substr($1,1,1) == "@") {print} '
              'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | '
              '{0} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
