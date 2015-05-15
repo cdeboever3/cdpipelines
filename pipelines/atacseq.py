@@ -281,7 +281,8 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
     return lines
 
 def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
-                    homer_path, link_dir, bedtools_path, bigwig=False):
+                    homer_path, link_dir, bedtools_path, tracklines_file,
+                    bigwig=False):
     """
     Combine tag directories and call peaks with HOMER. Optionally make bigwig
     file.
@@ -314,12 +315,18 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
         Lines to be printed to shell/PBS script.
 
     """
+    with open(web_path_file) as wpf:
+        web_path = wpf.readline().strip()
+    web_path = web_path + '/atac'
+
     temp_tagdir = os.path.realpath(temp_tagdir)
     final_tagdir = os.path.realpath(final_tagdir)
     name = '{}_combined_peak'.format(combined_name)
     bed = os.path.join(temp_tagdir,
                        '{}_combined_homer_peaks.bed'.format(combined_name))
     lines = []
+    tf_lines = []
+    softlink_lines = []
     lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, temp_tagdir, 
                                                       ' '.join(input_tagdirs)))
     if bigwig:
@@ -328,13 +335,29 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                          homer_path, os.path.split(temp_tagdir)[1], name, 
                          os.path.split(temp_tagdir)[0]))
         lines.append('mv {0}.ucsc.bigWig {0}'.format(temp_tagdir))
+        temp_link_dir = os.path.join(link_dir, 'bigwig')
+        bw = os.path.join(
+            final_tagdir,
+            '{}.ucsc.bigWig'.format(os.path.split(temp_tagdir)[1]))
+        softlink, name = _make_softlink(bw, name, os.path.join(temp_link_dir,
+                                                               'atac', 'peak'))
+        softlink_lines.append(softlink)
+        temp_web_path = web_path + '/bigwig'
+        try:
+            os.makedirs(temp_link_dir)
+        except OSError:
+            pass
+        tf_lines += ('track type=bigWig name="{0}_atac_cov" '
+                     'description="ATAC-seq '
+                     'coverage for {0}" visibility=0 db=hg19 bigDataUrl='
+                     '{1}/{0}.ucsc.bigWig\n'.format(
+                         os.path.split(temp_tagdir)[1], temp_web_path))
     lines.append('{}/findPeaks {} -style super -size 75 '
                  ' -o auto'.format(
                      homer_path, temp_tagdir))
     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
                  '-o auto'.format(homer_path, temp_tagdir))
    
-    softlink_lines = []
     posfile = os.path.join(temp_tagdir, 'regions.txt')
     name = '{}_combined'.format(combined_name)
     bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
@@ -344,6 +367,8 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
                                                             'peak'))
     softlink_lines.append(softlink)
+    temp_web_path = web_path + '/peak'
+    tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
 
     posfile = os.path.join(temp_tagdir, 'superEnhancers.txt')
     name = '{}_combined_super_enhancers'.format(combined_name)
@@ -354,8 +379,20 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
     softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
                                                             'peak'))
     softlink_lines.append(softlink)
+    tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
     lines = '\n'.join(lines) + '\n\n'
     softlink_lines = '\n'.join(softlink_lines)
+
+    # Write tracklines and URLs.
+    if os.path.exists(tracklines_file):
+        with open(tracklines_file) as f:
+            existing_lines = f.read()
+    else:
+        existing_lines = ''
+
+    with open(tracklines_file, 'w') as tf:
+        tf.write(existing_lines + tf_lines)
+    
     return lines, softlink_lines
 
 def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
@@ -929,7 +966,8 @@ def combined_homer_peaks(
     td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
     lines, softlink_lines = _combined_homer(td, combined_name, temp_tagdir,
                                             final_tagdir, homer_path, link_dir,
-                                            bedtools_path, bigwig=True)
+                                            bedtools_path, tracklines_file,
+                                            bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
