@@ -1313,19 +1313,21 @@ def merge_bams(
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
             ' \\\n\t'.join(bams), tempdir))
         bams = [os.path.split(x)[1] for x in bams]
+        files_to_remove += bams
 
     lines = _picard_merge(bams, merged_bam, picard_memory, picard_path,
                           tempdir)
     f.write(lines)
 
-    lines = _picard_index(merged_bam, index, picard_memory, picard_path,
-                          tempdir)
+    lines = _picard_index(merged_bam, merged_bam_index, picard_memory,
+                          picard_path, tempdir)
     f.write(lines)
 
     f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
         ' \\\n\t'.join(files_to_copy),
         outdir))
-    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
