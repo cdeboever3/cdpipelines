@@ -339,8 +339,8 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
         bw = os.path.join(
             final_tagdir,
             '{}.ucsc.bigWig'.format(os.path.split(temp_tagdir)[1]))
-        softlink, name = _make_softlink(bw, name, os.path.join(temp_link_dir,
-                                                               'atac', 'peak'))
+        softlink, name = _make_softlink(bw, name, os.path.join(
+            temp_link_dir, 'atac', 'bigwig'))
         softlink_lines.append(softlink)
         temp_web_path = web_path + '/bigwig'
         try:
