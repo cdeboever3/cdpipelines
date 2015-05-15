@@ -394,7 +394,7 @@ def _pbs_header(out, err, name, threads, queue='high'):
                         '#PBS -e {}\n\n'.format(err)]))
     return lines
 
-def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
+def _picard_index(in_bam, index, picard_memory, picard_path, tempdir, bg=False):
     """
     Index bam file using Picard Tools.
 
@@ -405,6 +405,9 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
 
     index : str
         Path to index file for input bam file.
+
+    bg : boolean
+        Whether to run the process in the background.
 
     Returns
     -------
@@ -417,7 +420,11 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
                           '\t-Djava.io.tmpdir={}'.format(tempdir),
                           '\t-jar {} BuildBamIndex'.format(picard_path),
                           '\tI={}'.format(in_bam),
-                          '\tO={} &\n\n'.format(index)]))
+                          '\tO={}'.format(index)]))
+    if bg:
+        line += ' &\n\n'
+    else:
+        line += '\n\n'
     return line
 
 def _picard_merge(bams, out_bam, picard_memory, picard_path, tempdir, bg=False):
