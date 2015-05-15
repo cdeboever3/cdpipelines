@@ -765,8 +765,10 @@ def align_and_call_peaks(
         '{} view -h -q 255 {} | \\\n'.format(samtools_path, aligned_bam) + 
         '\tawk \'{if ($3 != "chrM") {print} ' + 
         'else if (substr($1,1,1) == "@") {print}}\' | \\\n' + 
+        '\t{} view -Su - | \\\n'.format(samtools_path) + 
         '\t{} intersect -v -abam stdin -b {} | \\\n'.format(
             bedtools_path, blacklist_bed) + 
+        '\t{} view -h - | \\\n'.format(samtools_path) + 
         '\tawk \'{if (substr($1,1,1) == "@") {print} ' + 
         'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | \\\n' + 
         '\t{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam)
