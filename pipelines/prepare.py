@@ -64,6 +64,12 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
+def download_encode_blacklist(outdir):
+    src = ('https://www.encodeproject.org/files/ENCFF001TDO/@@download/'
+           'ENCFF001TDO.bed.gz')
+    dest = os.path.join(outdir, 'encode_blacklist.bed.gz')
+    _download_and_gunzip(src, dest)
+
 def download_blat(outdir):
     src = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/blat/blat'
     dest = os.path.join(outdir, 'blat')
