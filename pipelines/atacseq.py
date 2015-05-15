@@ -391,7 +391,7 @@ def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
         existing_lines = ''
 
     with open(tracklines_file, 'w') as tf:
-        tf.write(existing_lines + tf_lines)
+        tf.write(existing_lines + ''.join(tf_lines))
     
     return lines, softlink_lines
 
