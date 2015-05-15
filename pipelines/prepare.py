@@ -342,16 +342,18 @@ def download_bedtools(outdir):
         Directory to save Bedtools to.
 
     """
+    url = ('https://github.com/arq5x/bedtools2/releases/download/v2.23.0/'
+           'bedtools-2.23.0.tar.gz')
     url = ('https://github.com/arq5x/bedtools2/releases/'
            'download/v2.20.1/bedtools-2.20.1.tar.gz')
-    dest = os.path.join(outdir, 'bedtools-2.20.1.tar.gz')
+    dest = os.path.join(outdir, 'bedtools-2.23.0.tar.gz')
     _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(outdir, 'bedtools2-2.20.1'))
+    os.chdir(os.path.join(outdir, 'bedtools2-2.23.0'))
     subprocess.check_call('make')
     os.chdir(cwd)
     raw_input('\n\n\nYou should add\n' + 
-              os.path.join(outdir, 'bedtools2-2.20.1', 'bin') + 
+              os.path.join(outdir, 'bedtools2-2.23.0', 'bin') + 
               '\nto your path when using this environment so\n'
               'pybedtools uses the correct bedtools installation.\n'
               'Press any key to continue.\n\n\n')
