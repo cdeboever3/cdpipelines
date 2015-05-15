@@ -456,7 +456,7 @@ def _picard_merge(bams, out_bam, picard_memory, picard_path, tempdir, bg=False):
     if bg:
         line += ' &\n\n'
     else:
-        line +- '\n\n'
+        line += '\n\n'
     return line
 
 def _samtools_index(in_bam, samtools_path, index=None, bg=False):
