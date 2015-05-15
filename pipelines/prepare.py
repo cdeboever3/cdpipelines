@@ -346,6 +346,8 @@ def download_bedtools(outdir):
            'bedtools-2.23.0.tar.gz')
     dest = os.path.join(outdir, 'bedtools-2.23.0.tar.gz')
     _download_and_untar(url, dest, outdir)
+    os.rename(os.path.join(outdir, 'bedtools2'),
+              os.path.join(outdir, 'bedtools2-2.23.0'))
     cwd = os.getcwd()
     os.chdir(os.path.join(outdir, 'bedtools2-2.23.0'))
     subprocess.check_call('make')
