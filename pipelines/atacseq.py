@@ -762,12 +762,12 @@ def align_and_call_peaks(
     # Remove mitochondrial reads, read pairs that are not uniquely aligned, and
     # reads where one or both of the reads were in the ENCODE blacklist regions.
     lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
-             'awk \'{if ($3 != "chrM") {print} '
-             'else if (substr($1,1,1) == "@") {print}}\' | '
+             'awk \'{if ($3 != "chrM") {print} ' + 
+             'else if (substr($1,1,1) == "@") {print}}\' | ' + 
              '{} intersect -v -abam stdin -b {} | '.format(bedtools_path,
                                                            blacklist_bed) + 
-             'awk \'{if (substr($1,1,1) == "@") {print} '
-             'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | '
+             'awk \'{if (substr($1,1,1) == "@") {print} ' + 
+             'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | ' + 
              '{0} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
