@@ -282,7 +282,7 @@ def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
 
 def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
                     homer_path, link_dir, bedtools_path, tracklines_file,
-                    bigwig=False):
+                    web_path_file, bigwig=False):
     """
     Combine tag directories and call peaks with HOMER. Optionally make bigwig
     file.
@@ -967,7 +967,7 @@ def combined_homer_peaks(
     lines, softlink_lines = _combined_homer(td, combined_name, temp_tagdir,
                                             final_tagdir, homer_path, link_dir,
                                             bedtools_path, tracklines_file,
-                                            bigwig=True)
+                                            web_path_file, bigwig=True)
     f.write(lines)
     f.write('wait\n\n')
 
