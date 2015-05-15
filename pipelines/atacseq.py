@@ -496,6 +496,7 @@ def align_and_call_peaks(
     fastqc_path,
     samtools_path,
     homer_path,
+    blacklist_bed,
     conda_env='',
     rgpl='ILLUMINA',
     rgpu='',
@@ -568,6 +569,11 @@ def align_and_call_peaks(
 
     homer_path : str
         Path to HOMER bin.
+
+    blacklist_bed : str
+        String to bed file with blacklist regions. This should at least include
+        the ENCODE blacklist regions. Read pairs where one or both reads
+        intersect these regions are filtered out.
 
     conda_env : str
         If provided, load conda environment with this name. This will control
@@ -753,11 +759,16 @@ def align_and_call_peaks(
             '| uniq -c > {} &\n\n'.format(
         samtools_path, aligned_bam, chrM_counts))
 
-    # Remove mitochondrial reads and read pairs that are not uniquely aligned.
+    # Remove mitochondrial reads, read pairs that are not uniquely aligned, and
+    # reads where one or both of the reads were in the ENCODE blacklist regions.
     lines = ('{} view -h -q 255 {} | '.format(samtools_path, aligned_bam) + 
-             'awk \'{if ($3 != "chrM") {print} ' + 
-             'else if (substr($1,1,1) == "@") {print}}\' | ' + 
-             '{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
+             'awk \'{if ($3 != "chrM") {print} '
+             'else if (substr($1,1,1) == "@") {print}}\' | '
+             '{} intersect -v -abam stdin -b {} | '.format(bedtools_path,
+                                                           blacklist) + 
+             'awk \'{if (substr($1,1,1) == "@") {print} '
+             'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | '
+             '{0} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam))
     f.write(lines)
 
     # Coordinate sort bam file.
