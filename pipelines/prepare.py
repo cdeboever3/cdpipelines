@@ -344,8 +344,6 @@ def download_bedtools(outdir):
     """
     url = ('https://github.com/arq5x/bedtools2/releases/download/v2.23.0/'
            'bedtools-2.23.0.tar.gz')
-    url = ('https://github.com/arq5x/bedtools2/releases/'
-           'download/v2.20.1/bedtools-2.20.1.tar.gz')
     dest = os.path.join(outdir, 'bedtools-2.23.0.tar.gz')
     _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
