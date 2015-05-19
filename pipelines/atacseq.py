@@ -1094,8 +1094,8 @@ def nucleoatac(
     else: 
         pbs = True
 
-    tempdir = os.path.join(tempdir, '{}_nucleoatac'.format(combined_name))
-    outdir = os.path.join(outdir, '{}_nucleoatac'.format(combined_name))
+    tempdir = os.path.join(tempdir, '{}_nucleoatac'.format(sample_name))
+    outdir = os.path.join(outdir, '{}_nucleoatac'.format(sample_name))
 
     # I'm going to define some file names used later.
     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
@@ -1113,18 +1113,18 @@ def nucleoatac(
         pass
 
     if shell:
-        fn = os.path.join(outdir, '{}_nucleoatac.sh'.format(combined_name))
+        fn = os.path.join(outdir, '{}_nucleoatac.sh'.format(sample_name))
     else:
-        fn = os.path.join(outdir, '{}_nucleoatac.pbs'.format(combined_name))
+        fn = os.path.join(outdir, '{}_nucleoatac.pbs'.format(sample_name))
 
     f = open(fn, 'w')
     f.write('#!/bin/bash\n\n')
     if pbs:
         out = os.path.join(outdir,
-                           '{}_nucleoatac.out'.format(combined_name))
+                           '{}_nucleoatac.out'.format(sample_name))
         err = os.path.join(outdir,
-                           '{}_nucleoatac.err'.format(combined_name))
-        job_name = '{}_nucleoatac'.format(combined_name)
+                           '{}_nucleoatac.err'.format(sample_name))
+        job_name = '{}_nucleoatac'.format(sample_name)
         f.write(_pbs_header(out, err, job_name, threads))
     
     if conda_env != '':
