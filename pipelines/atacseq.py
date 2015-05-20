@@ -1131,8 +1131,6 @@ def nucleoatac(
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
-        ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
 
     f.write('source {}\n\n'.format(environment))
     
