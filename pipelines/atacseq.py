@@ -1003,10 +1003,10 @@ def combined_homer_peaks(
 
 def _nucleoatac(bam, bed, sample_name, fasta, threads):
     lines = ('nucleoatac run --bed {} \\\n'
-             '--bam {} \\\n'
-             '--out {} \\\n'
-             '--fasta {} \\\n'
-             '--cores {}\n\n'.format(bed, bam, sample_name, fasta, threads))
+             '\t--bam {} \\\n'
+             '\t--out {} \\\n'
+             '\t--fasta {} \\\n'
+             '\t--cores {}\n\n'.format(bed, bam, sample_name, fasta, threads))
     return lines
 
 def nucleoatac(
