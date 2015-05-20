@@ -1202,7 +1202,7 @@ def nucleoatac(
     f.write('cd {}\n'.format(tempdir))
 
     f.write('source {}\n\n'.format(environment))
-    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(bam))
+    f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
     
     # Run nucleoatac.
     lines = _nucleoatac(temp_bam, bed, sample_name, fasta, threads)
@@ -1342,7 +1342,7 @@ def macs2_peak_calling(
     f.write('cd {}\n'.format(tempdir))
 
     f.write('source {}\n\n'.format(environment))
-    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(bam))
+    f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
 
     # Run macs2 for narrow peaks.
     lines = _macs2(
@@ -1365,7 +1365,7 @@ def macs2_peak_calling(
         tracklines_file,
         link_dir,
         web_path_file,
-        broad=False,
+        broad=True,
     )
     f.write(lines)
     f.write('wait\n\n')
