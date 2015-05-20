@@ -444,7 +444,7 @@ def _add_macs2_trackline(bed, sample_name, outdir):
 
     """
     path = os.path.split(bed)[0]
-    track_type = os.path.splitext(bed)[1]
+    track_type = os.path.splitext(bed)[1][1:]
     if track_type == 'bed':
         name = 'summits'
     if track_type == 'narrowPeak':
