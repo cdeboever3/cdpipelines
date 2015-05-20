@@ -110,12 +110,6 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     r2_fastqc : str
         Path to fastqc_report.html for R2 reads.
 
-    narrow_peak : str
-        Path to narrowPeak file from MACS2.
-
-    narrow_peak : str
-        Path to broadPeak file from MACS2.
-
     sample_name : str
         Sample name used for naming files.
 
@@ -209,10 +203,10 @@ def _genome_browser_files(tracklines_file, link_dir, web_path_file,
     # fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
     # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
     # lines += new_lines
-    fn = os.path.join(outdir, os.path.split(broad_peak)[1])
-    new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
-    lines += new_lines
-    tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
+    # fn = os.path.join(outdir, os.path.split(broad_peak)[1])
+    # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
+    # lines += new_lines
+    # tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
 
     with open(tracklines_file, 'w') as tf:
         tf.write(tf_lines)
@@ -434,16 +428,14 @@ def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
     lines.append('rm temp.bed temp2.bed')
     return '\n'.join(lines) + '\n'
 
-def _macs2(bam, sample_name, outdir):
+def _add_macs2_trackline(bed, sample_name, outdir):
     """
-    Call peaks with MACS2. The macs2 executable is assumed to be in your path
-    which it should be if you installed it using pip install MACS2 into your
-    python environment.
+    Add trackline to macs2 bed file. 
 
     Parameters
     ----------
-    bam : str:
-        Path to paired-end, coordinate sorted bam file.
+    bed : str:
+        Full path to macs2 bed file.
 
     Returns
     -------
@@ -451,33 +443,109 @@ def _macs2(bam, sample_name, outdir):
         Lines to be printed to shell/PBS script.
 
     """
-    lines = ('macs2 callpeak -t {} -f BAMPE -g hs -n {} --outdir {} '
-             '--keep-dup all --broad\n'.format(
-                 bam, sample_name, outdir))
+    path = os.path.split(bed)[0]
+    if '_summits.bed' in bed:
+        name = 'summits'
+        track_type = 'bed'
+    if '_peaks.narrowPeak' in bed:
+        name = 'narrowPeak'
+        track_type = name
+    if '_peaks.broadPeak' in bed:
+        name = 'broadPeak'
+        track_type = name
+    if '_peaks.gappedPeak':
+        name = 'gappedPeak'
+        track_type = name
     
-    # # Add trackline to narrowPeak file from macs.
-    # out = os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name))
-    # temp = os.path.join(outdir, 'temp.narrowPeak')
-    # track_line = ' '.join(['track', 'type=narrowPeak',
-    #                        'name=\\"{}_macs2_atac_peaks\\"'.format(sample_name),
-    #                        ('description=\\"macs2 ATAC-seq peaks for '
-    #                         '{}\\"'.format(sample_name)),
-    #                        'visibility=0',
-    #                        'db=hg19'])
-    # lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
-    # lines += 'mv {} {}\n\n'.format(temp, out)
-    # Add trackline to broadPeak file from macs.
-    out = os.path.join(outdir, '{}_peaks.broadPeak'.format(sample_name))
-    temp = os.path.join(outdir, 'temp.broadPeak')
-    track_line = ' '.join(['track', 'type=broadPeak',
-                           'name=\\"{}_macs2_atac_broad_peaks\\"'.format(
-                               sample_name),
-                           ('description=\\"macs2 ATAC-seq broad peaks for '
-                            '{}\\"'.format(sample_name)),
-                           'visibility=0',
-                           'db=hg19'])
-    lines += 'cat <(echo "{}") {} > {}\n'.format(track_line, out, temp)
-    lines += 'mv {} {}\n\n'.format(temp, out)
+    temp_bed = os.path.join(outdir, 'temp.{}'.format(name))
+    track_line = (
+        'track type={} name=\\"{}_macs2_atac_{}\\" '
+        'description=\\"macs2 ATAC-seq {} for {}\\" '
+        'visibility=0 db=hg19'.format(
+            track_type, sample_name, name, name, sample_name)
+    )
+    lines = 'cat <(echo "{}") {} > {}\n'.format(track_line, bed, temp_bed)
+    lines += 'mv {} {}\n\n'.format(temp_bed, bed)
+    return lines
+
+def _macs2(
+    bam, 
+    sample_name, 
+    outdir,
+    tracklines_file,
+    link_dir,
+    web_path_file,
+    broad=False,
+):
+    """
+    Call peaks with MACS2. The macs2 executable is assumed to be in your path
+    which it should be if you installed it using pip install MACS2 into your
+    python environment.
+
+    Parameters
+    ----------
+    bam : str
+        Path to paired-end, coordinate sorted bam file.
+
+    outdir : str
+        Path to directory where final macs2 output should be stored. Softlinks
+        will be made to the output files in this directory.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    # Prepare some stuff for making softlinks and web links.
+    link_dir = os.path.join(link_dir, 'atac', 'peak')
+    with open(web_path_file) as wpf:
+        web_path = wpf.readline().strip()
+    web_path = web_path + '/atac/peak'
+    if os.path.exists(tracklines_file):
+        with open(tracklines_file) as f:
+            tf_lines = f.read()
+    else:
+        tf_lines = ''
+    try:
+        os.makedirs(link_dir)
+    except OSError:
+        pass
+
+    run_type = '--call-summits'
+    if broad:
+        run_type = '--broad'
+    lines = ('macs2 callpeak --nomodel --nolambda --keep-dup all \\\n'
+             '\t{} --slocal 10000 -f BAMPE -g hs \\\n'
+             '\t-t {} \\\n'
+             '\t-n {} \\\n'
+             '\t--outdir {}\n\n'.format(
+                 run_type, bam, sample_name, outdir))
+    
+    # Add tracklines to bed files and make softlinks.
+    if not broad:
+        for bed in [
+            os.path.join(outdir, '{}_peaks.narrowPeak'.format(sample_name)),
+            os.path.join(outdir, '{}_summits.bed'.format(sample_name))
+        ]:
+            lines += _add_macs2_trackline(bed, sample_name, outdir)
+            new_lines, name = _make_softlink(bed, sample_name, link_dir)
+            lines += new_lines
+            tf_lines += '{}/{}\n'.format(web_path, name)
+    elif broad:
+        for bed in [
+            os.path.join(outdir, '{}_peaks.broadPeak'.format(sample_name)),
+            os.path.join(outdir, '{}_peaks.gappedPeak'.format(sample_name))
+        ]:
+            lines += _add_macs2_trackline(bed, sample_name, outdir)
+            new_lines, name = _make_softlink(bed, sample_name, link_dir)
+            lines += new_lines
+            tf_lines += '{}/{}\n'.format(web_path, name)
+
+    # Write tracklines and URLs.
+    with open(tracklines_file, 'w') as tf:
+        tf.write(tf_lines)
+
     return lines
 
 def align_and_call_peaks(
@@ -805,7 +873,8 @@ def align_and_call_peaks(
     f.write(lines)
 
     # Call peaks with macs2.
-    lines = _macs2(no_dup_bam, sample_name, outdir)
+    lines = _macs2(no_dup_bam, sample_name, outdir, tracklines_file, link_dir,
+                   web_path_file, broad=True)
     f.write(lines)
     f.write('wait\n\n')
 

@@ -21,7 +21,8 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
-        macs2_path = 'path/to/macs2'
+        homer_path = 'path/to/homer'
+        blacklist_bed = 'path/to/blacklist'
         shell=False
         fn = ps.atacseq.align_and_call_peaks(
             r1_fastqs, 
@@ -38,7 +39,8 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
-            macs2_path,
+            homer_path,
+            blacklist_bed,
             shell=False
         )
         os.remove(fn)
@@ -60,7 +62,8 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
-        macs2_path = 'path/to/macs2'
+        homer_path = 'path/to/homer'
+        blacklist_bed = 'path/to/blacklist'
         shell=False
         fn = ps.atacseq.align_and_call_peaks(
             r1_fastqs, 
@@ -77,7 +80,8 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
-            macs2_path,
+            homer_path,
+            blacklist_bed,
             shell=False
         )
         os.remove(fn)
@@ -99,7 +103,8 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
-        macs2_path = 'path/to/macs2'
+        homer_path = 'path/to/homer'
+        blacklist_bed = 'path/to/blacklist'
         shell = False
         trim = 25
         fn = ps.atacseq.align_and_call_peaks(
@@ -117,7 +122,8 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
-            macs2_path,
+            homer_path,
+            blacklist_bed,
             shell=shell,
             trim=trim
         )
@@ -140,7 +146,8 @@ class TestAlignAndSort:
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
         fastqc_path = 'path/to/fastqc'
         samtools_path = 'path/to/samtools'
-        macs2_path = 'path/to/macs2'
+        homer_path = 'path/to/homer'
+        blacklist_bed = 'path/to/blacklist'
         shell=False
         trim=-25
         fn = ps.atacseq.align_and_call_peaks(
@@ -158,7 +165,8 @@ class TestAlignAndSort:
             bedgraph_to_bigwig_path,
             fastqc_path,
             samtools_path,
-            macs2_path,
+            homer_path,
+            blacklist_bed,
             shell=False,
             trim=trim
         )
