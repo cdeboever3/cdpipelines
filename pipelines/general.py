@@ -1196,10 +1196,12 @@ def convert_sra_to_fastq(
         
     # Concatenate files, pass through awk to remove unneeded stuff, gzip.
     f.write('cat *_1.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+            'if (NR % 4 == 3) {print "+"}}\' | '
             'gzip -c > ' + r1 + ' &\n\n')
     f.write('cat *_2.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+            'if (NR % 4 == 3) {print "+"}}\' | '
             'gzip -c > ' + r2 + '\n\n')
     f.write('wait\n\n')
 
