@@ -1154,7 +1154,5 @@ def nucleoatac(
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
 
-    f.write(softlink_lines)
-
     f.close()
     return fn
