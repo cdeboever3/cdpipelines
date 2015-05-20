@@ -64,6 +64,32 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
+def download_encode_blacklist(outdir):
+    src = ('https://www.encodeproject.org/files/ENCFF001TDO/@@download/'
+           'ENCFF001TDO.bed.gz')
+    dest = os.path.join(outdir, 'encode_blacklist.bed.gz')
+    _download_and_gunzip(src, dest)
+
+def download_blat(outdir):
+    src = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/blat/blat'
+    dest = os.path.join(outdir, 'blat')
+    _download_file(src, dest)
+    subprocess.check_call(['chmod', '755', '{}'.format(dest)])
+
+def download_weblogo(outdir):
+    """
+    Download weblogo. 
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save weblogo to.
+
+    """
+    src = ('http://weblogo.berkeley.edu/release/weblogo.2.8.2.tar.gz')
+    dest = os.path.join(outdir, 'weblogo')
+    _download_and_untar(src, dest, outdir)
+
 def download_rsem(outdir, lncurses=False):
     """
     Download RSEM.
@@ -316,16 +342,18 @@ def download_bedtools(outdir):
         Directory to save Bedtools to.
 
     """
-    url = ('https://github.com/arq5x/bedtools2/releases/'
-           'download/v2.20.1/bedtools-2.20.1.tar.gz')
-    dest = os.path.join(outdir, 'bedtools-2.20.1.tar.gz')
+    url = ('https://github.com/arq5x/bedtools2/releases/download/v2.23.0/'
+           'bedtools-2.23.0.tar.gz')
+    dest = os.path.join(outdir, 'bedtools-2.23.0.tar.gz')
     _download_and_untar(url, dest, outdir)
+    os.rename(os.path.join(outdir, 'bedtools2'),
+              os.path.join(outdir, 'bedtools2-2.23.0'))
     cwd = os.getcwd()
-    os.chdir(os.path.join(outdir, 'bedtools2-2.20.1'))
+    os.chdir(os.path.join(outdir, 'bedtools2-2.23.0'))
     subprocess.check_call('make')
     os.chdir(cwd)
     raw_input('\n\n\nYou should add\n' + 
-              os.path.join(outdir, 'bedtools2-2.20.1', 'bin') + 
+              os.path.join(outdir, 'bedtools2-2.23.0', 'bin') + 
               '\nto your path when using this environment so\n'
               'pybedtools uses the correct bedtools installation.\n'
               'Press any key to continue.\n\n\n')

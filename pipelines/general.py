@@ -1,5 +1,73 @@
 import os
 
+def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
+                                picard_memory, tempdir, bg=False):
+    """
+    Collect insert size metrics using Picard. The input bam file is assumed to
+    be sorted.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    out_metrics : str
+        Path to output metrics file.
+
+    out_hist : str
+        Path to output histogram PDF.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} CollectInsertSizeMetrics'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out_metrics),
+                           '\tHISTOGRAM_FILE={}'.format(out_hist),
+                           '\tASSUME_SORTED=true']))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
+def _picard_query_sort(in_bam, out_bam, picard_path, picard_memory, tempdir,
+                       bg=False):
+    """
+    Query sort using Picard Tools.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    out_bam : str
+        Path to output bam file.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} SortSam'.format(picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out_bam),
+                           '\tSO=queryname']))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
 def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
                        tempdir, bam_index=None):
     """
@@ -43,32 +111,6 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
 
     return lines
 
-def _picard_coord_sort_primary(in_bam, out_bam, picard_path, picard_memory,
-                               samtools_path, tempdir): 
-    """
-    Coordinate sort using Picard Tools while only keeping primary alignments.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out_bam : str
-        Path to output bam file.
-
-    """
-    lines = (' \\\n'.join(['{} view -hu -F 256 {} | '.format(samtools_path,
-                                                             in_bam),
-                           '\tjava -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
-                           '\t-jar {} SortSam'.format(picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI=/dev/stdin',
-                           '\tO={}'.format(out_bam),
-                           '\tSO=coordinate\n']))
-    return lines
-
 def _cutadapt_trim(fastq, length, out, bg=False):
     """
     Cut a specified number of bases from a fastq file using cutadapt. Cutadapt
@@ -98,9 +140,9 @@ def _cutadapt_trim(fastq, length, out, bg=False):
     """
     line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
     if bg:
-        line += ' &\n'
+        line += ' &\n\n'
     else:
-        line += '\n'
+        line += '\n\n'
     return line
 
 def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
@@ -113,7 +155,7 @@ def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                        '{} &\n'.format(bigwig)])
     return lines
 
-def _flagstat(bam, stats_file, samtools_path):
+def _flagstat(bam, stats_file, samtools_path, bg=False):
     """
     Run flagstat for a bam file.
 
@@ -134,7 +176,11 @@ def _flagstat(bam, stats_file, samtools_path):
         Lines to be written to PBS/shell script.
 
     """
-    lines = '{} flagstat {} > {} &\n\n'.format(samtools_path, bam, stats_file)
+    lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
     return lines
 
 def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
@@ -528,7 +574,7 @@ def _pbs_header(out, err, name, threads, queue='high'):
                         '#PBS -e {}\n\n'.format(err)]))
     return lines
 
-def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
+def _picard_index(in_bam, index, picard_memory, picard_path, tempdir, bg=False):
     """
     Index bam file using Picard Tools.
 
@@ -539,6 +585,9 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
 
     index : str
         Path to index file for input bam file.
+
+    bg : boolean
+        Whether to run the process in the background.
 
     Returns
     -------
@@ -551,10 +600,53 @@ def _picard_index(in_bam, index, picard_memory, picard_path, tempdir):
                           '\t-Djava.io.tmpdir={}'.format(tempdir),
                           '\t-jar {} BuildBamIndex'.format(picard_path),
                           '\tI={}'.format(in_bam),
-                          '\tO={} &\n\n'.format(index)]))
+                          '\tO={}'.format(index)]))
+    if bg:
+        line += ' &\n\n'
+    else:
+        line += '\n\n'
     return line
 
-def _samtools_index(in_bam, samtools_path, index=''):
+def _picard_merge(bams, out_bam, picard_memory, picard_path, tempdir, bg=False):
+    """
+    Merge bam files using Picard. Input bam files are assumed to be coordinate
+    sorted.
+
+    Parameters
+    ----------
+    bams : str
+        Bam files to merge.
+
+    out_bam : str
+        Path to output merged bam file.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    Returns
+    -------
+    line : str
+        Line to print to shell/pbs script.
+
+    """
+    merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
+    lines = ['java -Xmx{}g -jar'.format(picard_memory),
+             '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+             '\t-Djava.io.tmpdir={}'.format(tempdir), 
+             '\t-jar {} MergeSamFiles'.format(picard_path),
+             '\tASSUME_SORTED=true',
+             '\tUSE_THREADING=true']
+    for bam in bams:
+        lines.append('\tI={}'.format(bam))
+    lines.append('\tO={}'.format(out_bam))
+    line = (' \\\n'.join(lines))
+    if bg:
+        line += ' &\n\n'
+    else:
+        line += '\n\n'
+    return line
+
+def _samtools_index(in_bam, samtools_path, index=None, bg=False):
     """
     Index bam file using samtools.
 
@@ -573,10 +665,14 @@ def _samtools_index(in_bam, samtools_path, index=''):
         Path to index file for input bam file.
 
     """
-    if index == '':
-        line = 'samtools index {} &\n\n'.format(in_bam)
+    if index: 
+        line = '{} index {} {}'.format(samtools_path, in_bam, index)
     else:
-        line = 'samtools index {} {} &\n\n'.format(in_bam, index)
+        line = '{} index {}'.format(samtools_path, in_bam)
+    if bg:
+        line += ' &\n'
+    else:
+        line += '\n'
     return line
 
 def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
@@ -1140,7 +1236,7 @@ def convert_sra_to_fastq(
 
     Parameters
     ----------
-    sra_files : str
+    sra_files : list
         List of SRA files to convert.
 
     outdir : str
@@ -1240,10 +1336,12 @@ def convert_sra_to_fastq(
         
     # Concatenate files, pass through awk to remove unneeded stuff, gzip.
     f.write('cat *_1.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+            'if (NR % 4 == 3) {print "+"}}\' | '
             'gzip -c > ' + r1 + ' &\n\n')
     f.write('cat *_2.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} else {print "+"}}\' | '
+            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+            'if (NR % 4 == 3) {print "+"}}\' | '
             'gzip -c > ' + r2 + '\n\n')
     f.write('wait\n\n')
 
@@ -1254,6 +1352,124 @@ def convert_sra_to_fastq(
         ' \\\n\t'.join(files_to_copy),
         outdir))
     f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+
+    if tempdir != outdir:
+        f.write('rm -r {}\n'.format(tempdir))
+    f.close()
+
+    return fn
+
+def merge_bams(
+    bams, 
+    outdir, 
+    tempdir,
+    merged_name, 
+    picard_path,
+    picard_memory,
+    index=True,
+    copy_bams=True,
+    threads=8,
+    shell=False,
+):
+    """
+    Make a PBS or shell script for combining multiple bam files using Picard.
+
+    Parameters
+    ----------
+    bams : list
+        List of SRA files to convert.
+
+    outdir : str
+        Directory to store PBS/shell file and merged bam file.
+
+    merged_name : str
+        Name used for output directory, files etc.
+
+    picard_path : str
+        Path to Picard.
+
+    index : bool
+        Whether to index the merged bam file.
+
+    copy_bams : bool
+        Whether to copy the input bam files to the temp directory. Not
+        necessarcy if temp directory is on the same file system as bam files.
+
+    threads : int
+        Number of threads to request from PBS scheduler.
+
+    shell : boolean
+        If true, make a shell script rather than a PBS script.
+    
+    Returns
+    -------
+    fn : str
+        Path to PBS/shell script.
+
+    """
+    if shell:
+        pbs = False
+    else: 
+        pbs = True
+
+    tempdir = os.path.join(tempdir, '{}_merged_bam'.format(merged_name))
+    outdir = os.path.join(outdir, '{}_merged_bam'.format(merged_name))
+
+    # I'm going to define some file names used later.
+    merged_bam = os.path.join(tempdir,
+                                '{}_merged.bam'.format(merged_name))
+    merged_bam_index = os.path.join(tempdir,
+                                '{}_merged.bam.bai'.format(merged_name))
+    
+    # Files to copy to output directory.
+    files_to_copy = [merged_bam]
+    if index:
+        files_to_copy.append(merged_bam_index)
+    
+    # Temporary files that can be deleted at the end of the job. We may not want
+    # to delete the temp directory if the temp and output directory are the
+    # same.
+    files_to_remove = []
+
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+
+    if shell:
+        fn = os.path.join(outdir, '{}_merged_bam.sh'.format(merged_name))
+    else:
+        fn = os.path.join(outdir, '{}_merged_bam.pbs'.format(merged_name))
+
+    f = open(fn, 'w')
+    f.write('#!/bin/bash\n\n')
+    if pbs:
+        out = os.path.join(outdir, '{}_merged_bam.out'.format(merged_name))
+        err = os.path.join(outdir, '{}_merged_bam.err'.format(merged_name))
+        job_name = '{}_merged_bam'.format(merged_name)
+        f.write(_pbs_header(out, err, job_name, threads))
+
+    f.write('mkdir -p {}\n'.format(tempdir))
+    f.write('cd {}\n'.format(tempdir))
+    if copy_bams:
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+            ' \\\n\t'.join(bams), tempdir))
+        bams = [os.path.split(x)[1] for x in bams]
+        files_to_remove += bams
+
+    lines = _picard_merge(bams, merged_bam, picard_memory, picard_path,
+                          tempdir)
+    f.write(lines)
+
+    lines = _picard_index(merged_bam, merged_bam_index, picard_memory,
+                          picard_path, tempdir)
+    f.write(lines)
+
+    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+        ' \\\n\t'.join(files_to_copy),
+        outdir))
+    if len(files_to_remove) > 0:
+        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
 
     if tempdir != outdir:
         f.write('rm -r {}\n'.format(tempdir))
