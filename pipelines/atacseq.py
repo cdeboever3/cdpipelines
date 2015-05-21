@@ -1444,8 +1444,7 @@ def motif_analysis(
         Directory to store files as nucleoatac runs.
 
     threads : int
-        Number of threads to reserve using PBS scheduler and for nucleoatac to
-        use.
+        Number of threads to reserve using PBS scheduler and for HOMER to use.
 
     shell : boolean
         If true, make a shell script rather than a PBS script.
@@ -1516,8 +1515,8 @@ def motif_analysis(
         pass
 
     # Run HOMER motif analysis.
-    lines = 'findMotifsGenome.pl {} hg19 {} -size given -mask\n'.format(
-        bed, outdir)
+    lines = 'findMotifsGenome.pl -p {} {} hg19 {} -size given -mask\n'.format(
+        threads, bed, outdir)
     f.write(lines)
     f.write('wait\n\n')
 
