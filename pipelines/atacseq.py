@@ -1499,7 +1499,6 @@ def motif_analysis(
     f.write('cd {}\n'.format(tempdir))
 
     f.write('source {}\n\n'.format(environment))
-    f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
 
     # Prepare some stuff for making softlinks and web links.
     link_dir = os.path.join(link_dir, 'atac', 'motif')
