@@ -1515,8 +1515,8 @@ def motif_analysis(
         pass
 
     # Run HOMER motif analysis.
-    lines = 'findMotifsGenome.pl -p {} {} hg19 {} -size given -mask\n'.format(
-        threads, bed, outdir)
+    lines = 'findMotifsGenome.pl {} hg19 {} -size given -mask -p {}\n'.format(
+        bed, outdir, threads)
     f.write(lines)
     f.write('wait\n\n')
 
