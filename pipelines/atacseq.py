@@ -1393,6 +1393,7 @@ def motif_analysis(
     link_dir,
     web_path_file,
     environment,
+    mask=False,
     conda_env='',
     tempdir='/scratch', 
     threads=4, 
@@ -1435,6 +1436,9 @@ def motif_analysis(
     environment : str
         Bash file with PATH information that can be sourced. This should include
         the paths to executables HOMER will need like bedGraphToBigWig.
+
+    mask : bool
+        Whether to pass the -mask parameter to HOMER.
 
     conda_env : str
         If provided, load conda environment with this name. This will control
@@ -1515,8 +1519,12 @@ def motif_analysis(
         pass
 
     # Run HOMER motif analysis.
-    lines = 'findMotifsGenome.pl {} hg19 {} -size given -mask -p {}\n'.format(
-        bed, outdir, threads)
+    if mask:
+        lines = ('findMotifsGenome.pl {} hg19 {} -size given -mask '
+                 '-p {}\n'.format(bed, outdir, threads))
+    else:
+        lines = 'findMotifsGenome.pl {} hg19 {} -size given -p {}\n'.format(
+            bed, outdir, threads)
     f.write(lines)
     f.write('wait\n\n')
 
