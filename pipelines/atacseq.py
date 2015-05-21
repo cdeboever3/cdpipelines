@@ -1506,8 +1506,8 @@ def motif_analysis(
         web_path = wpf.readline().strip()
     web_path = web_path + '/atac/motif'
     if os.path.exists(tracklines_file):
-        with open(tracklines_file) as f:
-            tf_lines = f.read()
+        with open(tracklines_file) as tf:
+            tf_lines = tf.read()
     else:
         tf_lines = ''
     try:
