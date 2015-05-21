@@ -1465,7 +1465,6 @@ def motif_analysis(
     outdir = os.path.join(outdir, '{}_motif'.format(sample_name))
 
     # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
     
     # Files to copy to output directory.
     files_to_copy = []
