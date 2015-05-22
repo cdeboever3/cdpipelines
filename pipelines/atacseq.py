@@ -10,7 +10,7 @@ from general import _make_softlink
 from general import _pbs_header
 from general import _picard_coord_sort
 from general import _picard_query_sort
-from general import _picard_remove_duplicates
+from general import _picard_mark_duplicates
 from general import _process_fastqs
 from general import _samtools_index
 
@@ -847,9 +847,9 @@ def align_and_call_peaks(
     f.write('wait\n\n')
 
     # Remove duplicates.
-    lines = _picard_remove_duplicates(coord_sorted_bam, no_dup_bam,
-                                      duplicate_metrics, picard_path,
-                                      picard_memory, tempdir)
+    lines = _picard_mark_duplicates(coord_sorted_bam, no_dup_bam,
+                                    duplicate_metrics, picard_path,
+                                    picard_memory, tempdir, remove_dups=True)
     f.write(lines)
     f.write('wait\n\n')
 

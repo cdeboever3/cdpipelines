@@ -99,7 +99,6 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
                                '\t-jar {} SortSam'.format(picard_path),
                                '\tVALIDATION_STRINGENCY=SILENT',
                                '\tCREATE_INDEX=TRUE', 
-                               '\tCREATE_MD5_FILE=TRUE',
                                '\tI={}'.format(in_bam), 
                                '\tO={}'.format(out_bam),
                                '\tSO=coordinate\n']))
@@ -318,7 +317,7 @@ def _fastqc(fastqs, threads, outdir, fastqc_path):
     """
     Run FastQC
 
-    Parameters
+Parameters
     ----------
     fastqs : str or list
         Path to fastq file or list of paths to fastq files.
@@ -654,10 +653,10 @@ def _samtools_index(in_bam, samtools_path, index=None, bg=False):
         line += '\n'
     return line
 
-def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
-                              picard_memory, tempdir):
+def _picard_mark_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
+                            picard_memory, tempdir, remove_dups=False):
     """
-    Coordinate sort using Picard Tools.
+    Mark and optionally remove duplicates using Picard Tools.
 
     Parameters
     ----------
@@ -676,11 +675,14 @@ def _picard_remove_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
                            '\t-Djava.io.tmpdir={}'.format(tempdir), 
                            '\t-jar {} MarkDuplicates'.format(picard_path),
                            '\tMETRICS_FILE={}'.format(duplicate_metrics),
-                           '\tREMOVE_DUPLICATES=TRUE',
                            '\tVALIDATION_STRINGENCY=SILENT',
                            '\tASSUME_SORTED=TRUE',
                            '\tI={}'.format(in_bam), 
-                           '\tO={}\n'.format(out_bam)]))
+                           '\tO={}'.format(out_bam)]))
+    if remove_dups:
+        lines += ' \\\n\tREMOVE_DUPLICATES=TRUE\n\n'
+    else:
+        lines += '\n\n'
     return lines
 
 def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,

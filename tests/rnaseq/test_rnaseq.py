@@ -179,7 +179,7 @@ class TestAlignAndSort:
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
-        remove_dup=True, 
+        fastqc_path = 'path/to/fastqc'
         strand_specific=False, 
         shell=False
         fn = ps.rnaseq.align_and_sort(
@@ -195,7 +195,7 @@ class TestAlignAndSort:
             picard_path,
             bedtools_path,
             bedgraph_to_bigwig_path,
-            remove_dup=True, 
+            fastqc_path,
             strand_specific=False, 
             shell=False
         )
@@ -216,7 +216,7 @@ class TestAlignAndSort:
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
-        remove_dup = False,
+        fastqc_path = 'path/to/fastqc'
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
             r2_fastqs, 
@@ -230,44 +230,11 @@ class TestAlignAndSort:
             picard_path,
             bedtools_path,
             bedgraph_to_bigwig_path,
-            remove_dup=remove_dup
+            fastqc_path,
         )
         # os.remove(fn)
         os.remove(tracklines_file)
 
-    def test_run_no_remove_dup(self):
-        """Test to make sure the function at least runs"""
-        r1_fastqs = 'r1.fastq.gz'
-        r2_fastqs = 'r2.fastq.gz'
-        out_dir = '.'
-        sample_name = 's1'
-        star_index = 'path/to/index'
-        tracklines_file = 'tracklines.txt'
-        link_dir = '.'
-        web_path_file = 'web_path_file.txt'
-        star_path = 'path/to/star'
-        picard_path = 'path/to/picard'
-        bedtools_path = 'path/to/bedtools'
-        bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
-        remove_dup = False,
-        fn = ps.rnaseq.align_and_sort(
-            r1_fastqs, 
-            r2_fastqs, 
-            out_dir, 
-            sample_name, 
-            star_index,
-            tracklines_file,
-            link_dir,
-            web_path_file,
-            star_path,
-            picard_path,
-            bedtools_path,
-            bedgraph_to_bigwig_path,
-            remove_dup=remove_dup
-        )
-        os.remove(fn)
-        os.remove(tracklines_file)
-    
     def test_run_no_strand_specific(self):
         """Test to make sure the function at least runs"""
         r1_fastqs = 'r1.fastq.gz'
@@ -282,6 +249,7 @@ class TestAlignAndSort:
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
+        fastqc_path = 'path/to/fastqc'
         strand_specific = True,
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
@@ -296,6 +264,7 @@ class TestAlignAndSort:
             picard_path,
             bedtools_path,
             bedgraph_to_bigwig_path,
+            fastqc_path,
             strand_specific=strand_specific
         )
         os.remove(fn)
@@ -315,6 +284,7 @@ class TestAlignAndSort:
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
         bedgraph_to_bigwig_path = 'path/to/bedgraph_to_bigwig'
+        fastqc_path = 'path/to/fastqc'
         shell = True 
         fn = ps.rnaseq.align_and_sort(
             r1_fastqs, 
@@ -329,6 +299,7 @@ class TestAlignAndSort:
             picard_path,
             bedtools_path,
             bedgraph_to_bigwig_path,
+            fastqc_path,
             shell=True
         )
         os.remove(fn)
@@ -374,7 +345,8 @@ class TestHtseqCount:
         counts_file = 'counts.tsv'
         stats_file = 'stats.tsv'
         gtf = 'annot.gtf'
-        stranded = True
+        strand_specific = True
         samtools_path = 'path/to/samtools'
         lines = ps.rnaseq._htseq_count(bam, counts_file, stats_file, gtf,
-                                       samtools_path, stranded=stranded)
+                                       samtools_path,
+                                       strand_specific=strand_specific)

@@ -3,10 +3,12 @@ import os
 from general import _bedgraph_to_bigwig
 from general import _bigwig_files
 from general import _coverage_bedgraph
+from general import _fastqc
+from general import JobScript
 from general import _make_softlink
 from general import _pbs_header
 from general import _picard_coord_sort
-from general import _picard_remove_duplicates
+from general import _picard_mark_duplicates
 from general import _process_fastqs
 
 def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
@@ -65,7 +67,7 @@ def _cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs, r1_nodup, r2_nodup,
                   r2_nodup + '"}\'\n\n')
     return ''.join(lines)
 
-def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
+def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
                 threads):
     """
     Align paired fastq files with STAR.
@@ -88,10 +90,10 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
         Read Group platform unit (eg. run barcode). 
 
     """
-    r1_fastqs.sort()
-    r2_fastqs.sort()
-    r1_fastqs = ','.join(r1_fastqs)
-    r2_fastqs = ','.join(r2_fastqs)
+    # r1_fastqs.sort()
+    # r2_fastqs.sort()
+    # r1_fastqs = ','.join(r1_fastqs)
+    # r2_fastqs = ','.join(r2_fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
     line = (' \\\n'.join([star_path, 
@@ -99,7 +101,7 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                           '\t--genomeDir {}'.format(star_index), 
                           '\t--genomeLoad NoSharedMemory', 
                           '\t--readFilesCommand zcat',
-                          '\t--readFilesIn {} {}'.format(r1_fastqs, r2_fastqs),
+                          '\t--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
                           '\t--outSAMtype BAM Unsorted', 
                           '\t--outSAMattributes All', 
                           '\t--outSAMunmapped Within',
@@ -268,12 +270,12 @@ def align_and_sort(
     picard_path,
     bedtools_path,
     bedgraph_to_bigwig_path,
+    fastqc_path,
     rgpl='ILLUMINA',
     rgpu='',
     tempdir='/scratch', 
     threads=32, 
     picard_memory=58, 
-    remove_dup=False, 
     strand_specific=True, 
     shell=False
 ):
@@ -348,11 +350,6 @@ def align_and_sort(
     picard_memory : int
         Amount of memory (in gb) to give Picard Tools.
 
-    remove_dup : boolean
-        Whether to remove duplicate reads after alignment using Picard tools.
-        Note that duplicates are only removed from genomic alignments, not
-        transcriptomic alignments.
-
     strand_specific : boolean
         If false, data is not strand specific.
 
@@ -366,157 +363,129 @@ def align_and_sort(
 
     """
     assert threads >= 3
+    job_suffix = 'alignment'
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
+                    shell=shell, queue='high', copy_input=True)
 
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_alignment'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_alignment'.format(sample_name))
-
-    # I'm going to define some file names used later.
+    # I'm going to handle the copying and deleting of the fastqs myself rather
+    # than have the JobScript do it because I don't want to the fastqs to sit
+    # around on the disk the whole time after I'm done with them.
     temp_r1_fastqs = _process_fastqs(r1_fastqs, tempdir)
     temp_r2_fastqs = _process_fastqs(r2_fastqs, tempdir)
     if type(r1_fastqs) == list:
         r1_fastqs = ' '.join(r1_fastqs)
     if type(r2_fastqs) == list:
         r2_fastqs = ' '.join(r2_fastqs)
-    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
-    coord_sorted_bam = \
-            os.path.join(tempdir,
-                         '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
-    if remove_dup:
-        out_bam = \
-            os.path.join(tempdir,
-                         ('{}_Aligned.out.coord.'.format(sample_name) + 
-                          'sorted.nodup.bam'))
-        bam_index = \
-                os.path.join(tempdir,
-                             ('{}_Aligned.out.coord.'.format(sample_name) +
-                              'sorted.nodup.bam.bai'))
-    else:
-        out_bam = coord_sorted_bam
-        bam_index = \
-                os.path.join(tempdir,
-                             ('{}_Aligned.out.coord.'.format(sample_name) + 
-                              'sorted.bam.bai'))
-    
-    # Files to copy to output directory.
-    # TODO: Eventually, I'd like all filenames to include the sample name.
-    files_to_copy = [out_bam, bam_index, 'Log.out', 'Log.final.out',
-                     'Log.progress.out', 'SJ.out.tab',
-                     'Aligned.toTranscriptome.out.bam',
-                     '{}_Aligned.out.coord.sorted.bam.md5'.format(sample_name)]
-    # Temporary files that can be deleted at the end of the job. We likely don't
-    # want to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = temp_r1_fastqs + temp_r2_fastqs
+    combined_r1 = os.path.join(
+        tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
+    combined_r2 = os.path.join(
+        tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
 
-    if strand_specific:
-        # TODO: I need to fix how I'm calculating strand-specific coverage. The
-        # following (commented out) approach doesn't work because the R1 reads
-        # and R2 reads are always on opposite strands. I have to split the reads
-        # up based on what strand the R1 read is mapped to.
+    # Files that will be created.
+    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
+    job.temp_files_to_delete.append(aligned_bam)
+    coord_sorted_bam = os.path.join(
+        tempdir, '{}_sorted.bam'.format(sample_name))
+    job.temp_files_to_delete.append(coord_sorted_bam)
+    job.temp_files_to_delete.append('_STARtmp')
+    out_bam = os.path.join(
+        tempdir, '{}_sorted_mdup.bam'.format(sample_name))
+    bam_index = '{}.bai'.format(out_bam)
+    job.output_files_to_copy += [out_bam, bam_index]
+
+    # Other STAR Files to copy to output directory.
+    # TODO: Eventually, I'd like all filenames to include the sample name.
+    job.output_files_to_copy += [
+        'Log.out', 
+        'Log.final.out', 
+        'Log.progress.out', 
+        'SJ.out.tab', 
+        'Aligned.toTranscriptome.out.bam',
+    ]
+
+    # if strand_specific:
+        # TODO: I need to think about how to calculate coverage for strand
+        # specific data to make sure I'm doing it correctly and what the best
+        # way is to display the data. Maybe I could make a hub and color the two
+        # strand differently?
         # out_bigwig_plus = os.path.join(tempdir,
         #                                '{}_plus_rna.bw'.format(sample_name))
         # out_bigwig_minus = os.path.join(tempdir,
         #                                 '{}_minus_rna.bw'.format(sample_name))
         # files_to_copy.append(out_bigwig_plus)
         # files_to_copy.append(out_bigwig_minus)
-        out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
-        files_to_copy.append(out_bigwig)
-    else:
-        out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
-        files_to_copy.append(out_bigwig)
+    out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
+    job.output_files_to_copy.append(out_bigwig)
+    
+    with open(job.filename, "a") as f:
+        # I'm going to copy the fastq files here rather than have the JobScript
+        # class do it because I want to delete them as soon as I've combined
+        # them into a single file.
+        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+            '\\\n\t'.join(r1_fastqs + r2_fastqs),
+            job.tempdir))
 
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
+        # Combine fastq files.
+        f.write('cat \\\n{} \\\n\t> {} &\n'.format(
+            ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+            combined_r1))
+        f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
+            ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
+            combined_r2))
+        f.write('wait\n\n')
 
-    if shell:
-        fn = os.path.join(outdir, '{}_alignment.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_alignment.pbs'.format(sample_name))
+        # Remove temp fastqs.
+        f.write('rm \\\n{} \\\n{}\n\n'.format(
+            ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+            ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
+        f.write('wait\n\n')
 
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_alignment.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_alignment.err'.format(sample_name))
-        job_name = '{}_align'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz {} {} .\n\n'.format(r1_fastqs, r2_fastqs))
-
-    # Align reads.
-    lines = _star_align(temp_r1_fastqs, temp_r2_fastqs, sample_name, rgpl,
-                        rgpu, star_index, star_path, threads)
-    f.write(lines)
-    f.write('wait\n\n')
-
-    # Coordinate sort bam file.
-    lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                               picard_memory, tempdir, bam_index=bam_index)
-    f.write(lines)
-    f.write('wait\n\n')
-
-    # Remove duplicates if desired and align.
-    if remove_dup:
-        duplicate_metrics = \
-                os.path.join(outdir, 
-                             '{}_duplicate_metrics.txt'.format(sample_name))
-        lines = _picard_remove_duplicates(coord_sorted_bam, out_bam,
-                                          duplicate_metrics,
-                                          picard_path=picard_path,
-                                          picard_memory=picard_memory,
-                                          tempdir=tempdir)
+        # Run FASTQC.
+        lines = _fastqc([combined_r1, combined_r2], threads, outdir,
+                        fastqc_path)
         f.write(lines)
         f.write('wait\n\n')
-    # Make bigwig files for displaying coverage.
-    if strand_specific:
-        # TODO: update for strand specific eventually.
-        # lines = _bigwig_files(out_bam, out_bigwig_plus, sample_name,
-        #                       bedgraph_to_bigwig_path, bedtools_path,
-        #                       out_bigwig_minus=out_bigwig_minus)
-        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
-                              bedgraph_to_bigwig_path, bedtools_path)
-    else:
-        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
-                              bedgraph_to_bigwig_path, bedtools_path)
-    f.write(lines)
-    f.write('wait\n\n')
+    
+        # Align reads.
+        lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
+                            rgpu, star_index, star_path, threads)
+        f.write(lines)
+        f.write('wait\n\n')
 
-    # Make softlinks and tracklines for genome browser.
-    if strand_specific:
+        # Coordinate sort bam file.
+        lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
+                                   picard_memory, tempdir, bam_index=bam_index)
+        f.write(lines)
+        f.write('wait\n\n')
+
+        # Mark duplicates.
+        duplicate_metrics = os.path.join(
+            outdir, '{}_duplicate_metrics.txt'.format(sample_name))
+        lines = _picard_mark_duplicates(coord_sorted_bam, out_bam,
+                                        duplicate_metrics,
+                                        picard_path=picard_path,
+                                        picard_memory=picard_memory,
+                                        tempdir=tempdir)
+        f.write(lines)
+        f.write('wait\n\n')
+        
+        # Make bigwig files for displaying coverage.
         # TODO: update for strand specific eventually.
-        # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-        #                               out_bam, bam_index,
-        #                               out_bigwig_plus, sample_name, outdir,
-        #                               bigwig_minus=out_bigwig_minus)
+        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
+                              bedgraph_to_bigwig_path, bedtools_path)
+        f.write(lines)
+        f.write('wait\n\n')
+
+        # Make softlinks and tracklines for genome browser.
+        # TODO: update for strand specific eventually.
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       out_bam, bam_index, out_bigwig,
                                       sample_name, outdir)
-    else:
-        lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-                                      out_bam, bam_index, out_bigwig,
-                                      sample_name, outdir)
-    f.write(lines)
-    f.write('wait\n\n')
+        f.write(lines)
+        f.write('wait\n\n')
 
-    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-        ' \\\n\t'.join(files_to_copy),
-        outdir))
-    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
+    job.write_end()
+    return job.filename
 
 def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
                   strand_specific=False, samtools_path='.'):
