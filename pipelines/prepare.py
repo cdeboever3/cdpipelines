@@ -323,11 +323,11 @@ def download_picard(outdir):
         Directory to save Picard tools to.
 
     """
-    url = 'https://github.com/broadinstitute/picard/archive/1.128.tar.gz'
-    dest = os.path.join(outdir, '1.128.tar.gz')
+    url = 'https://github.com/broadinstitute/picard/archive/1.131.tar.gz'
+    dest = os.path.join(outdir, '1.131.tar.gz')
     _download_and_untar(url, dest, outdir)
     cwd = os.getcwd()
-    os.chdir(os.path.join(outdir, 'picard-1.128'))
+    os.chdir(os.path.join(outdir, 'picard-1.131'))
     subprocess.check_call('ant -lib lib/ant clone-htsjdk package-commands',
                           shell=True)
     os.chdir(cwd)
