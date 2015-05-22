@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import pytest
 
@@ -54,6 +55,66 @@ class TestPicardQuerySort:
         ps.general._picard_query_sort(in_bam, out_bam, picard_path,
                                       picard_memory, tempdir, bg=bg)
 
+class TestPicardCoordSort:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        in_bam = 'test.bam'
+        out_bam = 'test_sorted.bam'
+        picard_path = 'path/to/picard'
+        picard_memory = '58G'
+        tempdir = 'path/to/temp/dir'
+        fn = ps.general._picard_coord_sort(
+            in_bam, 
+            out_bam, 
+            picard_path, 
+            picard_memory,
+            tempdir, 
+            bam_index=None
+        )
+
+    def test_run_index(self):
+        """Test to make sure the function at least runs when making an index"""
+        in_bam = 'test.bam'
+        out_bam = 'test_sorted.bam'
+        picard_path = 'path/to/picard'
+        picard_memory = '58G'
+        tempdir = 'path/to/temp/dir'
+        bam_index = 'test_sorted.bam.bai'
+        fn = ps.general._picard_coord_sort(
+            in_bam, 
+            out_bam, 
+            picard_path, 
+            picard_memory,
+            tempdir, 
+            bam_index=bam_index,
+        )
+
+class TestCutadaptTrim:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        fastq = 'test.fastq.gz'
+        length = 50
+        out = 'test_cut.fastq.gz'
+        bg = False
+        fn = ps.general._cutadapt_trim(fastq, length, out, bg=bg)
+
+    def test_run_bg(self):
+        """Test to make sure the function at least runs with bg"""
+        fastq = 'test.fastq.gz'
+        length = 50
+        out = 'test_cut.fastq.gz'
+        bg = True
+        fn = ps.general._cutadapt_trim(fastq, length, out, bg=bg)
+
+    def test_run_negative(self):
+        """Test to make sure the function at least runs with negative amount to
+        cut"""
+        fastq = 'test.fastq.gz'
+        length = -50
+        out = 'test_cut.fastq.gz'
+        bg = False
+        fn = ps.general._cutadapt_trim(fastq, length, out, bg=bg)
+
 class TestPicardIndex:
     def test_run(self):
         """Test to make sure the function at least runs"""
@@ -74,9 +135,18 @@ class TestWaspAlleleSwap:
         sample_name = 'test'
         outdir = 'path/to/out'
         tempdir = 'path/to/temp/dir'
-        ps.general.wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir,
-                                    sample_name, outdir, tempdir,
-                                    conda_env=None, shell=False, threads=6)
+        fn = ps.general.wasp_allele_swap(
+            bam, 
+            find_intersecting_snps_path,
+            snp_dir, 
+            sample_name, 
+            outdir, 
+            tempdir,
+            conda_env=None, 
+            shell=False, 
+            threads=6
+        )
+        shutil.rmtree('path')
 
 class TestWaspAlignmentCompare:
     def test_run(self):
@@ -90,7 +160,7 @@ class TestWaspAlignmentCompare:
         tempdir = 'path/to/temp/dir'
         picard_path = 'path/to/picard'
 
-        ps.general.wasp_alignment_compare(
+        fn = ps.general.wasp_alignment_compare(
             to_remap_bam, 
             to_remap_num, 
             remapped_bam,
@@ -104,3 +174,4 @@ class TestWaspAlignmentCompare:
             shell=False, 
             threads=6
         )
+        shutil.rmtree('path')
