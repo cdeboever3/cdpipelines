@@ -175,3 +175,66 @@ class TestWaspAlignmentCompare:
             threads=6
         )
         shutil.rmtree('path')
+
+class TestWaspRemap:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        r1_fastq = 'r1.fastq.gz'
+        r2_fastq = 'r2.fastq.gz'
+        outdir = 'path/to/out'
+        sample_name = 'test'
+        star_index = 'path/to/star/index'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        samtools_path = 'path/to/samtools'
+        seq_type = 'RNA'
+        fn = ps.general.wasp_remap(
+            r1_fastq, 
+            r2_fastq, 
+            outdir, 
+            sample_name, 
+            star_index,
+            star_path,
+            picard_path,
+            samtools_path,
+            seq_type,
+            conda_env='',
+            rgpl='ILLUMINA',
+            rgpu='',
+            tempdir='/scratch', 
+            threads=32, 
+            picard_memory=58, 
+            shell=False,
+        )
+        shutil.rmtree('path')
+    
+    def test_run_atac(self):
+        """Test to make sure the function at least runs with ATAC seq type"""
+        r1_fastq = 'r1.fastq.gz'
+        r2_fastq = 'r2.fastq.gz'
+        outdir = 'path/to/out'
+        sample_name = 'test'
+        star_index = 'path/to/star/index'
+        star_path = 'path/to/star'
+        picard_path = 'path/to/picard'
+        samtools_path = 'path/to/samtools'
+        seq_type = 'ATAC'
+        fn = ps.general.wasp_remap(
+            r1_fastq, 
+            r2_fastq, 
+            outdir, 
+            sample_name, 
+            star_index,
+            star_path,
+            picard_path,
+            samtools_path,
+            seq_type,
+            conda_env='',
+            rgpl='ILLUMINA',
+            rgpu='',
+            tempdir='/scratch', 
+            threads=32, 
+            picard_memory=58, 
+            shell=False,
+        )
+        shutil.rmtree('path')

@@ -907,108 +907,57 @@ def wasp_remap(
     seq_types = ['ATAC', 'RNA']
     assert seq_type in seq_types, ('Only {} currently support for '
                                    'seq_type'.format(', '.join(seq_types)))
+    job_suffix = 'wasp_remap'
+    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+                    shell=False, queue='high', conda_env=conda_env,
+                    environment=None, copy_input=True)
+    
+    # Input files.
+    temp_r1 = job.add_input_file(r1_fastq)
+    temp_r2 = job.add_input_file(r2_fastq)
+    job.copy_input_files()
 
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_wasp_remap'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_wasp_remap'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    temp_r1 = os.path.join(tempdir, os.path.split(r1_fastq)[1])
-    temp_r2 = os.path.join(tempdir, os.path.split(r2_fastq)[1])
+    # Files that will be created.
     aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
+    job.temp_files_to_delete.append(aligned_bam)
     coord_sorted_bam = os.path.join(
-        tempdir, '{}_Aligned.out.coord.sorted.bam'.format(sample_name))
-    
+        tempdir, '{}_sorted.bam'.format(sample_name))
+    job.output_files_to_copy.append(coord_sorted_bam)
+    job.temp_files_to_delete.append('_STARtmp')
+
     # Files to copy to output directory.
-    files_to_copy = [coord_sorted_bam, 'Log.out', 'Log.final.out',
-                     'Log.progress.out', 'SJ.out.tab']
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = ['Aligned.out.bam', '_STARtmp']
-    if os.path.realpath(tempdir) != os.path.realpath(outdir):
-        files_to_remove.append('Aligned.out.coord.sorted.bam')
-    if os.path.realpath(temp_r1) != os.path.realpath(r1_fastq):
-        files_to_remove.append(temp_r1)
-    if os.path.realpath(temp_r2) != os.path.realpath(r2_fastq):
-        files_to_remove.append(temp_r2)
+    job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
+                                 'SJ.out.tab']
 
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
+    # Run WASP remapping.
+    with open(job.filename, "a") as f:
+        # Align with STAR and coordinate sort.
+        if seq_type == 'RNA':
+            from rnaseq import _star_align
+            lines = _star_align([temp_r1], [temp_r2], sample_name, rgpl,
+                                rgpu, star_index, star_path, threads)
+            f.write(lines)
+            f.write('wait\n\n')
+            lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
+                                       picard_path, picard_memory, tempdir)
+            f.write(lines)
+            f.write('wait\n\n')
+        
+        elif seq_type == 'ATAC':
+            from atacseq import _star_align
+            lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
+                                rgpu, star_index, star_path, threads)
+            f.write(lines)
+            f.write('wait\n\n')
 
-    if shell:
-        fn = os.path.join(outdir, '{}_wasp_remap.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_wasp_remap.pbs'.format(sample_name))
+            # Coordinate sort bam file.
+            lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
+                                       picard_path, picard_memory, tempdir)
+            f.write(lines)
+            f.write('wait\n\n')
 
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_wasp_remap.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_wasp_remap.err'.format(sample_name))
-        job_name = '{}_wasp_remap'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-    
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
-        ' \\\n'.join(['\t{}'.format(x) for x in [r1_fastq, r2_fastq]])))
-    
-    # Align with STAR and coordinate sort.
-    if seq_type == 'RNA':
-        from rnaseq import _star_align
-        lines = _star_align([temp_r1], [temp_r2], sample_name, rgpl,
-                            rgpu, star_index, star_path, threads)
-        f.write(lines)
-        f.write('wait\n\n')
-        lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                                   picard_memory, tempdir)
-        f.write(lines)
-        f.write('wait\n\n')
-    
-    elif seq_type == 'ATAC':
-        from atacseq import _star_align
-        lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
-                            rgpu, star_index, star_path, threads)
-        f.write(lines)
-        f.write('wait\n\n')
-        lines = _picard_coord_sort_primary(aligned_bam, coord_sorted_bam,
-                                           picard_path, picard_memory,
-                                           samtools_path, tempdir)
-        f.write(lines)
-        f.write('wait\n\n')
-
-    if tempdir != outdir:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join([x for x in files_to_copy if sample_name in 
-                            os.path.split(x)[1]]),
-            outdir))
-        for y in [x for x in files_to_copy if sample_name not in 
-             os.path.split(x)[1]]:
-            f.write('rsync -avz {} {}_{}\n'.format(
-                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
-            f.write('rm {}\n'.format(y))
-    else:
-        for y in [x for x in files_to_copy if sample_name not in 
-             os.path.split(x)[1]]:
-            f.write('mv {} {}_{}\n'.format(
-                y, os.path.join(outdir, sample_name), os.path.split(y)[1]))
-
-    f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
+    job.write_end()
+    return job.filename
 
 def _mbased(infile, locus_outfile, snv_outfile, sample_name, 
             is_phased=False, num_sim=1000000, threads=1):
