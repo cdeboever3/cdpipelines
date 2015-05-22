@@ -5,6 +5,11 @@ import pytest
 
 import pipelines as ps
 
+class TestGitInfo:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        ps.general._git_info()
+
 class TestPicardInsertSizeMetrics:
     def test_run(self):
         """Test to make sure the function at least runs"""

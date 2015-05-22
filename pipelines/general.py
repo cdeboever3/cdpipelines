@@ -1,4 +1,18 @@
 import os
+import subprocess
+
+def _git_info():
+    """Get current git version"""
+    # Necessary to pipe to cat because git will open the result in less
+    # otherwise.
+    d = os.path.sep.join(os.path.abspath(__file__).split(os.path.sep)[0:-2] +
+                         ['.git'])
+    command = ('git --git-dir {0} log -1 --pretty=oneline --decorate | '
+               'cat'.format(d))
+    res = subprocess.Popen(command, shell=True,
+                           stdout=subprocess.PIPE).communicate()
+    res = res[0][:-1].strip() 
+    return res 
 
 def _make_dir(d):
     """Make directory d if it doesn't exist"""
@@ -463,6 +477,7 @@ class JobScript:
                 f.write('#PBS -l nodes=1:ppn={}\n'.format(self.threads))
                 f.write('#PBS -o {}\n'.format(self.out))
                 f.write('#PBS -e {}\n\n'.format(self.err))
+            f.write('Git repository version:\n{}\n\n'.format(_git_info))
             if self.environment:
                 f.write('source {}\n\n'.format(self.environment))
             if self.conda_env:
