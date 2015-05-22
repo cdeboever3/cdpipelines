@@ -567,7 +567,7 @@ def align_and_call_peaks(
     rgpu='',
     tempdir='/scratch', 
     threads=10, 
-    picard_memory=18, 
+    picard_memory=15, 
     shell=False,
     trim=None,
 ):

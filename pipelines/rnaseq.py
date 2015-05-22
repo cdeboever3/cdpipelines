@@ -275,7 +275,7 @@ def align_and_sort(
     rgpu='',
     tempdir='/scratch', 
     threads=10, 
-    picard_memory=18, 
+    picard_memory=15,
     strand_specific=True, 
     shell=False
 ):
