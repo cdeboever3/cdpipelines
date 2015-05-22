@@ -370,8 +370,8 @@ def _make_softlink(fn, sample_name, link_dir):
     return lines, name
 
 class JobScript:
-    def __init__(sample_name, job_suffix, tempdir, outdir, threads, shell=False,
-                 queue='high', conda_env=None, environment=None,
+    def __init__(self, sample_name, job_suffix, tempdir, outdir, threads,
+                 shell=False, queue='high', conda_env=None, environment=None,
                  copy_input=True):
         """
         Create PBS/shell script object.
@@ -412,9 +412,10 @@ class JobScript:
         """
         self.sample_name = sample_name
         self.job_suffix = job_suffix
-        self.tempdir = os.path.realpath(os.path.join(tempdir, jobname))
-        self.outdir = os.path.realpath(os.path.join(outdir, jobname))
-        for d in tempdir, outdir:
+        self.jobname = '{}_{}'.format(sample_name, job_suffix)
+        self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
+        self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
+        for d in self.tempdir, self.outdir:
             try:
                 os.makedirs(d)
             except OSError:
@@ -427,7 +428,6 @@ class JobScript:
         self.conda_env = conda_env
         self.environment = environment
        
-        self.jobname = '{}_{}'.format(sample_name, job_suffix)
         self.out = os.path.join(self.outdir, '{}.out'.format(self.jobname))
         self.err = os.path.join(self.outdir, '{}.err'.format(self.jobname))
 
@@ -442,26 +442,28 @@ class JobScript:
     def _set_filename(self):
         """Make PBS/shell script filename."""
         if self.pbs:
-            self.filename = os.path.join(outdir, '{}.pbs'.format(jobname))
+            self.filename = os.path.join(self.outdir, 
+                                         '{}.pbs'.format(self.jobname))
         else:
-            self.filename = os.path.join(outdir, '{}.sh'.format(jobname))
+            self.filename = os.path.join(self.outdir, 
+                                         '{}.sh'.format(self.jobname))
 
     def _write_header(self):
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
-            if pbs:
+            if self.pbs:
                 f.write('#PBS -q {}\n'.format(self.queue))
                 f.write('#PBS -N {}\n'.format(self.jobname))
                 f.write('#PBS -l nodes=1:ppn={}\n'.format(self.threads))
                 f.write('#PBS -o {}\n'.format(self.out))
                 f.write('#PBS -e {}\n\n'.format(self.err))
-            if environment:
+            if self.environment:
                 f.write('source {}\n\n'.format(self.environment))
-            if conda_env:
-                f.write('source activate {}\n\n'.format(conda_env))
+            if self.conda_env:
+                f.write('source activate {}\n\n'.format(self.conda_env))
 
-            f.write('mkdir -p {}\n'.format(tempdir))
-            f.write('cd {}\n\n'.format(tempdir))
+            f.write('mkdir -p {}\n'.format(self.tempdir))
+            f.write('cd {}\n\n'.format(self.tempdir))
 
     # def add_file(self, fn, copy_to_tempdir=True, delete_temp=True,
     #              copy_to_outdir=False):
@@ -488,7 +490,7 @@ class JobScript:
 
     def copy_input_files(self):
         if len(self.input_files_to_copy) > 0:
-            with open(self,filename, "a") as f:
+            with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.input_files_to_copy),
                     self.tempdir))
@@ -498,21 +500,21 @@ class JobScript:
 
     def _copy_output_files(self):
         if len(self.output_files_to_copy) > 0:
-            with open(self,filename, "a") as f:
+            with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.output_files_to_copy),
                     self.outdir))
 
     def _delete_temp_files(self):
         if len(self.temp_files_to_delete) > 0:
-            with open(self,filename, "a") as f:
+            with open(self.filename, "a") as f:
                 f.write('rm \\\n\t{}\n\n'.format(
                     ' \\\n\t'.join(self.temp_files_to_delete)))
 
     def _delete_tempdir(self):
-        if tempdir != outdir:
-            with open(self,filename, "a") as f:
-                f.write('rm -r {}\n'.format(tempdir))
+        if self.tempdir != self.outdir:
+            with open(self.filename, "a") as f:
+                f.write('rm -r {}\n'.format(self.tempdir))
 
     def write_end(self):
         self._copy_output_files()
@@ -712,8 +714,8 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
     """
     job_suffix = 'wasp_allele_swap'
-    job = JobScript(sample_name, job_suffix, tempdir, outdir, shell=shell,
-                    conda_env=conda_env, threads=threads)
+    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+                    shell=shell, conda_env=conda_env)
     
     # Input files.
     temp_bam = job.add_input_file(bam)
@@ -782,8 +784,12 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
     """
     job_suffix = 'wasp_alignment_compare'
-    job = JobScript(sample_name, job_suffix, tempdir, outdir, shell=shell,
-                    conda_env=conda_env, threads=threads)
+    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+                    shell=shell, conda_env=conda_env)
+    # class JobScript:
+    #     def __init__(sample_name, job_suffix, tempdir, outdir, threads, shell=False,
+    #                  queue='high', conda_env=None, environment=None,
+    #                  copy_input=True):
 
     # Input files.
     temp_to_remap_bam = job.add_input_file(to_remap_bam)
@@ -815,7 +821,7 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
         f.write('\nwait\n\n')
     
     job.write_end()
-    return fn
+    return job.filename
 
 def wasp_remap(
     r1_fastq, 
