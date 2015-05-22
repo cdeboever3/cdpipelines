@@ -238,3 +238,39 @@ class TestWaspRemap:
             shell=False,
         )
         shutil.rmtree('path')
+
+class TestRunMBASED:
+    def test_run(self):
+        """Test to make sure the function at least runs"""
+        infile = 'test.in'
+        outdir = 'path/to/out'
+        sample_name = 'test'
+        fn = ps.general.run_mbased(
+            infile, 
+            outdir, 
+            sample_name, 
+            environment=None, 
+            is_phased=False,
+            num_sim=1000000,
+            threads=6, 
+            shell=False,
+        )
+        shutil.rmtree('path')
+    
+    def test_run_environment(self):
+        """Test to make sure the function at least runs with an environment"""
+        infile = 'test.in'
+        outdir = 'path/to/out'
+        sample_name = 'test'
+        environment = 'test.sh'
+        fn = ps.general.run_mbased(
+            infile, 
+            outdir, 
+            sample_name, 
+            environment=environment,
+            is_phased=False,
+            num_sim=1000000,
+            threads=6, 
+            shell=False,
+        )
+        shutil.rmtree('path')

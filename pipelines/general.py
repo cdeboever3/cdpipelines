@@ -1,5 +1,12 @@
 import os
 
+def _make_dir(d):
+    """Make directory d if it doesn't exist"""
+    try:
+        os.makedirs(d)
+    except OSError:
+        pass
+
 def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
                                 picard_memory, tempdir, bg=False):
     """
@@ -370,7 +377,7 @@ def _make_softlink(fn, sample_name, link_dir):
     return lines, name
 
 class JobScript:
-    def __init__(self, sample_name, job_suffix, tempdir, outdir, threads,
+    def __init__(self, sample_name, job_suffix, outdir, threads, tempdir=None,
                  shell=False, queue='high', conda_env=None, environment=None,
                  copy_input=True):
         """
@@ -384,15 +391,15 @@ class JobScript:
         job_suffix : str
             This suffix will be used for naming directories, files, etc.
 
-        tempdir : str
-            Path to directory where temporary directory should be made.
-
         outdir: str
             Path to directory where final output files should be stored.
 
         threads : int
             Number of threads to request for PBS scripts and to use for
             multi-threaded software.
+
+        tempdir : str
+            Path to directory where temporary directory should be made.
 
         shell : bool
             True if making a shell script. False if making a PBS script.
@@ -413,13 +420,13 @@ class JobScript:
         self.sample_name = sample_name
         self.job_suffix = job_suffix
         self.jobname = '{}_{}'.format(sample_name, job_suffix)
-        self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
+        if tempdir:
+            self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
+            _make_dir(self.tempdir)
+        else:
+            self.tempdir = tempdir
         self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
-        for d in self.tempdir, self.outdir:
-            try:
-                os.makedirs(d)
-            except OSError:
-                pass
+        _make_dir(self.outdir)
         assert type(threads) is int
         self.threads = threads
         self.shell = shell
@@ -461,9 +468,9 @@ class JobScript:
                 f.write('source {}\n\n'.format(self.environment))
             if self.conda_env:
                 f.write('source activate {}\n\n'.format(self.conda_env))
-
-            f.write('mkdir -p {}\n'.format(self.tempdir))
-            f.write('cd {}\n\n'.format(self.tempdir))
+            if self.tempdir:
+                f.write('mkdir -p {}\n'.format(self.tempdir))
+                f.write('cd {}\n\n'.format(self.tempdir))
 
     # def add_file(self, fn, copy_to_tempdir=True, delete_temp=True,
     #              copy_to_outdir=False):
@@ -512,7 +519,7 @@ class JobScript:
                     ' \\\n\t'.join(self.temp_files_to_delete)))
 
     def _delete_tempdir(self):
-        if self.tempdir != self.outdir:
+        if self.tempdir and (self.tempdir != self.outdir):
             with open(self.filename, "a") as f:
                 f.write('rm -r {}\n'.format(self.tempdir))
 
@@ -714,7 +721,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
     """
     job_suffix = 'wasp_allele_swap'
-    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
     
     # Input files.
@@ -784,7 +791,7 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
     """
     job_suffix = 'wasp_alignment_compare'
-    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
     # class JobScript:
     #     def __init__(sample_name, job_suffix, tempdir, outdir, threads, shell=False,
@@ -908,7 +915,7 @@ def wasp_remap(
     assert seq_type in seq_types, ('Only {} currently support for '
                                    'seq_type'.format(', '.join(seq_types)))
     job_suffix = 'wasp_remap'
-    job = JobScript(sample_name, job_suffix, tempdir, outdir, threads,
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=False, queue='high', conda_env=conda_env,
                     environment=None, copy_input=True)
     
@@ -1009,7 +1016,7 @@ def run_mbased(
     infile, 
     outdir, 
     sample_name, 
-    r_env=None, 
+    environment=None, 
     is_phased=False,
     num_sim=1000000,
     threads=6, 
@@ -1031,7 +1038,7 @@ def run_mbased(
     sample_name : str
         Sample name used for naming files etc.
 
-    r_env : str
+    environment : str
         This file will be sourced to set PATH variables for R.
 
     is_phased : bool
@@ -1054,46 +1061,22 @@ def run_mbased(
 
     """
     assert threads >= 1
+    job_suffix = 'mbased'
+    job = JobScript(sample_name, job_suffix, outdir, threads, shell=False,
+                    queue='high', environment=environment, copy_input=True)
     
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    outdir = os.path.join(outdir, '{}_mbased'.format(sample_name))
-
     # I'm going to define some file names used later.
     locus_outfile = os.path.join(outdir, '{}_locus.tsv'.format(sample_name))
     snv_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
     
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_mbased.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_mbased.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_mbased.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_mbased.err'.format(sample_name))
-        job_name = '{}_mbased'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
+    with open(job.filename, "a") as f:
+        lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
+                        is_phased=is_phased, num_sim=num_sim, threads=threads)
+        f.write(lines)
+        f.write('wait\n\n')
     
-    if r_env:
-        f.write('source {}\n'.format(r_env))
-    lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
-                    is_phased=is_phased, num_sim=num_sim, threads=threads)
-    f.write(lines)
-    f.write('wait\n\n')
-    
-    f.close()
-
-    return fn
+    job.write_end()
+    return job.filename
 
 def convert_sra_to_fastq(
     sra_files, 
