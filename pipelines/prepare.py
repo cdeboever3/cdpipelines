@@ -64,6 +64,66 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
+def make_rna_seq_metrics_files(outdir, gencode_gtf, genome_fasta, picard_path,
+                               gtfToGenePred_path):
+    """Make refFlat file and rRNA interval list"""
+    import HTSeq
+    import itertools as it
+
+    rrna_fn = 'rrna.bed'
+    rest_fn = 'rest.gtf'
+    rrna = open(rrna_fn, 'w')
+    rest = open(rest_fn, 'w')
+    gene_rrna = False
+
+    gtf = it.islice(HTSeq.GFF_Reader(gencode_gtf), None)
+    line = gtf.next()
+    while line != '':
+        if line.type == 'gene':
+            if (line.attr['gene_type'] == 'rRNA' or
+                line.attr['gene_type'] == 'Mt_rRNA'):
+                gene_rrna = True
+            else:
+                gene_rrna = False
+                rest.write(line.get_gff_line())
+        else:
+            if gene_rrna:
+                if line.type == 'exon':
+                    rrna.write('\t'.join([
+                        line.iv.chrom, str(line.iv.start - 1), str(line.iv.end),
+                        line.name, '.', line.iv.strand]) + '\n')
+            else:
+                rest.write(line.get_gff_line())
+        try:
+            line = gtf.next()
+        except StopIteration:
+            line = ''
+
+    rrna.close()
+    rest.close()
+
+    command = ('{} -ignoreGroupsWithoutExons -genePredExt -geneNameAsName2 {} '
+               'refFlat.tmp.txt'.format(gtfToGenePred_path, rest_fn))
+    subprocess.check_call(command, shell=True)
+    out_fn = os.path.join(outdir, 'gencode_no_rRNA.txt.gz')
+    command = ('paste <(cut -f 12 refFlat.tmp.txt) <(cut -f 1-10 '
+               'refFlat.tmp.txt) | gzip > {}'.format(out_fn))
+    subprocess.check_call(command, shell=True)
+    os.remove(rest_fn)
+    os.remove('refFlat.tmp.txt')
+
+    command = ('java -Xmx20g -jar -XX:-UseGCOverheadLimit -XX:-UseParallelGC '
+               '-Djava.io.tmpdir=. -jar {} CreateSequenceDictionary '
+               'REFERENCE={} OUTPUT=hg19.sam'.format(picard_path, genome_fasta))
+    subprocess.check_call(command, shell=True)
+    command = ('java -Xmx20g -jar -XX:-UseGCOverheadLimit -XX:-UseParallelGC '
+               '-Djava.io.tmpdir=. -jar {} BedToIntervalList '
+               'I={} SEQUENCE_DICTIONARY=hg19.sam OUTPUT={}'.format(
+                   picard_path, rrna_fn, os.path.join(outdir, 'rrna.interval')))
+    subprocess.check_call(command, shell=True)
+    os.remove(rrna_fn)
+    os.remove('hg19.sam')
+
 def download_encode_blacklist(outdir):
     src = ('https://www.encodeproject.org/files/ENCFF001TDO/@@download/'
            'ENCFF001TDO.bed.gz')
@@ -514,6 +574,14 @@ def download_gencode_gtf(outdir):
            'gencode.v19.annotation.gtf.gz')
     dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
     _download_and_gunzip(src, dest)
+
+def download_bedGraphToBigWig(outdir):
+    req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
+                  'linux.x86_64/gtfToGenePred')
+    dest = os.path.join(outdir, 'gtfToGenePred')
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+    subprocess.check_call(['chmod', '755', '{}'.format(dest)])
 
 def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
