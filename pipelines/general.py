@@ -21,6 +21,38 @@ def _make_dir(d):
     except OSError:
         pass
 
+def _picard_collect_multiple_metrics(in_bam, sample_name, picard_path,
+                                     picard_memory, tempdir, bg=False):
+    """
+    Collect multiple metrics using Picard. The input bam file is assumed to be
+    sorted.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    sample_name : str
+        Sample name used to name output files.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} CollectMultipleMetrics'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(sample_name)]))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
 def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
                                 picard_memory, tempdir, bg=False):
     """
@@ -520,7 +552,7 @@ class JobScript:
                 self.input_files_to_copy]
 
     def _copy_output_files(self):
-        if len(self.output_files_to_copy) > 0:
+        if len(self.output_files_to_copy) > 0 and self.tempdir != self.outdir:
             with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.output_files_to_copy),
@@ -528,6 +560,11 @@ class JobScript:
 
     def _delete_temp_files(self):
         if len(self.temp_files_to_delete) > 0:
+            if self.tempdir == self.outdir or self.tempdir is None:
+                self.temp_files_to_delete = [
+                    x for x in self.temp_files_to_delete if x not in
+                    self.output_files_to_copy
+                ]
             with open(self.filename, "a") as f:
                 f.write('rm \\\n\t{}\n\n'.format(
                     ' \\\n\t'.join(self.temp_files_to_delete)))

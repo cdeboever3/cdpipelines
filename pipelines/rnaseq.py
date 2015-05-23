@@ -8,6 +8,7 @@ from general import JobScript
 from general import _make_softlink
 from general import _pbs_header
 from general import _picard_coord_sort
+from general import _picard_collect_multiple_metrics
 from general import _picard_mark_duplicates
 from general import _process_fastqs
 
@@ -468,6 +469,23 @@ def align_and_sort(
                                         tempdir=tempdir)
         f.write(lines)
         f.write('wait\n\n')
+
+        # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
+        lines = _picard_collect_multiple_metrics(in_bam, sample_name,
+                                                 picard_path, picard_memory,
+                                                 tempdir, bg=True)
+        for fn in ['{}.{}'.format(sample_name, x) for x in 
+            'alignment_summary_metrics', 
+            'quality_by_cycle.pdf', 
+            'base_distribution_by_cycle.pdf', 
+            'quality_by_cycle_metrics', 
+            'base_distribution_by_cycle_metrics', 
+            'quality_distribution.pdf', 
+            'insert_size_histogram.pdf', 
+            'quality_distribution_metrics', 
+            'insert_size_metrics'
+                  ]:
+            job.output_files_to_copy.append(fn)
         
         # Make bigwig files for displaying coverage.
         # TODO: update for strand specific eventually.
