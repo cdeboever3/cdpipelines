@@ -11,7 +11,7 @@ from general import _picard_bam_index_stats
 from general import _picard_coord_sort
 from general import _picard_collect_multiple_metrics
 from general import _picard_collect_rna_seq_metrics
-from general import _picard_gb_bias_metrics
+from general import _picard_gc_bias_metrics
 from general import _picard_index
 from general import _picard_mark_duplicates
 from general import _process_fastqs
