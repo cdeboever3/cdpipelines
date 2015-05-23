@@ -638,7 +638,7 @@ class JobScript:
                 f.write('#PBS -l nodes=1:ppn={}\n'.format(self.threads))
                 f.write('#PBS -o {}\n'.format(self.out))
                 f.write('#PBS -e {}\n\n'.format(self.err))
-            f.write('# Git repository version:\n{}\n\n'.format(_git_info()))
+            f.write('# Git repository version:\n# {}\n\n'.format(_git_info()))
             if self.environment:
                 f.write('source {}\n\n'.format(self.environment))
             if self.conda_env:
