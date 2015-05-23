@@ -108,7 +108,7 @@ def make_rna_seq_metrics_files(outdir, gencode_gtf, genome_fasta, picard_path,
     out_fn = os.path.join(outdir, 'gencode_no_rRNA.txt.gz')
     command = ('paste <(cut -f 12 refFlat.tmp.txt) <(cut -f 1-10 '
                'refFlat.tmp.txt) | gzip > {}'.format(out_fn))
-    subprocess.check_call(command, shell=True)
+    subprocess.check_call(command, shell=True, executable='/bin/bash')
     os.remove(rest_fn)
     os.remove('refFlat.tmp.txt')
 
