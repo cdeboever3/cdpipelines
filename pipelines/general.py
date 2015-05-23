@@ -597,7 +597,6 @@ class JobScript:
         self.jobname = '{}_{}'.format(sample_name, job_suffix)
         if tempdir:
             self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
-            _make_dir(self.tempdir)
         else:
             self.tempdir = tempdir
         self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
