@@ -7,8 +7,12 @@ from general import _fastqc
 from general import JobScript
 from general import _make_softlink
 from general import _pbs_header
+from general import _picard_bam_index_stats
 from general import _picard_coord_sort
 from general import _picard_collect_multiple_metrics
+from general import _picard_collect_rna_seq_metrics
+from general import _picard_gb_bias_metrics
+from general import _picard_index
 from general import _picard_mark_duplicates
 from general import _process_fastqs
 
@@ -272,6 +276,8 @@ def align_and_sort(
     bedtools_path,
     bedgraph_to_bigwig_path,
     fastqc_path,
+    ref_flat, 
+    rrna_intervals,
     rgpl='ILLUMINA',
     rgpu='',
     tempdir='/scratch', 
@@ -335,6 +341,12 @@ def align_and_sort(
     bedgraph_to_bigwig_path : str
         Path bedGraphToBigWig executable.
 
+    ref_flat : str
+        Path to refFlat file with non-rRNA genes. Can ge gzipped.
+
+    rrna_intervals : str
+        Pato to interval list file with rRNA intervals.
+
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
 
@@ -371,26 +383,26 @@ def align_and_sort(
     # I'm going to handle the copying and deleting of the fastqs myself rather
     # than have the JobScript do it because I don't want to the fastqs to sit
     # around on the disk the whole time after I'm done with them.
-    temp_r1_fastqs = _process_fastqs(r1_fastqs, tempdir)
-    temp_r2_fastqs = _process_fastqs(r2_fastqs, tempdir)
-    if type(r1_fastqs) == list:
-        r1_fastqs = ' '.join(r1_fastqs)
-    if type(r2_fastqs) == list:
-        r2_fastqs = ' '.join(r2_fastqs)
+    temp_r1_fastqs = _process_fastqs(r1_fastqs, job.tempdir)
+    temp_r2_fastqs = _process_fastqs(r2_fastqs, job.tempdir)
+    if type(r1_fastqs) != list:
+        r1_fastqs = [r1_fastqs]
+    if type(r2_fastqs) != list:
+        r2_fastqs = [r2_fastqs]
     combined_r1 = os.path.join(
-        tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
+        job.tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
     combined_r2 = os.path.join(
-        tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
+        job.tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
 
     # Files that will be created.
-    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
+    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
     job.temp_files_to_delete.append(aligned_bam)
     coord_sorted_bam = os.path.join(
-        tempdir, '{}_sorted.bam'.format(sample_name))
+        job.tempdir, '{}_sorted.bam'.format(sample_name))
     job.temp_files_to_delete.append(coord_sorted_bam)
     job.temp_files_to_delete.append('_STARtmp')
     out_bam = os.path.join(
-        tempdir, '{}_sorted_mdup.bam'.format(sample_name))
+        job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
     bam_index = '{}.bai'.format(out_bam)
     job.output_files_to_copy += [out_bam, bam_index]
 
@@ -409,13 +421,13 @@ def align_and_sort(
         # specific data to make sure I'm doing it correctly and what the best
         # way is to display the data. Maybe I could make a hub and color the two
         # strand differently?
-        # out_bigwig_plus = os.path.join(tempdir,
+        # out_bigwig_plus = os.path.join(job.tempdir,
         #                                '{}_plus_rna.bw'.format(sample_name))
-        # out_bigwig_minus = os.path.join(tempdir,
+        # out_bigwig_minus = os.path.join(job.tempdir,
         #                                 '{}_minus_rna.bw'.format(sample_name))
         # files_to_copy.append(out_bigwig_plus)
         # files_to_copy.append(out_bigwig_minus)
-    out_bigwig = os.path.join(tempdir, '{}_rna.bw'.format(sample_name))
+    out_bigwig = os.path.join(job.tempdir, '{}_rna.bw'.format(sample_name))
     job.output_files_to_copy.append(out_bigwig)
     
     with open(job.filename, "a") as f:
@@ -423,26 +435,38 @@ def align_and_sort(
         # class do it because I want to delete them as soon as I've combined
         # them into a single file.
         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
-            '\\\n\t'.join(r1_fastqs + r2_fastqs),
-            job.tempdir))
+            '\\\n\t'.join(r1_fastqs + r2_fastqs), job.tempdir))
+        # f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+        #     '\\\n\t'.join(r1_fastqs + r2_fastqs),
+        #     job.tempdir))
 
         # Combine fastq files.
-        f.write('cat \\\n{} \\\n\t> {} &\n'.format(
-            ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
-            combined_r1))
-        f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
-            ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
-            combined_r2))
+        if len(temp_r1_fastqs) > 1:
+            f.write('cat \\\n{} \\\n\t> {} &\n'.format(
+                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
+                combined_r1))
+        else:
+            f.write('mv {} {}\n\n'.format(temp_r1_fastqs[0], combined_r1))
+
+        if len(temp_r2_fastqs) > 1:
+            f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
+                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
+                combined_r2))
+        else:
+            f.write('mv {} {}\n\n'.format(temp_r2_fastqs[0], combined_r2))
         f.write('wait\n\n')
 
         # Remove temp fastqs.
-        f.write('rm \\\n{} \\\n{}\n\n'.format(
-            ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
-            ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
-        f.write('wait\n\n')
+        if len(temp_r1_fastqs) > 1:
+            f.write('rm \\\n{} &\n\n'.format(
+                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs])))
+        if len(temp_r2_fastqs) > 1:
+            f.write('rm \\\n{}\n\n'.format(
+                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
+            f.write('wait\n\n')
 
         # Run FASTQC.
-        lines = _fastqc([combined_r1, combined_r2], threads, outdir,
+        lines = _fastqc([combined_r1, combined_r2], threads, job.outdir,
                         fastqc_path)
         f.write(lines)
         f.write('wait\n\n')
@@ -455,25 +479,31 @@ def align_and_sort(
 
         # Coordinate sort bam file.
         lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                                   picard_memory, tempdir, bam_index=bam_index)
+                                   picard_memory, job.tempdir)
         f.write(lines)
         f.write('wait\n\n')
 
         # Mark duplicates.
         duplicate_metrics = os.path.join(
-            outdir, '{}_duplicate_metrics.txt'.format(sample_name))
+            job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
         lines = _picard_mark_duplicates(coord_sorted_bam, out_bam,
                                         duplicate_metrics,
                                         picard_path=picard_path,
                                         picard_memory=picard_memory,
-                                        tempdir=tempdir)
+                                        tempdir=job.tempdir)
         f.write(lines)
         f.write('wait\n\n')
 
+        # Index bam file.
+        lines = _picard_index(out_bam, bam_index, picard_memory / 4,
+                              picard_path, job.tempdir, bg=True)
+        f.write('wait\n\n')
+
         # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
-        lines = _picard_collect_multiple_metrics(in_bam, sample_name,
-                                                 picard_path, picard_memory,
-                                                 tempdir, bg=True)
+        lines = _picard_collect_multiple_metrics(out_bam, sample_name,
+                                                 picard_path, picard_memory / 4,
+                                                 job.tempdir, bg=True)
+        f.write(lines)
         for fn in ['{}.{}'.format(sample_name, x) for x in 
             'alignment_summary_metrics', 
             'quality_by_cycle.pdf', 
@@ -486,7 +516,34 @@ def align_and_sort(
             'insert_size_metrics'
                   ]:
             job.output_files_to_copy.append(fn)
+
+        metrics = os.path.join(job.outdir,
+                               '{}_rna_seq_metrics.txt'.format(sample_name))
+        chart = os.path.join(job.outdir,
+                             '{}_5_3_coverage.pdf'.format(sample_name))
+        lines = _picard_collect_rna_seq_metrics(
+            out_bam, 
+            metrics, 
+            chart, 
+            sample_name,
+            picard_path, 
+            picard_memory / 4,
+            job.tempdir,
+            ref_flat, 
+            rrna_intervals,
+            strand_specific=strand_specific, 
+            bg=True)
+        f.write(lines)
         
+        metrics = os.path.join(job.outdir,
+                               '{}_gc_bias_metrics.txt'.format(sample_name))
+        chart = os.path.join(job.outdir, '{}_gc_bias.pdf'.format(sample_name))
+        out = os.path.join(job.outdir, '{}_gc_bias.txt'.format(sample_name))
+        lines = _picard_gb_bias_metrics(out_bam, metrics, chart, out,
+                                        picard_path, picard_memory / 4,
+                                        job.tempdir, bg=False)
+        f.write(lines)
+
         # Make bigwig files for displaying coverage.
         # TODO: update for strand specific eventually.
         lines = _bigwig_files(out_bam, out_bigwig, sample_name,
@@ -494,11 +551,20 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
 
+        index_out = os.path.join(job.outdir,
+                                 '{}_index_stats.txt'.format(sample_name))
+        index_err = os.path.join(job.outdir,
+                                 '{}_index_stats.err'.format(sample_name))
+        lines = _picard_bam_index_stats(out_bam, index_out, index_err,
+                                        picard_path, picard_memory, tempdir,
+                                        bg=True)
+        f.write(lines)
+
         # Make softlinks and tracklines for genome browser.
         # TODO: update for strand specific eventually.
         lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
                                       out_bam, bam_index, out_bigwig,
-                                      sample_name, outdir)
+                                      sample_name, job.outdir)
         f.write(lines)
         f.write('wait\n\n')
 

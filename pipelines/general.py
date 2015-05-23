@@ -21,6 +21,59 @@ def _make_dir(d):
     except OSError:
         pass
 
+def _picard_collect_rna_seq_metrics(in_bam, metrics, chart, sample_name,
+                                    picard_path, picard_memory, tempdir,
+                                    ref_flat, rrna_intervals,
+                                    strand_specific=True, bg=False):
+    """
+    Collect RNA-seq metrics using Picard. The input bam file is assumed to be
+    sorted.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    metrics : str
+        Path to output metrics file.
+
+    chart : str
+        Path to output PDF file.
+
+    sample_name : str
+        Sample name used to name output files.
+
+    ref_flat : str
+        Path to refFlat file with non-rRNA genes. Can ge gzipped.
+
+    rrna_intervals : str
+        Pato to interval list file with rRNA intervals.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} CollectRnaSeqMetrics'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tASSUME_SORTED=true',
+                           '\tREF_FLAT={}'.format(ref_flat),
+                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
+                           '\tI={}'.format(in_bam), 
+                           '\tCHART_OUTPUT={}'.format(chart),
+                           '\tO={}'.format(metrics)]))
+    if strand_specific:
+        lines += '\n\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND'
+
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
 def _picard_collect_multiple_metrics(in_bam, sample_name, picard_path,
                                      picard_memory, tempdir, bg=False):
     """
@@ -45,8 +98,85 @@ def _picard_collect_multiple_metrics(in_bam, sample_name, picard_path,
                            '\t-jar {} CollectMultipleMetrics'.format(
                                picard_path),
                            '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tASSUME_SORTED=true',
                            '\tI={}'.format(in_bam), 
                            '\tO={}'.format(sample_name)]))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
+def _picard_gb_bias_metrics(in_bam, metrics, chart, out, picard_path,
+                            picard_memory, tempdir, bg=False):
+    """
+    Collect GC bias metrics using Picard. The input bam file is assumed to
+    be sorted.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    metrics : str
+        Path to output metrics file.
+
+    chart : str
+        Path to output PDF chart.
+
+    out : str
+        Path to picard output file.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} CollectGcBiasMetrics'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam), 
+                           '\tO={}'.format(out),
+                           '\tCHART_OUTPUT={}'.format(chart),
+                           '\tSUMMARY_OUTPUT={}'.format(metrics),
+                           '\tASSUME_SORTED=true']))
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
+    return lines
+
+def _picard_bam_index_stats(in_bam, out, err, picard_path, picard_memory,
+                            tempdir, bg=False):
+    """
+    Collect bam index stats with Picard.
+
+    Parameters
+    ----------
+    in_bam : str
+        Path to input bam file.
+
+    out : str
+        Path to write stdout to. This contains the index stats.
+
+    err : str
+        Path to write stderr to. this contains picard stuff.
+
+    bg : boolean
+        Whether to run the process in the background.
+
+    """
+    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
+                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                           '\t-Djava.io.tmpdir={}'.format(tempdir), 
+                           '\t-jar {} BamIndexStats'.format(
+                               picard_path),
+                           '\tVALIDATION_STRINGENCY=SILENT',
+                           '\tI={}'.format(in_bam),
+                           '\t> {}'.format(out),
+                           '\t2> {}'.format(err)]))
     if bg:
         lines += ' &\n\n'
     else:
@@ -509,7 +639,7 @@ class JobScript:
                 f.write('#PBS -l nodes=1:ppn={}\n'.format(self.threads))
                 f.write('#PBS -o {}\n'.format(self.out))
                 f.write('#PBS -e {}\n\n'.format(self.err))
-            f.write('Git repository version:\n{}\n\n'.format(_git_info))
+            f.write('Git repository version:\n{}\n\n'.format(_git_info()))
             if self.environment:
                 f.write('source {}\n\n'.format(self.environment))
             if self.conda_env:
