@@ -495,13 +495,13 @@ def align_and_sort(
         f.write('wait\n\n')
 
         # Index bam file.
-        lines = _picard_index(out_bam, bam_index, picard_memory / 4,
+        lines = _picard_index(out_bam, bam_index, picard_memory / 3,
                               picard_path, job.tempdir, bg=True)
         f.write('wait\n\n')
 
         # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
         lines = _picard_collect_multiple_metrics(out_bam, sample_name,
-                                                 picard_path, picard_memory / 4,
+                                                 picard_path, picard_memory / 3,
                                                  job.tempdir, bg=True)
         f.write(lines)
         for fn in ['{}.{}'.format(sample_name, x) for x in 
@@ -527,7 +527,7 @@ def align_and_sort(
             chart, 
             sample_name,
             picard_path, 
-            picard_memory / 4,
+            picard_memory / 3,
             job.tempdir,
             ref_flat, 
             rrna_intervals,
@@ -535,14 +535,14 @@ def align_and_sort(
             bg=True)
         f.write(lines)
         
-        metrics = os.path.join(job.outdir,
-                               '{}_gc_bias_metrics.txt'.format(sample_name))
-        chart = os.path.join(job.outdir, '{}_gc_bias.pdf'.format(sample_name))
-        out = os.path.join(job.outdir, '{}_gc_bias.txt'.format(sample_name))
-        lines = _picard_gb_bias_metrics(out_bam, metrics, chart, out,
-                                        picard_path, picard_memory / 4,
-                                        job.tempdir, bg=False)
-        f.write(lines)
+        # metrics = os.path.join(job.outdir,
+        #                        '{}_gc_bias_metrics.txt'.format(sample_name))
+        # chart = os.path.join(job.outdir, '{}_gc_bias.pdf'.format(sample_name))
+        # out = os.path.join(job.outdir, '{}_gc_bias.txt'.format(sample_name))
+        # lines = _picard_gc_bias_metrics(out_bam, metrics, chart, out,
+        #                                 picard_path, picard_memory / 4,
+        #                                 job.tempdir, bg=False)
+        # f.write(lines)
 
         # Make bigwig files for displaying coverage.
         # TODO: update for strand specific eventually.

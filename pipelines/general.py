@@ -107,7 +107,7 @@ def _picard_collect_multiple_metrics(in_bam, sample_name, picard_path,
         lines += '\n\n'
     return lines
 
-def _picard_gb_bias_metrics(in_bam, metrics, chart, out, picard_path,
+def _picard_gc_bias_metrics(in_bam, metrics, chart, out, picard_path,
                             picard_memory, tempdir, bg=False):
     """
     Collect GC bias metrics using Picard. The input bam file is assumed to
