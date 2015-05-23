@@ -575,7 +575,7 @@ def download_gencode_gtf(outdir):
     dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
     _download_and_gunzip(src, dest)
 
-def download_bedGraphToBigWig(outdir):
+def download_gtfToGenePred(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
                   'linux.x86_64/gtfToGenePred')
     dest = os.path.join(outdir, 'gtfToGenePred')
