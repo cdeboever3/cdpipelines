@@ -62,7 +62,7 @@ def _picard_collect_rna_seq_metrics(in_bam, metrics, chart, sample_name,
                            '\t-Djava.io.tmpdir={}'.format(tempdir), 
                            '\t-jar {} CollectRnaSeqMetrics'.format(
                                picard_path),
-                           '\tI={}'.format(in_bam) + 
+                           '\tI={}'.format(in_bam),
                            '\tREF_FLAT={}'.format(ref_flat),
                            ss,
                            '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
