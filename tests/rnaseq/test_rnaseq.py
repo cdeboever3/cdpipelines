@@ -13,30 +13,6 @@ class TestPbsHeader:
         threads = 30
         lines = ps.rnaseq._pbs_header(out, err, name, threads)
 
-class TestCbarrettPairedDupRemoval:
-    def test_run(self):
-        """Test to make sure the function at least runs"""
-        r1_fastqs = 'r1.fastq.gz'
-        r2_fastqs = 'r2.fastq.gz'
-        r1_nodup = 'r1_nodup.fastq.gz'
-        r2_nodup = 'r2_nodup.fastq.gz'
-        temp_dir = 'temp_dir'
-        lines = ps.rnaseq._cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs,
-                                                        r1_nodup, r2_nodup,
-                                                        temp_dir)
-    
-    def test_list_run(self):
-        """Test to make sure the function at least runs with lists of files as
-        input"""
-        r1_fastqs = ['r1_1.fastq.gz', 'r1_2.fastq.gz']
-        r2_fastqs = ['r2_1.fastq.gz', 'r2_2.fastq.gz']
-        r1_nodup = 'r1_nodup.fastq.gz'
-        r2_nodup = 'r2_nodup.fastq.gz'
-        temp_dir = 'temp_dir'
-        lines = ps.rnaseq._cbarrett_paired_dup_removal(r1_fastqs, r2_fastqs,
-                                                        r1_nodup, r2_nodup,
-                                                        temp_dir)
-
 class TestStarAlign:
     def test_run(self):
         """Test to make sure the function at least runs"""
@@ -128,41 +104,41 @@ class TestBigwigFiles:
                                          bedgraph_to_bigwig_path, bedtools_path,
                                          out_bigwig_minus=out_bigwig_minus)
 
-class TestGenomeBrowserFiles:
-    def test_run(self):
-        """Test to make sure the function at least runs"""
-        tracklines_file = 'tracklines.txt'
-        link_dir = '.'
-        web_path_file = 'web_path_file.txt'
-        coord_sorted_bam = 'test.bam'
-        bam_index = 'test.bam.bai'
-        bigwig = 'test.bw'
-        sample_name = 's1'
-        out_dir = '.'
-        lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
-                                                web_path_file, coord_sorted_bam,
-                                                bam_index, bigwig, sample_name,
-                                                out_dir, bigwig_minus='')
-        os.remove(tracklines_file)
-
-    def test_run(self):
-        """Test to make sure the function at least runs for standed input"""
-        tracklines_file = 'tracklines.txt'
-        link_dir = '.'
-        web_path_file = 'web_path_file.txt'
-        coord_sorted_bam = 'test.bam'
-        bam_index = 'test.bam.bai'
-        bigwig = 'plus.bw'
-        sample_name = 's1'
-        bigwig_minus = 'minus.bw'
-        out_dir = '.'
-        lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
-                                                web_path_file, coord_sorted_bam,
-                                                bam_index, bigwig, sample_name,
-                                                out_dir,
-                                                bigwig_minus=bigwig_minus)
-        out_dir = '.'
-        os.remove(tracklines_file)
+# class TestGenomeBrowserFiles:
+#     def test_run(self):
+#         """Test to make sure the function at least runs"""
+#         tracklines_file = 'tracklines.txt'
+#         link_dir = '.'
+#         web_path_file = 'web_path_file.txt'
+#         coord_sorted_bam = 'test.bam'
+#         bam_index = 'test.bam.bai'
+#         bigwig = 'test.bw'
+#         sample_name = 's1'
+#         out_dir = '.'
+#         lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
+#                                                 web_path_file, coord_sorted_bam,
+#                                                 bam_index, bigwig, sample_name,
+#                                                 out_dir, bigwig_minus='')
+#         os.remove(tracklines_file)
+# 
+#     def test_run(self):
+#         """Test to make sure the function at least runs for standed input"""
+#         tracklines_file = 'tracklines.txt'
+#         link_dir = '.'
+#         web_path_file = 'web_path_file.txt'
+#         coord_sorted_bam = 'test.bam'
+#         bam_index = 'test.bam.bai'
+#         bigwig = 'plus.bw'
+#         sample_name = 's1'
+#         bigwig_minus = 'minus.bw'
+#         out_dir = '.'
+#         lines = ps.rnaseq._genome_browser_files(tracklines_file, link_dir,
+#                                                 web_path_file, coord_sorted_bam,
+#                                                 bam_index, bigwig, sample_name,
+#                                                 out_dir,
+#                                                 bigwig_minus=bigwig_minus)
+#         out_dir = '.'
+#         os.remove(tracklines_file)
 
 class TestAlignAndSort:
     # def test_run(self):

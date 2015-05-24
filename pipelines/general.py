@@ -521,6 +521,27 @@ Parameters
              '\t--extract --threads {} {}\n\n'.format(threads, fastqs))
     return lines
 
+def _softlink(target, link):
+    """
+    Make softlink from target to link.
+
+    Parameters
+    ----------
+    target : str
+        Full path to file to make link to.
+
+    link : str
+        Full path to softlink.
+
+    Returns
+    -------
+    lines : str
+        Lines to be printed to shell/PBS script.
+
+    """
+    lines = 'ln -s {} {}\n'.format(target, link)
+    return lines
+
 def _make_softlink(fn, sample_name, link_dir):
     """
     Make softlink for file fn in link_dir. sample_name followed by an underscore
@@ -619,6 +640,7 @@ class JobScript:
         self.input_files_to_copy = []
         self.output_files_to_copy = []
         self.temp_files_to_delete = []
+        self.softlinks = []
         self._set_filename()
         self._write_header()
 
@@ -663,6 +685,11 @@ class JobScript:
     #         self.output_files_to_copy.append(f.temp_filename)
     #     return f
 
+    def add_softlink(self, target, link):
+        """Add a target, link pair to the JobScript instance so that a softlink
+        from target to link is made at the end of the jobscript."""
+        self.softlinks.append([target, link])
+
     def add_input_file(self, fn):
         """Add input file to self.input_files_to_copy and return temp path"""
         self.input_files_to_copy.append(fn)
@@ -705,10 +732,16 @@ class JobScript:
             with open(self.filename, "a") as f:
                 f.write('rm -r {}\n'.format(self.tempdir))
 
+    def _make_softlinks(self):
+        with open(self.filename, "a") as f:
+            for p in self.softlinks:
+                _softlink(p[0], p[1])
+
     def write_end(self):
         self._copy_output_files()
         self._delete_temp_files()
         self._delete_tempdir()
+        self._make_softlinks()
 
 def _pbs_header(out, err, name, threads, queue='high'):
     """
