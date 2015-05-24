@@ -724,7 +724,7 @@ class JobScript:
                     self.output_files_to_copy
                 ]
             with open(self.filename, "a") as f:
-                f.write('rm \\\n\t{}\n\n'.format(
+                f.write('rm -r \\\n\t{}\n\n'.format(
                     ' \\\n\t'.join(self.temp_files_to_delete)))
 
     def _delete_tempdir(self):
