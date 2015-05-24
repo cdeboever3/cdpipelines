@@ -735,7 +735,7 @@ class JobScript:
     def _make_softlinks(self):
         with open(self.filename, "a") as f:
             for p in self.softlinks:
-                _softlink(p[0], p[1])
+                f.write(_softlink(p[0], p[1]))
 
     def write_end(self):
         self._copy_output_files()

@@ -424,6 +424,11 @@ def align_and_sort(
         r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
         job.add_softlink(os.path.join(outdir, r2), 
                          os.path.join(link_dir, 'fastqc', r2))
+        with open(tracklines_file, "a") as tf:
+            tf_lines = ('{}/fastqc/{}'.format(web_path, r1))
+            tf.write(tf_lines)
+            tf_lines = ('{}/fastqc/{}'.format(web_path, r2))
+            tf.write(tf_lines)
     
         # Align reads.
         lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
@@ -544,7 +549,9 @@ def align_and_sort(
         #                               sample_name, job.outdir)
         f.write(lines)
         f.write('wait\n\n')
-
+    
+    import pdb
+    pdb.set_trace()
     job.write_end()
     return job.filename
 
