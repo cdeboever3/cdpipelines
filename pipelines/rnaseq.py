@@ -324,6 +324,7 @@ def align_and_sort(
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
     web_path = web_path + '/rna'
+    link_dir = os.path.join(link_dir, 'rna')
     job_suffix = 'alignment'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, queue='high', copy_input=True)
@@ -419,10 +420,10 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
         r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(outdir, r1), 
+        job.add_softlink(os.path.join(job.outdir, r1), 
                          os.path.join(link_dir, 'fastqc', r1))
         r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(outdir, r2), 
+        job.add_softlink(os.path.join(job.outdir, r2), 
                          os.path.join(link_dir, 'fastqc', r2))
         with open(tracklines_file, "a") as tf:
             tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
@@ -455,8 +456,8 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
         name = os.path.split(out_bam)[1]
-        job.add_softlink(os.path.join(outdir, name), 
-                         os.path.join(outdir, 'rna', 'bam', name))
+        job.add_softlink(os.path.join(job.outdir, name), 
+                         os.path.join(link_dir, 'bam', name))
         with open(tracklines_file, "a") as tf:
             tf_lines = ('track type=bam name="{}_bam" '
                         'description="RNAseq for {}" '
@@ -470,8 +471,8 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
         name = os.path.split(bam_index)[1]
-        job.add_softlink(os.path.join(outdir, name), 
-                         os.path.join(outdir, 'bam', name))
+        job.add_softlink(os.path.join(job.outdir, name), 
+                         os.path.join(link_dir, 'bam', name))
 
         # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
         lines = _picard_collect_multiple_metrics(out_bam, sample_name,
@@ -525,8 +526,8 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
         name = os.path.split(out_bigwig)[1]
-        job.add_softlink(os.path.join(outdir, name), 
-                         os.path.join(outdir, 'bw', name))
+        job.add_softlink(os.path.join(job.outdir, name), 
+                         os.path.join(link_dir, 'bw', name))
 
         with open(tracklines_file, "a") as tf:
             tf_lines = ('track type=bigWig name="{}_cov" '
