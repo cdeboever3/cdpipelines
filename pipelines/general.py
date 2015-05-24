@@ -61,12 +61,15 @@ def _picard_collect_rna_seq_metrics(in_bam, metrics, chart, sample_name,
                            '\tVALIDATION_STRINGENCY=SILENT',
                            '\tASSUME_SORTED=true',
                            '\tREF_FLAT={}'.format(ref_flat),
-                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
-                           '\tI={}'.format(in_bam), 
-                           '\tCHART_OUTPUT={}'.format(chart),
-                           '\tO={}'.format(metrics)]))
+                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals)]))
     if strand_specific:
-        lines += '\n\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND'
+        lines += '\n\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND \\\n'
+    else:
+        lines += '\n\tSTRAND_SPECIFICITY=NONE \\\n'
+
+    lines += ('\tI={} \\\n'.format(in_bam) + 
+              '\tCHART_OUTPUT={} \\\n'.format(chart) + 
+              '\tO={}'.format(metrics))
 
     if bg:
         lines += ' &\n\n'

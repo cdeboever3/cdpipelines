@@ -497,6 +497,7 @@ def align_and_sort(
         # Index bam file.
         lines = _picard_index(out_bam, bam_index, picard_memory / 3,
                               picard_path, job.tempdir, bg=True)
+        f.write(lines)
         f.write('wait\n\n')
 
         # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
