@@ -550,8 +550,6 @@ def align_and_sort(
         f.write(lines)
         f.write('wait\n\n')
     
-    import pdb
-    pdb.set_trace()
     job.write_end()
     return job.filename
 
