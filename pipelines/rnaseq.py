@@ -425,9 +425,9 @@ def align_and_sort(
         job.add_softlink(os.path.join(outdir, r2), 
                          os.path.join(link_dir, 'fastqc', r2))
         with open(tracklines_file, "a") as tf:
-            tf_lines = ('{}/fastqc/{}'.format(web_path, r1))
+            tf_lines = ('{}/fastqc/{}\n'.format(web_path, r1))
             tf.write(tf_lines)
-            tf_lines = ('{}/fastqc/{}'.format(web_path, r2))
+            tf_lines = ('{}/fastqc/{}\n'.format(web_path, r2))
             tf.write(tf_lines)
     
         # Align reads.
