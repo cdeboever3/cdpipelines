@@ -529,8 +529,8 @@ def align_and_sort(
                          os.path.join(outdir, 'bw', name))
 
         with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bigWig name="{}_cov"'
-                        'description="RNAseq coverage for {}"'
+            tf_lines = ('track type=bigWig name="{}_cov" '
+                        'description="RNAseq coverage for {}" '
                         'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
                             sample_name, sample_name, web_path, name))
             tf.write(tf_lines)
