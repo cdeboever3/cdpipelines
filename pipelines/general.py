@@ -53,23 +53,22 @@ def _picard_collect_rna_seq_metrics(in_bam, metrics, chart, sample_name,
         Whether to run the process in the background.
 
     """
+    if strand_specific:
+        ss = '\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND'
+    else:
+        ss = '\tSTRAND_SPECIFICITY=NONE'
     lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
                            '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
                            '\t-Djava.io.tmpdir={}'.format(tempdir), 
                            '\t-jar {} CollectRnaSeqMetrics'.format(
                                picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tASSUME_SORTED=true',
+                           '\tI={}'.format(in_bam) + 
                            '\tREF_FLAT={}'.format(ref_flat),
-                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals)]))
-    if strand_specific:
-        lines += '\n\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND \\\n'
-    else:
-        lines += '\n\tSTRAND_SPECIFICITY=NONE \\\n'
-
-    lines += ('\tI={} \\\n'.format(in_bam) + 
-              '\tCHART_OUTPUT={} \\\n'.format(chart) + 
-              '\tO={}'.format(metrics))
+                           ss,
+                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
+                           '\tASSUME_SORTED=TRUE',
+                           '\tCHART_OUTPUT={}'.format(chart),
+                           '\tO={}'.format(metrics)]))
 
     if bg:
         lines += ' &\n\n'
@@ -101,7 +100,7 @@ def _picard_collect_multiple_metrics(in_bam, sample_name, picard_path,
                            '\t-jar {} CollectMultipleMetrics'.format(
                                picard_path),
                            '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tASSUME_SORTED=true',
+                           '\tASSUME_SORTED=TRUE',
                            '\tI={}'.format(in_bam), 
                            '\tO={}'.format(sample_name)]))
     if bg:
@@ -144,7 +143,7 @@ def _picard_gc_bias_metrics(in_bam, metrics, chart, out, picard_path,
                            '\tO={}'.format(out),
                            '\tCHART_OUTPUT={}'.format(chart),
                            '\tSUMMARY_OUTPUT={}'.format(metrics),
-                           '\tASSUME_SORTED=true']))
+                           '\tASSUME_SORTED=TRUE']))
     if bg:
         lines += ' &\n\n'
     else:
@@ -216,7 +215,7 @@ def _picard_insert_size_metrics(in_bam, out_metrics, out_hist, picard_path,
                            '\tI={}'.format(in_bam), 
                            '\tO={}'.format(out_metrics),
                            '\tHISTOGRAM_FILE={}'.format(out_hist),
-                           '\tASSUME_SORTED=true']))
+                           '\tASSUME_SORTED=TRUE']))
     if bg:
         lines += ' &\n\n'
     else:
@@ -796,8 +795,8 @@ def _picard_merge(bams, out_bam, picard_memory, picard_path, tempdir, bg=False):
              '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
              '\t-Djava.io.tmpdir={}'.format(tempdir), 
              '\t-jar {} MergeSamFiles'.format(picard_path),
-             '\tASSUME_SORTED=true',
-             '\tUSE_THREADING=true']
+             '\tASSUME_SORTED=TRUE',
+             '\tUSE_THREADING=TRUE']
     for bam in bams:
         lines.append('\tI={}'.format(bam))
     lines.append('\tO={}'.format(out_bam))
