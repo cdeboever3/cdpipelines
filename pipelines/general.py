@@ -288,7 +288,6 @@ def _picard_coord_sort(in_bam, out_bam, picard_path, picard_memory,
                                '\t-Djava.io.tmpdir={}'.format(tempdir), 
                                '\t-jar {} SortSam'.format(picard_path),
                                '\tVALIDATION_STRINGENCY=SILENT',
-                               '\tCREATE_MD5_FILE=TRUE',
                                '\tI={}'.format(in_bam), 
                                '\tO={}'.format(out_bam),
                                '\tSO=coordinate\n']))
