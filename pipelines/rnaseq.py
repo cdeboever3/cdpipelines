@@ -549,14 +549,15 @@ def align_and_sort(
                                         picard_path, picard_memory, tempdir,
                                         bg=True)
         f.write(lines)
+        f.write('wait\n\n')
 
         # Make softlinks and tracklines for genome browser.
         # TODO: update for strand specific eventually.
         # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
         #                               out_bam, bam_index, out_bigwig,
         #                               sample_name, job.outdir)
-        f.write(lines)
-        f.write('wait\n\n')
+        # f.write(lines)
+        # f.write('wait\n\n')
     
     job.write_end()
     return job.filename
