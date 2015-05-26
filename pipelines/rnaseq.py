@@ -509,6 +509,10 @@ def align_and_sort(
             strand_specific=strand_specific, 
             bg=True)
         f.write(lines)
+
+        # Make md5 hash for output bam file.
+        f.write('md5sum {} > {}\n\n'.format(
+            out_bam, os.path.join(job.outdir, '{}.md5'.format(out_bam))))
         
         # metrics = os.path.join(job.outdir,
         #                        '{}_gc_bias_metrics.txt'.format(sample_name))
