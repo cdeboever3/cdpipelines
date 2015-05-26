@@ -511,7 +511,7 @@ def align_and_sort(
         f.write(lines)
 
         # Make md5 hash for output bam file.
-        f.write('md5sum {} > {}\n\n'.format(
+        f.write('md5sum {} > {} &\n\n'.format(
             out_bam, os.path.join(job.outdir, '{}.md5'.format(
                 os.path.split(out_bam)[1]))))
         
