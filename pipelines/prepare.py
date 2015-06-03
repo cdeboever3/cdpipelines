@@ -124,6 +124,15 @@ def make_rna_seq_metrics_files(outdir, gencode_gtf, genome_fasta, picard_path,
     os.remove(rrna_fn)
     os.remove('hg19.sam')
 
+def download_igvtools(outdir):
+    src = ('http://data.broadinstitute.org/igv/projects/downloads/'
+           'igvtools_2.3.55.zip')
+    dest = os.path.join(outdir, 'igvtools_2.3.55.zip')
+    req = urlopen(src)
+    with open(dest, 'w') as f:
+        shutil.copyfileobj(req, f)
+    subprocess.check_call(['unzip', '-d', outdir, dest])
+
 def download_encode_blacklist(outdir):
     src = ('https://www.encodeproject.org/files/ENCFF001TDO/@@download/'
            'ENCFF001TDO.bed.gz')
