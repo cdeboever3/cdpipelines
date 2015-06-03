@@ -817,8 +817,12 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
         File name for the softlink.
 
     """
+    # line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
+    #         '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
+    #         '--ci-memory {} --estimate-rspd {} {} {}'.format(
+    #             rsem_path, threads, ci_mem, bam, reference, sample_name))
     line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
-            '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
+            '--no-bam-output --seed 3272015 --calc-ci '
             '--ci-memory {} --estimate-rspd {} {} {}'.format(
                 rsem_path, threads, ci_mem, bam, reference, sample_name))
     if strand_specific:
