@@ -235,7 +235,7 @@ def download_snpeff(outdir):
     url = ('http://sourceforge.net/projects/snpeff/'
            'files/snpEff_v4_1g_core.zip/download')
     dest = os.path.join(outdir, 'snpEff_v4_1g_core.zip')
-    req = urlopen(src)
+    req = urlopen(url)
     with open(dest, 'w') as f:
         shutil.copyfileobj(req, f)
     subprocess.check_call(['unzip', '-d', outdir, dest])
