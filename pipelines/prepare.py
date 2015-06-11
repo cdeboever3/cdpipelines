@@ -222,6 +222,24 @@ def download_fastqc(outdir):
         shutil.copyfileobj(req, f)
     subprocess.check_call(['unzip', '-d', outdir, dest])
 
+def download_snpeff(outdir):
+    """
+    Download snpEff.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save snpEff to.
+
+    """
+    url = ('http://sourceforge.net/projects/snpeff/'
+           'files/snpEff_v4_1g_core.zip/download')
+    dest = os.path.join(outdir, 'snpEff_v4_1g_core.zip')
+    req = urlopen(src)
+    with open(dest, 'w') as f:
+        shutil.copyfileobj(req, f)
+    subprocess.check_call(['unzip', '-d', outdir, dest])
+    
 def download_vcftools(outdir):
     """
     Download and compile vcftools.
