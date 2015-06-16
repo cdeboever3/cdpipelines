@@ -900,6 +900,57 @@ def _picard_mark_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
         lines += '\n\n'
     return lines
 
+def _wasp_snp_directory(vcf, directory, sample_name=None):
+    """
+    Convert VCF file into input files directory and files needed for WASP. Only
+    bi-allelic heterozygous sites are used.
+
+    Parameters:
+    -----------
+    vcf : str
+        Path to VCF file.
+
+    directory : str
+        Output directory. This is the directory that will hold the files for
+        WASP.
+
+    sample_name : str
+        If provided, use this sample name to get heterozygous SNPs from VCF
+        file.
+
+    """
+    chrom = []
+    pos = []
+    ref = []
+    alt = []
+    vcf_reader = pyvcf.Reader(open(vcf, 'r'))
+    if sample_name:
+        def condition(record, sample_name):
+            return sample_name in [x.sample for x in record.get_hets()]
+    else:
+        def condition(record, sample_name):
+            return len(record.get_hets()) > 0
+    for record in vcf_reader:
+        if condition(record, sample_name):
+            if len(record.ALT) == 1:
+                chrom.append(record.CHROM)
+                pos.append(record.POS)
+                ref.append(record.REF)
+                alt.append(record.ALT[0].sequence)
+    df = pd.DataFrame([chrom, pos, ref, alt], 
+                      index=['chrom', 'position', 'RefAllele', 'AltAllele']).T
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    for c in set(df.chrom):
+        tdf = df[df.chrom == c]
+        if tdf.shape[0] > 0:
+            f = gzip.open(os.path.join(directory, '{}.snps.txt.gz'.format(c)),
+                          'wb')
+            lines = (tdf.position.astype(str) + '\t' + tdf.RefAllele + '\t' +
+                     tdf.AltAllele)
+            f.write('\n'.join(lines) + '\n')
+            f.close()
+
 def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
                      outdir, tempdir, conda_env=None, shell=False, threads=6):
     """
