@@ -11,11 +11,12 @@ some of the common scientific python packages. I recommend using [Anaconda
 python](https://store.continuum.io/cshop/anaconda/) since it includes most of
 the needed packages. If you are using Anaconda, I'd recommend making new
 environments for different projects. Besides the default Anaconda packages, you
-will need the following (available through `pip`):
+will need the following (available through `conda` or `pip`):
 
 * HTSeq
 * pysam (this is available through conda but currently it's an old version so
   you have to get it using `pip`)
+* PyVCF
 
 ### `rpy2`
 
