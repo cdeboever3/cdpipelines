@@ -1131,8 +1131,8 @@ def wasp_remap(
     rgpl='ILLUMINA',
     rgpu='',
     tempdir='/scratch', 
-    threads=32, 
-    picard_memory=58, 
+    threads=10, 
+    picard_memory=15, 
     shell=False,
 ):
     """
