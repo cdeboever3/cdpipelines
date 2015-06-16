@@ -14,6 +14,7 @@ environments for different projects. Besides the default Anaconda packages, you
 will need the following (available through `conda` or `pip`):
 
 * HTSeq
+* pandas
 * pysam (this is available through conda but currently it's an old version so
   you have to get it using `pip`)
 * PyVCF

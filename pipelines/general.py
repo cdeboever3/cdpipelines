@@ -919,6 +919,7 @@ def _wasp_snp_directory(vcf, directory, sample_name=None):
         file.
 
     """
+    import pandas as pd
     import vcf as pyvcf
     chrom = []
     pos = []
