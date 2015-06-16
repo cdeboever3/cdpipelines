@@ -1017,7 +1017,6 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     job.output_files_to_copy += fns
 
     from __init__ import scripts
-    is_phased = str(is_phased).upper()
     input_script = os.path.join(scripts, 'make_wasp_input.py')
 
     # Run WASP to swap alleles.
