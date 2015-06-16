@@ -1134,8 +1134,8 @@ def wasp_remap(
     shell=False,
 ):
     """
-    Make a PBS or shell script for aligning ATAC-seq reads with STAR. The
-    defaults are set for use on the Frazer lab's PBS scheduler on FLC.
+    Make a PBS or shell script for re-aligning reads from with variants using
+    STAR. The defaults are set for use on the Frazer lab's PBS scheduler on FLC.
 
     Parameters
     ----------
