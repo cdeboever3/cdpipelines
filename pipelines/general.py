@@ -951,8 +951,9 @@ def _wasp_snp_directory(vcf, directory, sample_name=None):
             f.write('\n'.join(lines) + '\n')
             f.close()
 
-def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
-                     outdir, tempdir, conda_env=None, shell=False, threads=6):
+def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
+                     outdir, tempdir, vcf_sample_name=None, conda_env=None,
+                     shell=False, threads=6):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
@@ -966,8 +967,8 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
     find_intersecting_snps_path : str
         Path to find_intersecting_snps.py script.
 
-    snp_dir : str
-        Path to directory containing SNP input files for WASP.
+    vcf : str
+        VCF file containing exonic SNPs.
     
     sample_name : str
         Sample name used for naming files etc.
@@ -977,6 +978,10 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
 
     tempdir : str
         Directory to store temporary files.
+
+    vcf_sample_name : str
+        Sample name of this sample in the VCF file (if different than
+        sample_name).
 
     conda_env : str
         If provided, load conda environment with this name.
@@ -992,8 +997,12 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
     
+    if not vcf_sample_name:
+        vcf_sample_name = sample_name
+
     # Input files.
     temp_bam = job.add_input_file(bam)
+    temp_vcf = job.add_input_file(vcf)
     job.copy_input_files()
     
     # Files to copy to output directory.
@@ -1007,10 +1016,18 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, snp_dir, sample_name,
     ]
     job.output_files_to_copy += fns
 
+    from __init__ import scripts
+    is_phased = str(is_phased).upper()
+    input_script = os.path.join(scripts, 'make_wasp_input.py')
+
     # Run WASP to swap alleles.
     with open(job.filename, "a") as f:
+        snp_directory = os.path.join(tempdir, 'snps')
+        f.write('python {} -s {} {} {}\n\n'.format(input_script,
+                                                   vcf_sample_name, temp_vcf,
+                                                   snp_directory))
         f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
-                                                temp_bam, snp_dir))
+                                                temp_bam, snp_directory))
     
     job.write_end()
     return job.filename
