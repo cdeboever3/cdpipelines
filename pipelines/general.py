@@ -1203,7 +1203,7 @@ def wasp_remap(
                                    'seq_type'.format(', '.join(seq_types)))
     job_suffix = 'wasp_remap'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=False, queue='high', conda_env=conda_env,
+                    shell=shell, queue='high', conda_env=conda_env,
                     environment=None, copy_input=True)
     
     # Input files.
