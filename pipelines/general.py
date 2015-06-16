@@ -1021,7 +1021,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
 
     # Run WASP to swap alleles.
     with open(job.filename, "a") as f:
-        snp_directory = os.path.join(tempdir, 'snps')
+        snp_directory = os.path.join(job.tempdir, 'snps')
         f.write('python {} -s {} {} {}\n\n'.format(input_script,
                                                    vcf_sample_name, temp_vcf,
                                                    snp_directory))
