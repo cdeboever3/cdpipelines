@@ -1080,10 +1080,6 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
     job_suffix = 'wasp_alignment_compare'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
-    # class JobScript:
-    #     def __init__(sample_name, job_suffix, tempdir, outdir, threads, shell=False,
-    #                  queue='high', conda_env=None, environment=None,
-    #                  copy_input=True):
 
     # Input files.
     temp_to_remap_bam = job.add_input_file(to_remap_bam)
@@ -1093,10 +1089,10 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
     # Files that will be created.
     temp_filtered_bam = os.path.join(
-        tempdir, '{}_filtered.bam'.format(sample_name))
+        job.tempdir, '{}_filtered.bam'.format(sample_name))
     job.temp_files_to_delete.append(temp_filtered_bam)
     coord_sorted_bam = os.path.join(
-        tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
+        job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
     job.output_files_to_copy.append(coord_sorted_bam)
     bam_index = coord_sorted_bam + '.bai'
     job.output_files_to_copy.append(bam_index)
@@ -1109,7 +1105,7 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
         # Coordinate sort and index.
         lines = _picard_coord_sort(temp_filtered_bam, coord_sorted_bam,
-                                   picard_path, picard_memory, tempdir,
+                                   picard_path, picard_memory, job.tempdir,
                                    bam_index=bam_index)
         f.write(lines)
         f.write('\nwait\n\n')
