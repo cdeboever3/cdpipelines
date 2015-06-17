@@ -1046,7 +1046,8 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                            shell=False, threads=6):
     """
     Write pbs or shell script for checking original mapping position of reads
-    against remapping after swapping alleles using WASP.
+    against remapping after swapping alleles using WASP, then count allele
+    coverage for each SNP.
 
     Parameters
     ----------
@@ -1060,6 +1061,9 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
 
     remapped_bam : str
         Bam file with remapped reads.
+
+    snps : str
+        Path to TSV file with SNPs (made by wasp_allele_swap).
 
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py script.
@@ -1114,6 +1118,17 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam,
                                    picard_path, picard_memory, job.tempdir,
                                    bam_index=bam_index)
         f.write(lines)
+        f.write('\nwait\n\n')
+        
+        # Count allele coverage.
+        from __init__ import scripts
+        count_script = os.path.join(scripts, 'count_alleles.py')
+        if stranded:
+            strand_info = ' --stranded '
+        else:
+            strand_info = ' '
+        f.write('python {}{}{} {}\n\n'.format(count_info, strand_info,
+                                              coord_sorted_bam, snps))
         f.write('\nwait\n\n')
     
     job.write_end()

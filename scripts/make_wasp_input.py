@@ -21,6 +21,5 @@ def main():
     ps.general._wasp_snp_directory(vcf, directory, all_snps,
                                    sample_name=sample_name)
 
-
 if __name__ == '__main__':
     main()
