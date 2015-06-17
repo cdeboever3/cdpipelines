@@ -1212,10 +1212,10 @@ def wasp_remap(
     job.copy_input_files()
 
     # Files that will be created.
-    aligned_bam = os.path.join(tempdir, 'Aligned.out.bam')
+    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
     job.temp_files_to_delete.append(aligned_bam)
     coord_sorted_bam = os.path.join(
-        tempdir, '{}_sorted.bam'.format(sample_name))
+        job.tempdir, '{}_sorted.bam'.format(sample_name))
     job.output_files_to_copy.append(coord_sorted_bam)
     job.temp_files_to_delete.append('_STARtmp')
 
