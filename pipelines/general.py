@@ -1133,8 +1133,9 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
             strand_info = ' '
         counts = os.path.join(job.outdir,
                               '{}_allele_counts.tsv'.format(sample_name))
-        f.write('python {}{}{} {}\n\n'.format(count_script, strand_info,
-                                              coord_sorted_bam, snps, counts))
+        f.write('python {}{}{} {} {}\n\n'.format(count_script, strand_info,
+                                                 coord_sorted_bam, snps,
+                                                 counts))
         f.write('\nwait\n\n')
     
     job.write_end()
