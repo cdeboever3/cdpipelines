@@ -900,7 +900,7 @@ def _picard_mark_duplicates(in_bam, out_bam, duplicate_metrics, picard_path,
         lines += '\n\n'
     return lines
 
-def _wasp_snp_directory(vcf, directory, sample_name=None):
+def _wasp_snp_directory(vcf, directory, all_snps, sample_name=None):
     """
     Convert VCF file into input files directory and files needed for WASP. Only
     bi-allelic heterozygous sites are used.
@@ -913,6 +913,10 @@ def _wasp_snp_directory(vcf, directory, sample_name=None):
     directory : str
         Output directory. This is the directory that will hold the files for
         WASP.
+
+    all_snps : str
+        Path to output file for all information on all SNPs. This can be used
+        later to count coverage.
 
     sample_name : str
         If provided, use this sample name to get heterozygous SNPs from VCF
@@ -941,7 +945,8 @@ def _wasp_snp_directory(vcf, directory, sample_name=None):
                 ref.append(record.REF)
                 alt.append(record.ALT[0].sequence)
     df = pd.DataFrame([chrom, pos, ref, alt], 
-                      index=['chrom', 'position', 'RefAllele', 'AltAllele']).T
+                      index=['chrom', 'position', 'ref', 'alt']).T
+    df.to_csv(all_snps, sep='\t', index=False)
     if not os.path.exists(directory):
         os.makedirs(directory)
     for c in set(df.chrom):
@@ -949,8 +954,8 @@ def _wasp_snp_directory(vcf, directory, sample_name=None):
         if tdf.shape[0] > 0:
             f = gzip.open(os.path.join(directory, '{}.snps.txt.gz'.format(c)),
                           'wb')
-            lines = (tdf.position.astype(str) + '\t' + tdf.RefAllele + '\t' +
-                     tdf.AltAllele)
+            lines = (tdf.position.astype(str) + '\t' + tdf.ref + '\t' +
+                     tdf.alt)
             f.write('\n'.join(lines) + '\n')
             f.close()
 
@@ -1025,9 +1030,10 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     # Run WASP to swap alleles.
     with open(job.filename, "a") as f:
         snp_directory = os.path.join(job.tempdir, 'snps')
-        f.write('python {} -s {} {} {}\n\n'.format(input_script,
-                                                   vcf_sample_name, temp_vcf,
-                                                   snp_directory))
+        all_snps = os.path.join(job.outdir, 'snps.tsv')
+        f.write('python {} -s {} {} {} {}\n\n'.format(input_script,
+                                                      vcf_sample_name, temp_vcf,
+                                                      snp_directory, all_snps))
         f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
                                                 temp_bam, snp_directory))
     
