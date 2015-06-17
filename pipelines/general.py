@@ -1232,10 +1232,6 @@ def wasp_remap(
                                 rgpu, star_index, star_path, threads)
             f.write(lines)
             f.write('wait\n\n')
-            lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
-                                       picard_path, picard_memory, tempdir)
-            f.write(lines)
-            f.write('wait\n\n')
         
         elif seq_type == 'ATAC':
             from atacseq import _star_align
@@ -1244,11 +1240,11 @@ def wasp_remap(
             f.write(lines)
             f.write('wait\n\n')
 
-            # Coordinate sort bam file.
-            lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
-                                       picard_path, picard_memory, job.tempdir)
-            f.write(lines)
-            f.write('wait\n\n')
+        # Coordinate sort bam file.
+        lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
+                                   picard_path, picard_memory, job.tempdir)
+        f.write(lines)
+        f.write('wait\n\n')
 
     job.write_end()
     return job.filename
