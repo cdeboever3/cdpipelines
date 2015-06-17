@@ -1042,7 +1042,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
 
 def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
                            filter_remapped_reads_path, sample_name, outdir,
-                           tempdir, picard_path, strand_specifc=False,
+                           tempdir, picard_path, strand_specific=False,
                            picard_memory=12, conda_env='', shell=False,
                            threads=6):
     """
