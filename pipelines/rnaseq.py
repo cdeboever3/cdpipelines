@@ -23,11 +23,11 @@ def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
 
     Parameters
     ----------
-    r1_fastqs : list 
-        List of paths to gzipped R1 fastq file(s). 
+    r1_fastq : str 
+        Path to R1 fastq file.
 
-    r2_fastqs : list 
-        List of paths to gzipped R2 fastq file(s). 
+    r2_fastq : str 
+        Path to R2 fastq file.
 
     sample : str
         Sample name.
