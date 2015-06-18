@@ -1013,6 +1013,11 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     temp_vcf = job.add_input_file(vcf)
     job.copy_input_files()
     
+    # Files that will be created.
+    temp_uniq_bam = os.path.join(
+        job.tempdir, '{}_uniq.bam'.format(sample_name))
+    job.temp_files_to_delete.append(temp_uniq_bam)
+    
     # Files to copy to output directory.
     prefix = os.path.splitext(os.path.split(bam)[1])[0]
     fns = [
@@ -1034,8 +1039,11 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
         f.write('python {} -s {} {} {} {}\n\n'.format(input_script,
                                                       vcf_sample_name, temp_vcf,
                                                       snp_directory, all_snps))
+        f.write('{} view -b -q 255 {} > {}\n\n'.format(samtools_path, temp_bam,
+                                                       temp_uniq_bam))
+        f.write('wait\n\n')
         f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
-                                                temp_bam, snp_directory))
+                                                temp_uniq_bam, snp_directory))
     
     job.write_end()
     return job.filename
