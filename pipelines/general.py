@@ -1373,8 +1373,8 @@ def run_mbased(
                     queue='high', environment=environment, copy_input=True)
     
     # I'm going to define some file names used later.
-    locus_outfile = os.path.join(outdir, '{}_locus.tsv'.format(sample_name))
-    snv_outfile = os.path.join(outdir, '{}_snv.tsv'.format(sample_name))
+    locus_outfile = os.path.join(job.outdir, '{}_locus.tsv'.format(sample_name))
+    snv_outfile = os.path.join(job.outdir, '{}_snv.tsv'.format(sample_name))
     
     with open(job.filename, "a") as f:
         lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
