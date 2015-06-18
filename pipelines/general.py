@@ -1268,8 +1268,8 @@ def wasp_remap(
         # # Coordinate sort bam file.
         # lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
         #                            picard_path, picard_memory, job.tempdir)
-        f.write(lines)
-        f.write('wait\n\n')
+        # f.write(lines)
+        # f.write('wait\n\n')
 
     job.write_end()
     return job.filename
