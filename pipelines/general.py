@@ -1237,10 +1237,11 @@ def wasp_remap(
 
     # Files that will be created.
     aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    job.temp_files_to_delete.append(aligned_bam)
-    coord_sorted_bam = os.path.join(
-        job.tempdir, '{}_sorted.bam'.format(sample_name))
-    job.output_files_to_copy.append(coord_sorted_bam)
+    job.output_files_to_copy.append(aligned_bam)
+    # job.temp_files_to_delete.append(aligned_bam)
+    # coord_sorted_bam = os.path.join(
+    #     job.tempdir, '{}_sorted.bam'.format(sample_name))
+    # job.output_files_to_copy.append(coord_sorted_bam)
     job.temp_files_to_delete.append('_STARtmp')
 
     # Files to copy to output directory.
@@ -1264,9 +1265,9 @@ def wasp_remap(
             f.write(lines)
             f.write('wait\n\n')
 
-        # Coordinate sort bam file.
-        lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
-                                   picard_path, picard_memory, job.tempdir)
+        # # Coordinate sort bam file.
+        # lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
+        #                            picard_path, picard_memory, job.tempdir)
         f.write(lines)
         f.write('wait\n\n')
 
