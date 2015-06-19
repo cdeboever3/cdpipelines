@@ -1019,7 +1019,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     job.temp_files_to_delete.append(temp_uniq_bam)
     
     # Files to copy to output directory.
-    prefix = os.path.splitext(os.path.split(bam)[1])[0]
+    prefix = '{}_uniq'.format(sample_name)
     fns = [
         '{}.keep.bam'.format(prefix),
         '{}.remap.fq1.gz'.format(prefix),
