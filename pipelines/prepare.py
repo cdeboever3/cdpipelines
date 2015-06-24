@@ -176,7 +176,7 @@ def download_epacts(outdir):
     dest = os.path.join(outdir, 'EPACTS-3.2.6.tar.gz')
     _download_and_untar(src, dest, outdir)
     cwd = os.getcwd()
-    edir = os.path.join(outdir, 'EPACTS-3.2.6'))
+    edir = os.path.join(outdir, 'EPACTS-3.2.6')
     os.chdir(edir)
     subprocess.check_call('./configure --prefix={}'.format(edir), shell=True)
     subprocess.check_call('make > EPACTS_make.out 2> EPACTS_make.err',
