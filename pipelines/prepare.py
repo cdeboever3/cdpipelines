@@ -182,7 +182,7 @@ def download_epacts(outdir):
     subprocess.check_call('make > EPACTS_make.out 2> EPACTS_make.err',
                           shell=True)
     subprocess.check_call(('make install > EPACTS_make_install.out 2> '
-                           'EPACTS_make_install.err', shell=True)
+                           'EPACTS_make_install.err'), shell=True)
     os.chdir(cwd)
 
 def download_rsem(outdir, lncurses=False):
