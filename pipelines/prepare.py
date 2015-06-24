@@ -159,6 +159,32 @@ def download_weblogo(outdir):
     dest = os.path.join(outdir, 'weblogo')
     _download_and_untar(src, dest, outdir)
 
+def download_epacts(outdir):
+    """
+    Download and install EPACTS. bin is put in the source directory. If you have
+    a specific version of R you are using with a project, you should probably
+    have that R in your path. I think EPACTS may install an R package into
+    whatever R it finds in your path although I'm not sure about this.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save EPACTS to.
+
+    """
+    src = ('http://csg.sph.umich.edu/kang/epacts/download/EPACTS-3.2.6.tar.gz')
+    dest = os.path.join(outdir, 'EPACTS-3.2.6.tar.gz')
+    _download_and_untar(src, dest, outdir)
+    cwd = os.getcwd()
+    edir = os.path.join(outdir, 'EPACTS-3.2.6'))
+    os.chdir(edir)
+    subprocess.check_call('./configure --prefix={}'.format(edir), shell=True)
+    subprocess.check_call('make > EPACTS_make.out 2> EPACTS_make.err',
+                          shell=True)
+    subprocess.check_call(('make install > EPACTS_make_install.out 2> '
+                           'EPACTS_make_install.err', shell=True)
+    os.chdir(cwd)
+
 def download_rsem(outdir, lncurses=False):
     """
     Download RSEM.
