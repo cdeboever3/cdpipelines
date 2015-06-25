@@ -301,21 +301,49 @@ def download_subread(outdir):
                         'subread-1.4.6-Linux-x86_64.tar.gz')
     _download_and_untar(url, dest, outdir)
 
-def download_samtools(outdir):
+def download_bcftools(outdir):
     """
-    Download Samtools.
+    Download and compile bcftools.
 
     Parameters
     ----------
     outdir : str
-        Directory to save Samtools to.
+        Directory to save bcftools to.
 
     """
-    url = ('http://sourceforge.net/projects/samtools/files/samtools/1.0/'
-           'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2/download')
-    dest = os.path.join(outdir,
-                        'samtools-bcftools-htslib-1.0_x64-linux.tar.bz2')
+    url = ('https://github.com/samtools/bcftools/releases/download/1.2/'
+           'bcftools-1.2.tar.bz2')
+    dest = os.path.join(outdir, 'bcftools-1.2.tar.bz2')
     _download_and_untar(url, dest, outdir)
+    cwd = os.getcwd()
+    edir = os.path.join(outdir, 'bcftools-1.2')
+    os.chdir(edir)
+    subprocess.check_call('make > make.out 2> make.err', shell=True)
+    subprocess.check_call(('make prefix={} install > make_install.out 2> '
+                           'make_install.err'.format(edir)), shell=True)
+    os.chdir(cwd)
+
+def download_samtools(outdir):
+    """
+    Download and compile samtools.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save samtools to.
+
+    """
+    url = ('https://github.com/samtools/samtools/releases/download/1.2/'
+           'samtools-1.2.tar.bz2')
+    dest = os.path.join(outdir, 'samtools-1.2.tar.bz2')
+    _download_and_untar(url, dest, outdir)
+    cwd = os.getcwd()
+    edir = os.path.join(outdir, 'samtools-1.2')
+    os.chdir(edir)
+    subprocess.check_call('make > make.out 2> make.err', shell=True)
+    subprocess.check_call(('make prefix={} install > make_install.out 2> '
+                           'make_install.err'.format(edir)), shell=True)
+    os.chdir(cwd)
     
 def download_hg19(outdir, samtools_path):
     """
