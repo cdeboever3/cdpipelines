@@ -195,7 +195,7 @@ def download_rsem(outdir, lncurses=False):
         Directory to save RSEM.
 
     lncurses : bool
-        Set to true to use lncurses rather than lcurses to build samtools. See
+        Set to true to use lncurses rather than lcurses to build RSEM. See
         http://seqanswers.com/forums/showthread.php?t=6669 for more information.
 
     """
@@ -323,7 +323,7 @@ def download_bcftools(outdir):
                            'make_install.err'.format(edir)), shell=True)
     os.chdir(cwd)
 
-def download_samtools(outdir):
+def download_samtools(outdir, lncurses=False):
     """
     Download and compile samtools.
 
@@ -331,6 +331,10 @@ def download_samtools(outdir):
     ----------
     outdir : str
         Directory to save samtools to.
+
+    lncurses : bool
+        Set to true to use lncurses rather than lcurses to build samtools. See
+        http://seqanswers.com/forums/showthread.php?t=6669 for more information.
 
     """
     url = ('https://github.com/samtools/samtools/releases/download/1.2/'
@@ -340,6 +344,14 @@ def download_samtools(outdir):
     cwd = os.getcwd()
     edir = os.path.join(outdir, 'samtools-1.2')
     os.chdir(edir)
+    if lncurses:
+        f = open('Makefile', 'r')
+        lines = f.read().replace('lcurses', 'lncurses')
+        f.close()
+        f = open('Makefile', 'w')
+        f.write(lines)
+        f.close()
+
     subprocess.check_call('make > make.out 2> make.err', shell=True)
     subprocess.check_call(('make prefix={} install > make_install.out 2> '
                            'make_install.err'.format(edir)), shell=True)
