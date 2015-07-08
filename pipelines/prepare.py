@@ -706,6 +706,7 @@ def install_bioconductor_dependencies():
     robjects.r('biocLite("Gviz", ask=FALSE)')
     robjects.r('biocLite("goseq", ask=FALSE)')
     robjects.r('biocLite("org.Hs.eg.db", ask=FALSE)')
+    robjects.r('biocLite("qvalue", ask=FALSE)')
 
 def make_dexseq_annotation(gtf, out_gff):
     try:
