@@ -459,7 +459,7 @@ def align_and_sort(
         job.add_softlink(os.path.join(job.outdir, name), 
                          os.path.join(link_dir, 'bam', name))
         with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bam name="{}_bam" '
+            tf_lines = ('track type=bam name="{}_rna_bam" '
                         'description="RNAseq for {}" '
                         'bigDataUrl={}/bam/{}\n'.format(
                             sample_name, sample_name, web_path, name))
@@ -535,7 +535,7 @@ def align_and_sort(
                          os.path.join(link_dir, 'bw', name))
 
         with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bigWig name="{}_cov" '
+            tf_lines = ('track type=bigWig name="{}_rna_cov" '
                         'description="RNAseq coverage for {}" '
                         'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
                             sample_name, sample_name, web_path, name))
