@@ -698,19 +698,9 @@ def align_and_call_peaks(
 
     # Files that will be created.
     aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    job.temp_files_to_delete.append(aligned_bam)
-    coord_sorted_bam = os.path.join(
-        job.tempdir, '{}_sorted.bam'.format(sample_name))
-    job.temp_files_to_delete.append(coord_sorted_bam)
-    job.temp_files_to_delete.append('_STARtmp')
-    out_bam = os.path.join(
-        job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
-    bam_index = '{}.bai'.format(out_bam)
-    job.output_files_to_copy += [out_bam, bam_index]
-
-    # I'm going to define some file names used later.
-    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
     job.output_files_to_copy.append(aligned_bam)
+    
+    job.temp_files_to_delete.append('_STARtmp')
 
     filtered_bam = os.path.join(
         job.tempdir, '{}_atac_filtered.bam'.format(sample_name))
