@@ -559,7 +559,8 @@ def align_and_call_peaks(
     fastqc_path,
     samtools_path,
     blacklist_bed,
-    conda_env='',
+    conda_env=None,
+    environment=None,
     rgpl='ILLUMINA',
     rgpu='',
     tempdir='/scratch', 
@@ -638,6 +639,10 @@ def align_and_call_peaks(
         If provided, load conda environment with this name. This will control
         which version of MACS2 is used.
 
+    environment : str
+        Path to shell file that is sourced to set environmental variables and
+        paths.
+
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
 
@@ -674,7 +679,8 @@ def align_and_call_peaks(
     link_dir = os.path.join(link_dir, 'atac')
     job_suffix = 'alignment'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, queue='high', copy_input=True)
+                    shell=shell, queue='high', copy_input=True,
+                    conda_env=conda_env, environment=environment)
 
     # I'm going to handle the copying and deleting of the fastqs myself rather
     # than have the JobScript do it because I don't want to the fastqs to sit
