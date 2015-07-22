@@ -926,7 +926,7 @@ def align_and_call_peaks(
 
         # Call peaks with macs2.
         lines = _macs2(no_dup_bam, sample_name, job.outdir, tracklines_file,
-                       link_dir, web_path_file, broad=True)
+                       link_dir, web_path_file)
         f.write(lines)
         f.write('wait\n\n')
 
@@ -1402,6 +1402,8 @@ def macs2_peak_calling(
     f.write(lines)
     f.write('wait\n\n')
 
+    # TODO: check that the results of broad versus narrow are different. I don't
+    # think they are.
     # Run macs2 for broad peaks.
     lines = _macs2(
         temp_bam, 
