@@ -509,7 +509,7 @@ def _macs2(
     if broad:
         run_type = '--broad'
     lines = ('macs2 callpeak --nomodel --nolambda --keep-dup all \\\n'
-             '\t{} --slocal 10000 -f BAMPE -g hs \\\n'
+             '\t{} -f BAMPE -g hs \\\n'
              '\t-t {} \\\n'
              '\t-n {} \\\n'
              '\t--outdir {}\n\n'.format(
