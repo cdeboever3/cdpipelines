@@ -537,8 +537,8 @@ def download_r(outdir):
                            '2> R_configure.err'),
                           shell=True)
     subprocess.check_call('make > R_make.out 2> R_make.err', shell=True)
-    subprocess.check_call('make check > R_check.out 2> R_check.err', 
-                          shell=True)
+    # subprocess.check_call('make check > R_check.out 2> R_check.err', 
+    #                       shell=True)
     subprocess.check_call('make install > R_install.out 2> R_install.err', 
                           shell=True)
     os.chdir(cwd)
