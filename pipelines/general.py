@@ -701,7 +701,7 @@ class JobScript:
     def copy_input_files(self):
         if len(self.input_files_to_copy) > 0:
             with open(self.filename, "a") as f:
-                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+                f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.input_files_to_copy),
                     self.tempdir))
             self.temp_files_to_delete += [
