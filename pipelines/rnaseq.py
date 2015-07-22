@@ -383,7 +383,7 @@ def align_and_sort(
         # I'm going to copy the fastq files here rather than have the JobScript
         # class do it because I want to delete them as soon as I've combined
         # them into a single file.
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+        f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
             '\\\n\t'.join(r1_fastqs + r2_fastqs), job.tempdir))
         # f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
         #     '\\\n\t'.join(r1_fastqs + r2_fastqs),
