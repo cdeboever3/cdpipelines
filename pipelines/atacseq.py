@@ -763,7 +763,6 @@ def align_and_call_peaks(
         '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
         'fastqc_report.html')
     
-    job.temp_files_to_delete.append('_STARtmp')
     job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
                                  'SJ.out.tab']
 
@@ -931,8 +930,9 @@ def align_and_call_peaks(
         f.write('wait\n\n')
 
         # Make bigwig file.
-        _bigwig_files(no_dup_bam, out_bigwig, sample_name,
-                      bedgraph_to_bigwig_path, bedtools_path)
+        lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
+                              bedgraph_to_bigwig_path, bedtools_path)
+        f.write(lines)
         name = os.path.split(out_bigwig)[1]
         job.add_softlink(os.path.join(job.outdir, name), 
                          os.path.join(link_dir, 'bw', name))
