@@ -557,7 +557,6 @@ def align_and_call_peaks(
     bedgraph_to_bigwig_path,
     fastqc_path,
     samtools_path,
-    homer_path,
     blacklist_bed,
     conda_env='',
     rgpl='ILLUMINA',
@@ -629,9 +628,6 @@ def align_and_call_peaks(
     samtools_path : str
         Path to samtools executable.
 
-    homer_path : str
-        Path to HOMER bin.
-
     blacklist_bed : str
         String to bed file with blacklist regions. This should at least include
         the ENCODE blacklist regions. Read pairs where one or both reads
@@ -678,7 +674,6 @@ def align_and_call_peaks(
     job_suffix = 'alignment'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, queue='high', copy_input=True)
-    #TODO: make sure all tempdir and outdir go to job.tempdir/outdir
 
     # I'm going to handle the copying and deleting of the fastqs myself rather
     # than have the JobScript do it because I don't want to the fastqs to sit
@@ -693,7 +688,6 @@ def align_and_call_peaks(
         job.tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
     combined_r2 = os.path.join(
         job.tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
-    #TODO: deal with fastq files
 
     # Files that will be created.
     aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
