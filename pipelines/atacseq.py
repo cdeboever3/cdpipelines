@@ -514,6 +514,7 @@ def _macs2(
              '\t-n {} \\\n'
              '\t--outdir {}\n\n'.format(
                  run_type, bam, sample_name, outdir))
+    lines += 'macs2 --version\n\n'
     
     # Add tracklines to bed files and make softlinks.
     tf_lines = ''
