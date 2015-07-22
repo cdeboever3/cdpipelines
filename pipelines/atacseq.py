@@ -783,7 +783,7 @@ def align_and_call_peaks(
         # I'm going to copy the fastq files here rather than have the JobScript
         # class do it because I want to delete them as soon as I've combined
         # them into a single file.
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+        f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
             '\\\n\t'.join(r1_fastqs + r2_fastqs), job.tempdir))
 
         # Combine fastq files.
@@ -1084,7 +1084,7 @@ def combined_homer_peaks(
         f.write('source activate {}\n'.format(conda_env))
     f.write('mkdir -p {}\n'.format(tempdir))
     f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -Lavz \\\n{} \\\n\t.\n\n'.format(
+    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
         ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
 
     # Add executables to path because HOMER expects them there.
