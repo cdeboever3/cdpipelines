@@ -543,7 +543,7 @@ def _macs2(
 
     return lines
 
-def align_and_call_peaks(
+def align(
     r1_fastqs, 
     r2_fastqs, 
     outdir, 
@@ -739,11 +739,11 @@ def align_and_call_peaks(
     chrM_counts = os.path.join(
         job.outdir, '{}_chrM_counts.txt'.format(sample_name))
 
-    narrow_peak = os.path.join(
-        job.outdir, '{}_peaks.narrowPeak'.format(sample_name))
-    
-    broad_peak = os.path.join(
-        job.outdir, '{}_peaks.broadPeak'.format(sample_name))
+    # narrow_peak = os.path.join(
+    #     job.outdir, '{}_peaks.narrowPeak'.format(sample_name))
+    # 
+    # broad_peak = os.path.join(
+    #     job.outdir, '{}_peaks.broadPeak'.format(sample_name))
 
     # local_tagdir = '{}_tags'.format(sample_name)
     # temp_tagdir = os.path.join(tempdir, local_tagdir)
@@ -920,11 +920,11 @@ def align_and_call_peaks(
                                             picard_memory, job.tempdir, bg=True)
         f.write(lines)
 
-        # Call peaks with macs2.
-        lines = _macs2(no_dup_bam, sample_name, job.outdir, tracklines_file,
-                       link_dir, web_path_file)
-        f.write(lines)
-        f.write('wait\n\n')
+        # # Call peaks with macs2.
+        # lines = _macs2(no_dup_bam, sample_name, job.outdir, tracklines_file,
+        #                link_dir, web_path_file)
+        # f.write(lines)
+        # f.write('wait\n\n')
 
         # Make bigwig file.
         lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
