@@ -1348,7 +1348,7 @@ def macs2_peak_calling(
                     conda_env=conda_env, environment=environment)
 
     # I'm going to define some file names used later.
-    temp_bam = os.path.join(job.tempdir, os.path.split(bam)[1])
+    temp_bam = job.add_input_file(bam)
     job.temp_files_to_delete.append(temp_bam)
     
     with open(job.filename, "a") as f:
@@ -1356,7 +1356,7 @@ def macs2_peak_calling(
         lines = _macs2(
             temp_bam, 
             sample_name, 
-            outdir,
+            job.outdir,
             tracklines_file,
             link_dir,
             web_path_file,
