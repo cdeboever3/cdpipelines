@@ -1349,7 +1349,7 @@ def macs2_peak_calling(
 
     # I'm going to define some file names used later.
     temp_bam = job.add_input_file(bam)
-    job.temp_files_to_delete.append(temp_bam)
+    job.copy_input_files()
     
     with open(job.filename, "a") as f:
         # Run macs2 for narrow peaks.
