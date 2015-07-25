@@ -1316,15 +1316,14 @@ def macs2_peak_calling(
         figshare, etc.
 
     environment : str
-        Bash file with PATH information that can be sourced. This should include
-        the paths to executables HOMER will need like bedGraphToBigWig.
+        Bash file with PATH information that will be sourced. 
 
     conda_env : str
         If provided, load conda environment with this name. This will control
-        which version of nucleoatac is used.
+        which version of macs2 is used.
 
     tempdir : str
-        Directory to store files as nucleoatac runs.
+        Directory to store files as macs2 runs.
 
     threads : int
         Number of threads to reserve using PBS scheduler and for nucleoatac to
@@ -1339,97 +1338,35 @@ def macs2_peak_calling(
         Path to PBS/shell script.
 
     """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_macs2'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_macs2'.format(sample_name))
+    with open(web_path_file) as wpf:
+        web_path = wpf.readline().strip()
+    web_path = web_path + '/atac'
+    link_dir = os.path.join(link_dir, 'atac')
+    job_suffix = 'macs2'
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
+                    shell=shell, queue='high', copy_input=True,
+                    conda_env=conda_env, environment=environment)
 
     # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+    temp_bam = os.path.join(job.tempdir, os.path.split(bam)[1])
+    job.temp_files_to_delete.append(temp_bam)
     
-    # Files to copy to output directory.
-    files_to_copy = []
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = [temp_bam]
+    with open(job.filename, "a") as f:
+        # Run macs2 for narrow peaks.
+        lines = _macs2(
+            temp_bam, 
+            sample_name, 
+            outdir,
+            tracklines_file,
+            link_dir,
+            web_path_file,
+            broad=False,
+        )
+        f.write(lines)
+        f.write('wait\n\n')
 
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_macs2.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_macs2.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir,
-                           '{}_macs2.out'.format(sample_name))
-        err = os.path.join(outdir,
-                           '{}_macs2.err'.format(sample_name))
-        job_name = '{}_macs2'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-    
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-
-    f.write('source {}\n\n'.format(environment))
-    f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
-
-    # Run macs2 for narrow peaks.
-    lines = _macs2(
-        temp_bam, 
-        sample_name, 
-        outdir,
-        tracklines_file,
-        link_dir,
-        web_path_file,
-        broad=False,
-    )
-    f.write(lines)
-    f.write('wait\n\n')
-
-    # TODO: check that the results of broad versus narrow are different. I don't
-    # think they are.
-    # Run macs2 for broad peaks.
-    lines = _macs2(
-        temp_bam, 
-        sample_name, 
-        outdir,
-        tracklines_file,
-        link_dir,
-        web_path_file,
-        broad=True,
-    )
-    f.write(lines)
-    f.write('wait\n\n')
-
-    if tempdir != outdir:
-        if len(files_to_copy) > 0:
-            f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-                ' \\\n\t'.join(files_to_copy), outdir))
-
-    if len(files_to_remove) > 0:
-        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-            f.write('rsync -avz {} {}\n\n'.format(os.path.join(tempdir, '*'),
-                                                  outdir))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-
-    f.close()
-    return fn
+    job.write_end()
+    return job.filename
 
 def motif_analysis(
     bed, 
@@ -1487,11 +1424,10 @@ def motif_analysis(
         Whether to pass the -mask parameter to HOMER.
 
     conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of nucleoatac is used.
+        If provided, load conda environment with this name. 
 
     tempdir : str
-        Directory to store files as nucleoatac runs.
+        Directory to store files as motif analysis runs.
 
     threads : int
         Number of threads to reserve using PBS scheduler and for HOMER to use.
