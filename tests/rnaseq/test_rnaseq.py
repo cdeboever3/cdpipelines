@@ -4,6 +4,8 @@ import pytest
 
 import pipelines as ps
 
+WEB_PATH_FILE = os.path.join(ps._root, 'tests', 'rnaseq', 'web_path_file.txt')
+
 class TestPbsHeader:
     def test_run(self):
         """Test to make sure the function at least runs"""
@@ -109,7 +111,7 @@ class TestBigwigFiles:
 #         """Test to make sure the function at least runs"""
 #         tracklines_file = 'tracklines.txt'
 #         link_dir = '.'
-#         web_path_file = 'web_path_file.txt'
+#         web_path_file = WEB_PATH_FILE
 #         coord_sorted_bam = 'test.bam'
 #         bam_index = 'test.bam.bai'
 #         bigwig = 'test.bw'
@@ -125,7 +127,7 @@ class TestBigwigFiles:
 #         """Test to make sure the function at least runs for standed input"""
 #         tracklines_file = 'tracklines.txt'
 #         link_dir = '.'
-#         web_path_file = 'web_path_file.txt'
+#         web_path_file = WEB_PATH_FILE
 #         coord_sorted_bam = 'test.bam'
 #         bam_index = 'test.bam.bai'
 #         bigwig = 'plus.bw'
@@ -150,7 +152,7 @@ class TestAlignAndSort:
     #     star_index = 'path/to/index'
     #     tracklines_file = 'tracklines.txt'
     #     link_dir = '.'
-    #     web_path_file = 'web_path_file.txt'
+    #     web_path_file = WEB_PATH_FILE
     #     star_path = 'path/to/star'
     #     picard_path = 'path/to/picard'
     #     bedtools_path = 'path/to/bedtools'
@@ -191,7 +193,7 @@ class TestAlignAndSort:
         star_index = 'path/to/index'
         tracklines_file = 'tracklines.txt'
         link_dir = '.'
-        web_path_file = 'web_path_file.txt'
+        web_path_file = WEB_PATH_FILE
         star_path = 'path/to/star'
         picard_path = 'path/to/picard'
         bedtools_path = 'path/to/bedtools'
@@ -216,8 +218,9 @@ class TestAlignAndSort:
             ref_flat,
             rrna_intervals,
         )
-        # os.remove(fn)
+        os.remove(fn)
         os.remove(tracklines_file)
+        os.rmdir('s1_alignment')
 
     # def test_run_no_strand_specific(self):
     #     """Test to make sure the function at least runs"""
@@ -228,7 +231,7 @@ class TestAlignAndSort:
     #     star_index = 'path/to/index'
     #     tracklines_file = 'tracklines.txt'
     #     link_dir = '.'
-    #     web_path_file = 'web_path_file.txt'
+    #     web_path_file = WEB_PATH_FILE
     #     star_path = 'path/to/star'
     #     picard_path = 'path/to/picard'
     #     bedtools_path = 'path/to/bedtools'
@@ -267,7 +270,7 @@ class TestAlignAndSort:
     #     star_index = 'path/to/index'
     #     tracklines_file = 'tracklines.txt'
     #     link_dir = '.'
-    #     web_path_file = 'web_path_file.txt'
+    #     web_path_file = WEB_PATH_FILE
     #     star_path = 'path/to/star'
     #     picard_path = 'path/to/picard'
     #     bedtools_path = 'path/to/bedtools'
