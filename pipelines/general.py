@@ -636,6 +636,7 @@ class JobScript:
 
         # # self.files contains JobScriptFile objects.
         # self.files = []
+        self.copy_input = copy_input
         self.input_files_to_copy = []
         self.output_files_to_copy = []
         self.temp_files_to_delete = []
@@ -689,9 +690,24 @@ class JobScript:
         from target to link is made at the end of the jobscript."""
         self.softlinks.append([target, link])
 
-    def add_input_file(self, fn):
-        """Add input file to self.input_files_to_copy and return temp path"""
+    def add_temp_file(self, fn, copy=False):
+        """Add temporary file to self.temp_files_to_delete, add to
+        self.output_files_to_copy if copy, and return temp path"""
         self.input_files_to_copy.append(fn)
+        if copy:
+            self.output_files_to_copy.append(fn)
+        return self.temp_file_path(fn)
+
+    def add_input_file(self, fn, copy=None):
+        """Add input file to self.input_files_to_copy (if self.copy_input or
+        copy) and return temp path"""
+        if copy:
+            self.input_files_to_copy.append(fn)
+        elif copy == False:
+            pass 
+        else:
+            if self.copy_input:
+                self.input_files_to_copy.append(fn)
         return self.temp_file_path(fn)
 
     def temp_file_path(self, fn):
@@ -1544,6 +1560,7 @@ def merge_bams(
     picard_path,
     picard_memory,
     index=True,
+    bigwig=False,
     copy_bams=True,
     threads=8,
     shell=False,
@@ -1568,6 +1585,9 @@ def merge_bams(
     index : bool
         Whether to index the merged bam file.
 
+    bigwig : bool
+        Whether to make bigwig file from merged bam file.
+
     copy_bams : bool
         Whether to copy the input bam files to the temp directory. Not
         necessary if temp directory is on the same file system as bam files.
@@ -1584,25 +1604,38 @@ def merge_bams(
         Path to PBS/shell script.
 
     """
+    if bigwig:
+        index = True
+
     job_suffix = 'merged_bam'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
     
     # I'm going to define some file names used later.
-    merged_bam = os.path.join(tempdir,
-                                '{}_merged.bam'.format(merged_name))
-    job.output_files_to_copy.append(merged_bam)
+    merged_bam = job.add_temp_file('{}_merged.bam'.format(merged_name),
+                                   copy=True)
+    # merged_bam = os.path.join(tempdir,
+    #                             '{}_merged.bam'.format(merged_name))
+    # job.output_files_to_copy.append(merged_bam)
     if index:
-        merged_bam_index = os.path.join(tempdir,
-                                    '{}_merged.bam.bai'.format(merged_name))
-        job.output_files_to_copy.append(merged_bam_index)
+        merged_bam_index = job.add_temp_file(
+            '{}_merged.bam'.format(merged_name), copy=True)
+        # merged_bam_index = os.path.join(tempdir,
+        #                             '{}_merged.bam.bai'.format(merged_name))
+        # job.output_files_to_copy.append(merged_bam_index)
+    
+    if bigwig:
+        merged_bam_index = job.add_temp_file(
+            '{}_merged.bw'.format(merged_name), copy=True)
     
     if copy_bams:
-        self.input_files_to_copy += bams
-        # add line to remove bams
+        temp_bams = []
+        for bam in bams:
+            temp_bams.append(job.add_input_file(bam))
+        # self.input_files_to_copy += bams
 
     with open(job.filename, "a") as f:
-        lines = _picard_merge(bams, merged_bam, picard_memory, picard_path,
+        lines = _picard_merge(temp_bams, merged_bam, picard_memory, picard_path,
                               tempdir)
         f.write(lines)
         
@@ -1612,6 +1645,10 @@ def merge_bams(
             f.write(lines)
 
         # add option for making bigwig
+        if bigwig:
+            lines = _bigwig_files(in_bam, out_bigwig, sample_name,
+                                  bedgraph_to_bigwig_path, bedtools_path)
+            f.write(lines)
 
     job.write_end()
     return fn
