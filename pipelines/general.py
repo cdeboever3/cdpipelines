@@ -693,7 +693,6 @@ class JobScript:
     def add_temp_file(self, fn, copy=False):
         """Add temporary file to self.temp_files_to_delete, add to
         self.output_files_to_copy if copy, and return temp path"""
-        self.input_files_to_copy.append(fn)
         if copy:
             self.output_files_to_copy.append(fn)
         return self.temp_file_path(fn)
