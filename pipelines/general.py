@@ -1644,7 +1644,7 @@ def merge_bams(
         
         if index:
             lines = _picard_index(merged_bam, merged_bam_index, picard_memory,
-                                  picard_path, tempdir)
+                                  picard_path, tempdir, bg=bigwig)
             f.write(lines)
 
         if bigwig:
