@@ -1613,7 +1613,7 @@ def merge_bams(
 
     job_suffix = 'merged_bam'
     job = JobScript(merged_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, conda_env=conda_env)
+                    shell=shell, copy_input=not shell)
     
     # I'm going to define some file names used later.
     merged_bam = job.add_temp_file('{}_merged.bam'.format(merged_name),
