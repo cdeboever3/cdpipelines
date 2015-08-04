@@ -1612,7 +1612,7 @@ def merge_bams(
         assert bedtools_path
 
     job_suffix = 'merged_bam'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
+    job = JobScript(merged_name, job_suffix, outdir, threads, tempdir=tempdir,
                     shell=shell, conda_env=conda_env)
     
     # I'm going to define some file names used later.
