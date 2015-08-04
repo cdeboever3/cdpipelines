@@ -1653,4 +1653,4 @@ def merge_bams(
             f.write(lines)
 
     job.write_end()
-    return fn
+    return job.filename
