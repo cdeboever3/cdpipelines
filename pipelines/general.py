@@ -1570,7 +1570,7 @@ def merge_bams(
 
     copy_bams : bool
         Whether to copy the input bam files to the temp directory. Not
-        necessarcy if temp directory is on the same file system as bam files.
+        necessary if temp directory is on the same file system as bam files.
 
     threads : int
         Number of threads to request from PBS scheduler.
@@ -1584,72 +1584,34 @@ def merge_bams(
         Path to PBS/shell script.
 
     """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_merged_bam'.format(merged_name))
-    outdir = os.path.join(outdir, '{}_merged_bam'.format(merged_name))
-
+    job_suffix = 'merged_bam'
+    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
+                    shell=shell, conda_env=conda_env)
+    
     # I'm going to define some file names used later.
     merged_bam = os.path.join(tempdir,
                                 '{}_merged.bam'.format(merged_name))
-    merged_bam_index = os.path.join(tempdir,
-                                '{}_merged.bam.bai'.format(merged_name))
-    
-    # Files to copy to output directory.
-    files_to_copy = [merged_bam]
+    job.output_files_to_copy.append(merged_bam)
     if index:
-        files_to_copy.append(merged_bam_index)
+        merged_bam_index = os.path.join(tempdir,
+                                    '{}_merged.bam.bai'.format(merged_name))
+        job.output_files_to_copy.append(merged_bam_index)
     
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = []
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_merged_bam.sh'.format(merged_name))
-    else:
-        fn = os.path.join(outdir, '{}_merged_bam.pbs'.format(merged_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_merged_bam.out'.format(merged_name))
-        err = os.path.join(outdir, '{}_merged_bam.err'.format(merged_name))
-        job_name = '{}_merged_bam'.format(merged_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
     if copy_bams:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(bams), tempdir))
-        bams = [os.path.split(x)[1] for x in bams]
-        files_to_remove += bams
+        self.input_files_to_copy += bams
+        # add line to remove bams
 
-    lines = _picard_merge(bams, merged_bam, picard_memory, picard_path,
-                          tempdir)
-    f.write(lines)
+    with open(job.filename, "a") as f:
+        lines = _picard_merge(bams, merged_bam, picard_memory, picard_path,
+                              tempdir)
+        f.write(lines)
+        
+        if index:
+            lines = _picard_index(merged_bam, merged_bam_index, picard_memory,
+                                  picard_path, tempdir)
+            f.write(lines)
 
-    lines = _picard_index(merged_bam, merged_bam_index, picard_memory,
-                          picard_path, tempdir)
-    f.write(lines)
+        # add option for making bigwig
 
-    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-        ' \\\n\t'.join(files_to_copy),
-        outdir))
-    if len(files_to_remove) > 0:
-        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
+    job.write_end()
     return fn
