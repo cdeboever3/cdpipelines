@@ -708,7 +708,11 @@ class JobScript:
         else:
             if self.copy_input:
                 self.input_files_to_copy.append(fn)
-        return self.temp_file_path(fn)
+                copy = True
+        if copy:
+            return self.temp_file_path(fn)
+        else:
+            return os.path.realpath(fn)
 
     def temp_file_path(self, fn):
         """Return the path to the temporary version of an input file"""
