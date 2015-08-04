@@ -1623,7 +1623,7 @@ def merge_bams(
     # job.output_files_to_copy.append(merged_bam)
     if index:
         merged_bam_index = job.add_temp_file(
-            '{}_merged.bam'.format(merged_name), copy=True)
+            '{}_merged.bam.bai'.format(merged_name), copy=True)
         # merged_bam_index = os.path.join(tempdir,
         #                             '{}_merged.bam.bai'.format(merged_name))
         # job.output_files_to_copy.append(merged_bam_index)
