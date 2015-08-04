@@ -1632,11 +1632,10 @@ def merge_bams(
         merged_bam_index = job.add_temp_file(
             '{}_merged.bw'.format(merged_name), copy=True)
     
-    if copy_bams:
-        temp_bams = []
-        for bam in bams:
-            temp_bams.append(job.add_input_file(bam))
-        # self.input_files_to_copy += bams
+    temp_bams = []
+    for bam in bams:
+        temp_bams.append(job.add_input_file(bam))
+    # self.input_files_to_copy += bams
 
     with open(job.filename, "a") as f:
         lines = _picard_merge(temp_bams, merged_bam, picard_memory, picard_path,
