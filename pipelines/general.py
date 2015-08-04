@@ -1648,7 +1648,7 @@ def merge_bams(
             f.write(lines)
 
         if bigwig:
-            lines = _bigwig_files(in_bam, out_bigwig, sample_name,
+            lines = _bigwig_files(merged_bam, out_bigwig, sample_name,
                                   bedgraph_to_bigwig_path, bedtools_path)
             f.write(lines)
 
