@@ -1561,6 +1561,8 @@ def merge_bams(
     picard_memory,
     index=True,
     bigwig=False,
+    bedgraph_to_bigwig_path=None,
+    bedtools_path=None,
     copy_bams=True,
     threads=8,
     shell=False,
@@ -1606,6 +1608,8 @@ def merge_bams(
     """
     if bigwig:
         index = True
+        assert bedgraph_to_bigwig_path
+        assert bedtools_path
 
     job_suffix = 'merged_bam'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
@@ -1644,7 +1648,6 @@ def merge_bams(
                                   picard_path, tempdir)
             f.write(lines)
 
-        # add option for making bigwig
         if bigwig:
             lines = _bigwig_files(in_bam, out_bigwig, sample_name,
                                   bedgraph_to_bigwig_path, bedtools_path)
