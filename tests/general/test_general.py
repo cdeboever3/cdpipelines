@@ -136,16 +136,18 @@ class TestWaspAlleleSwap:
         """Test to make sure the function at least runs"""
         bam = 'test.bam'
         find_intersecting_snps_path = 'path/to/find_intersecting_snps.py'
-        snp_dir = 'test/dir'
+        vcf = 'test/sample.vcf'
         sample_name = 'test'
         outdir = 'path/to/out'
+        samtools_path = 'path/to/samtools'
         tempdir = 'path/to/temp/dir'
         fn = ps.general.wasp_allele_swap(
             bam, 
             find_intersecting_snps_path,
-            snp_dir, 
+            vcf,
             sample_name, 
             outdir, 
+            samtools_path,
             tempdir,
             conda_env=None, 
             shell=False, 
@@ -159,16 +161,17 @@ class TestWaspAlignmentCompare:
         to_remap_bam = 'to_remap.bam'
         to_remap_num = 'to_remap.num'
         remapped_bam = 'remapped.bam'
+        snps = 'snps.tsv',
         filter_remapped_reads_path = 'path/to/filter_remapped_reads.py'
         sample_name = 'test'
         outdir = 'path/to/out'
         tempdir = 'path/to/temp/dir'
         picard_path = 'path/to/picard'
-
         fn = ps.general.wasp_alignment_compare(
             to_remap_bam, 
             to_remap_num, 
             remapped_bam,
+            snps, 
             filter_remapped_reads_path, 
             sample_name, 
             outdir, 
