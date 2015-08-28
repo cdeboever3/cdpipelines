@@ -697,32 +697,45 @@ def align(
         job.tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
 
     # Files that will be created.
-    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    job.output_files_to_copy.append(aligned_bam)
+    aligned_bam = job.add_temp_file('Aligned.out.bam', copy=True)
+    # aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
+    # job.output_files_to_copy.append(aligned_bam)
     
     job.temp_files_to_delete.append('_STARtmp')
 
-    filtered_bam = os.path.join(
-        job.tempdir, '{}_atac_filtered.bam'.format(sample_name))
-    job.temp_files_to_delete.append(filtered_bam)
+    filtered_bam = job.add_temp_file('{}_atac_filtered.bam'.format(sample_name))
+    # filtered_bam = os.path.join(
+    #     job.tempdir, '{}_atac_filtered.bam'.format(sample_name))
+    # job.temp_files_to_delete.append(filtered_bam)
 
-    coord_sorted_bam = os.path.join(
-        job.tempdir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
-    job.temp_files_to_delete.append(coord_sorted_bam)
+    coord_sorted_bam = job.add_temp_file('{}_atac_filtered_coord_sorted.bam'.format(sample_name))
+    # coord_sorted_bam = os.path.join(
+    #     job.tempdir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
+    # job.temp_files_to_delete.append(coord_sorted_bam)
 
-    no_dup_bam = os.path.join(
-        job.tempdir, '{}_atac_no_dup.bam'.format(sample_name))
-    job.output_files_to_copy.append(no_dup_bam)
+    no_dup_bam = job.add_temp_file('{}_atac_no_dup.bam'.format(sample_name),
+                                   copy=True)
+    # no_dup_bam = os.path.join(
+    #     job.tempdir, '{}_atac_no_dup.bam'.format(sample_name))
+    # job.output_files_to_copy.append(no_dup_bam)
 
-    bam_index = os.path.join(
-        job.tempdir, '{}_atac_no_dup.bam.bai'.format(sample_name))
-    job.output_files_to_copy.append(bam_index)
+    bam_index = job.add_temp_file('{}_atac_no_dup.bam.bai'.format(sample_name),
+                                  copy=True)
+    # bam_index = os.path.join(
+    #     job.tempdir, '{}_atac_no_dup.bam.bai'.format(sample_name))
+    # job.output_files_to_copy.append(bam_index)
 
-    qsorted_bam = os.path.join(
-        job.tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
+    qsorted_bam = job.add_temp_file('{}_atac_no_dup_qsorted.bam'.format(sample_name),
+                                    copy=True)
+    # qsorted_bam = os.path.join(
+    #     job.tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
 
-    out_bigwig = os.path.join(job.tempdir, '{}_atac.bw'.format(sample_name))
-    job.output_files_to_copy.append(out_bigwig)
+    out_bigwig = job.add_temp_file(os.path.join(job.tempdir,
+                                                '{}_atac.bw'.format(sample_name)),
+                                   copy=True)
+
+    # out_bigwig = os.path.join(job.tempdir, '{}_atac.bw'.format(sample_name))
+    # job.output_files_to_copy.append(out_bigwig)
 
     insert_metrics = os.path.join(
         job.outdir, '{}_insert_metrics.txt'.format(sample_name))
@@ -739,16 +752,6 @@ def align(
     chrM_counts = os.path.join(
         job.outdir, '{}_chrM_counts.txt'.format(sample_name))
 
-    # narrow_peak = os.path.join(
-    #     job.outdir, '{}_peaks.narrowPeak'.format(sample_name))
-    # 
-    # broad_peak = os.path.join(
-    #     job.outdir, '{}_peaks.broadPeak'.format(sample_name))
-
-    # local_tagdir = '{}_tags'.format(sample_name)
-    # temp_tagdir = os.path.join(tempdir, local_tagdir)
-    # final_tagdir = os.path.join(outdir, local_tagdir)
-    
     tn = os.path.split(combined_r1)[1]
     r1_fastqc = os.path.join(
         job.outdir, 
@@ -763,20 +766,7 @@ def align(
     job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
                                  'SJ.out.tab']
 
-    # # Files to copy to output directory.
-    # files_to_copy = [aligned_bam, no_dup_bam, bam_index, qsorted_bam, 'Log.out',
-    #                  'Log.final.out', 'Log.progress.out', 'SJ.out.tab',
-    #                  temp_tagdir]
-    # # Temporary files that can be deleted at the end of the job. We may not want
-    # # to delete the temp directory if the temp and output directory are the
-    # # same.
-    # files_to_remove = [combined_r1, combined_r2, aligned_bam, filtered_bam,
-    #                    coord_sorted_bam, '_STARtmp']
-
     with open(job.filename, "a") as f:
-        # # Add HOMER executables to path because HOMER expects them there.
-        # f.write('export PATH="{}:$PATH"\n\n'.format(homer_path))
-    
         # I'm going to copy the fastq files here rather than have the JobScript
         # class do it because I want to delete them as soon as I've combined
         # them into a single file.
@@ -920,12 +910,6 @@ def align(
                                             picard_memory, job.tempdir, bg=True)
         f.write(lines)
 
-        # # Call peaks with macs2.
-        # lines = _macs2(no_dup_bam, sample_name, job.outdir, tracklines_file,
-        #                link_dir, web_path_file)
-        # f.write(lines)
-        # f.write('wait\n\n')
-
         # Make bigwig file.
         lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
                               bedgraph_to_bigwig_path, bedtools_path)
@@ -939,19 +923,6 @@ def align(
                         'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
                             sample_name, sample_name, web_path, name))
             tf.write(tf_lines)
-
-        # # Run HOMER.
-        # lines = _homer(qsorted_bam, sample_name, temp_tagdir, final_tagdir,
-        #                homer_path, link_dir, bedtools_path, bigwig=True)
-        # f.write(lines)
-        # f.write('wait\n\n')
-
-    # Make softlinks and tracklines for genome browser.
-    # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-    #                               no_dup_bam, bam_index, r1_fastqc,
-    #                               r2_fastqc, narrow_peak, broad_peak,
-    #                               sample_name, outdir)
-    # f.write(lines)
 
     job.write_end()
     return job.filename
