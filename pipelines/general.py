@@ -1006,6 +1006,9 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     tempdir : str
         Directory to store temporary files.
 
+    copy_vcf : str
+        Whether to copy vcf to temp directory.
+
     vcf_sample_name : str
         Sample name of this sample in the VCF file (if different than
         sample_name).
@@ -1029,7 +1032,7 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
 
     # Input files.
     temp_bam = job.add_input_file(bam)
-    temp_vcf = job.add_input_file(vcf)
+    temp_vcf = job.add_input_file(vcf, copy=copy_vcf)
     job.copy_input_files()
     
     # Files that will be created.
