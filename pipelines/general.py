@@ -979,8 +979,9 @@ def _wasp_snp_directory(vcf, directory, all_snps, sample_name=None):
             f.close()
 
 def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
-                     outdir, samtools_path, tempdir, vcf_sample_name=None,
-                     conda_env=None, shell=False, threads=6):
+                     outdir, samtools_path, tempdir, copy_vcf=True,
+                     vcf_sample_name=None, conda_env=None, shell=False,
+                     threads=6):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
