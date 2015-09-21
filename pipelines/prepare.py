@@ -323,6 +323,28 @@ def download_bcftools(outdir):
                            'make_install.err'.format(edir)), shell=True)
     os.chdir(cwd)
 
+def download_htslib(outdir):
+    """
+    Download and compile htslib.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save htslib to.
+
+    """
+    url = ('https://github.com/samtools/htslib/releases/download/1.2.1/'
+           'htslib-1.2.1.tar.bz2')
+    dest = os.path.join(outdir, 'htslib-1.2.1.tar.bz2')
+    _download_and_untar(url, dest, outdir)
+    cwd = os.getcwd()
+    edir = os.path.join(outdir, 'htslib-1.2.1')
+    os.chdir(edir)
+    subprocess.check_call('make > make.out 2> make.err', shell=True)
+    subprocess.check_call(('make prefix={} install > make_install.out 2> '
+                           'make_install.err'.format(edir)), shell=True)
+    os.chdir(cwd)
+
 def download_samtools(outdir, lncurses=False):
     """
     Download and compile samtools.
