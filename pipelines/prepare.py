@@ -813,3 +813,68 @@ def download_roadmap_25_state_chromatin_model(outdir):
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
         _download_file(src, dest)
+
+def download_roadmap_15_state_chromatin_model(outdir):
+    """
+    Download 15 state chromatin model from Roadmap Epigenomics. There is a bed
+    file for each cell type as well as an annotation file with state information
+    and file to convert the roadmap ID's to human readable cell types. Bed files
+    are sorted so they work with bedtools -sorted option.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save files to.
+
+    """
+    src = ('http://egg2.wustl.edu/roadmap/data/byFileType/chromhmmSegmentations'
+           '/ChmmModels/coreMarks/jointModel/final/all.mnemonics.bedFiles.tgz')
+    dest = os.path.join(outdir, os.path.split(src)[1])
+    _download_and_untar(src, dest, outdir, remove_tarball=True)
+    import glob
+    fns = os.path.join(outdir, '*bed.gz')
+    for fn in fns:
+        sorted_fn = '{}_sorted.bed'.format(fn.strip('.bed.gz'))
+        subprocess.check_call('zcat {} | sort -k 1,1 -k2,2n > {}'.format(
+            fn, sorted_fn), shell=True)
+        os.remove(fn)
+        
+    to_download = []
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/imputed12marks/'
+                       'jointModel/final/EIDlegend.txt')
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/coreMarks/jointModel'
+                       '/final/labelmap_15_coreMarks.tab')
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/coreMarks/jointModel'
+                       '/final/colormap_15_coreMarks.tab')
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_file(src, dest)
+    # The 15 state model doesn't have a nice annotation file like the 25 state
+    # model (although the table is on the website), so I'm just putting the info
+    # in here and I'll write the file myself.
+    columns = [u'STATE NO.', u'MNEMONIC', u'DESCRIPTION', u'COLOR NAME', u'COLOR
+               CODE']
+    vals = [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 
+            ['TssA', 'TssAFlnk', 'TxFlnk', 'Tx', 'TxWk', 'EnhG', 'Enh',
+             'ZNF/Rpts', 'Het', 'TssBiv', 'BivFlnk', 'EnhBiv', 'ReprPC',
+             'ReprPCWk', 'Quies'],
+            ['Active TSS', 'Flanking Active TSS', "Transcr. at gene 5' and 3'",
+             'Strong transcription', 'Weak transcription', 'Genic enhancers',
+             'Enhancers', 'ZNF genes & repeats', 'Heterochromatin',
+             'Bivalent/Poised TSS', 'Flanking Bivalent TSS/Enh', 'Bivalent
+             Enhancer', 'Repressed PolyComb', 'Weak Repressed PolyComb',
+             'Quiescent/Low'],
+            ['Red', 'Orange Red', 'LimeGreen', 'Green', 'DarkGreen',
+             'GreenYellow', 'Yellow', 'Medium Aquamarine', 'PaleTurquoise',
+             'IndianRed', 'DarkSalmon', 'DarkKhaki', 'Silver', 'Gainsboro',
+             'White']
+            ['255,0,0', '255,69,0', '50,205,50', '0,128,0', '0,100,0',
+             '194,225,5', '255,255,0', '102,205,170', '138,145,208',
+             '205,92,92', '233,150,122', '189,183,107', '128,128,128',
+             '192,192,192', '255,255,255']
+           ]
+    df = pd.DataFrame(vals, index=columns).T
+    df.to_csv(os.path.join(outdir, 'frazer_annotation.tsv'), index=None)
