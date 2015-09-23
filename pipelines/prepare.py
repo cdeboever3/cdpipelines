@@ -827,6 +827,10 @@ def download_roadmap_15_state_chromatin_model(outdir):
         Directory to save files to.
 
     """
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
     src = ('http://egg2.wustl.edu/roadmap/data/byFileType/chromhmmSegmentations'
            '/ChmmModels/coreMarks/jointModel/final/all.mnemonics.bedFiles.tgz')
     dest = os.path.join(outdir, os.path.split(src)[1])
