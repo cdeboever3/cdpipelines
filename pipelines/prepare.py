@@ -836,7 +836,7 @@ def download_roadmap_15_state_chromatin_model(outdir):
     dest = os.path.join(outdir, os.path.split(src)[1])
     _download_and_untar(src, dest, outdir, remove_tarball=True)
     import glob
-    fns = os.path.join(outdir, '*bed.gz')
+    fns = glob.glob(os.path.join(outdir, '*bed.gz'))
     for fn in fns:
         subprocess.check_call(['gunzip', fn])
         sorted_fn = '{}_sorted.bed'.format(fn.strip('.bed.gz'))
