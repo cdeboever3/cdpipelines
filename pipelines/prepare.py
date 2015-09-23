@@ -881,6 +881,7 @@ def download_roadmap_15_state_chromatin_model(outdir):
              '205,92,92', '233,150,122', '189,183,107', '128,128,128',
              '192,192,192', '255,255,255']
            ]
+    import pandas as pd
     df = pd.DataFrame(vals, index=columns).T
     df.to_csv(os.path.join(outdir, 'frazer_annotation.tsv'), index=None,
               sep='\t')
