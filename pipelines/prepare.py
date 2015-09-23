@@ -855,8 +855,8 @@ def download_roadmap_15_state_chromatin_model(outdir):
     # The 15 state model doesn't have a nice annotation file like the 25 state
     # model (although the table is on the website), so I'm just putting the info
     # in here and I'll write the file myself.
-    columns = [u'STATE NO.', u'MNEMONIC', u'DESCRIPTION', u'COLOR NAME', u'COLOR
-               CODE']
+    columns = [u'STATE NO.', u'MNEMONIC', u'DESCRIPTION', u'COLOR NAME', 
+               u'COLOR CODE']
     vals = [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 
             ['TssA', 'TssAFlnk', 'TxFlnk', 'Tx', 'TxWk', 'EnhG', 'Enh',
              'ZNF/Rpts', 'Het', 'TssBiv', 'BivFlnk', 'EnhBiv', 'ReprPC',
