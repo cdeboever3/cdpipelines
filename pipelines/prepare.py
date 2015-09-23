@@ -842,7 +842,6 @@ def download_roadmap_15_state_chromatin_model(outdir):
         sorted_fn = '{}_sorted.bed'.format(fn.strip('.bed.gz'))
         subprocess.check_call('sort -k 1,1 -k2,2n {} > {}'.format(
             fn.strip('.gz'), sorted_fn), shell=True)
-        os.remove(fn)
         
     to_download = []
     to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
