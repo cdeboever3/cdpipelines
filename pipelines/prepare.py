@@ -864,9 +864,9 @@ def download_roadmap_15_state_chromatin_model(outdir):
             ['Active TSS', 'Flanking Active TSS', "Transcr. at gene 5' and 3'",
              'Strong transcription', 'Weak transcription', 'Genic enhancers',
              'Enhancers', 'ZNF genes & repeats', 'Heterochromatin',
-             'Bivalent/Poised TSS', 'Flanking Bivalent TSS/Enh', 'Bivalent
-             Enhancer', 'Repressed PolyComb', 'Weak Repressed PolyComb',
-             'Quiescent/Low'],
+             'Bivalent/Poised TSS', 'Flanking Bivalent TSS/Enh', 
+             'Bivalent Enhancer', 'Repressed PolyComb', 
+             'Weak Repressed PolyComb', 'Quiescent/Low'],
             ['Red', 'Orange Red', 'LimeGreen', 'Green', 'DarkGreen',
              'GreenYellow', 'Yellow', 'Medium Aquamarine', 'PaleTurquoise',
              'IndianRed', 'DarkSalmon', 'DarkKhaki', 'Silver', 'Gainsboro',
