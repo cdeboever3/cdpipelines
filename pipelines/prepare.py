@@ -874,7 +874,7 @@ def download_roadmap_15_state_chromatin_model(outdir):
             ['Red', 'Orange Red', 'LimeGreen', 'Green', 'DarkGreen',
              'GreenYellow', 'Yellow', 'Medium Aquamarine', 'PaleTurquoise',
              'IndianRed', 'DarkSalmon', 'DarkKhaki', 'Silver', 'Gainsboro',
-             'White']
+             'White'],
             ['255,0,0', '255,69,0', '50,205,50', '0,128,0', '0,100,0',
              '194,225,5', '255,255,0', '102,205,170', '138,145,208',
              '205,92,92', '233,150,122', '189,183,107', '128,128,128',
