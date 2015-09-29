@@ -690,6 +690,12 @@ def download_gencode_gtf(outdir):
     dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
     _download_and_gunzip(src, dest)
 
+def download_kheradpour_motifs(outdir):
+    req = urlopen('http://compbio.mit.edu/encode-motifs/motifs.txt')
+    dest = os.path.join(outdir, 'motifs.txt')
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+
 def download_gtfToGenePred(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
                   'linux.x86_64/gtfToGenePred')
