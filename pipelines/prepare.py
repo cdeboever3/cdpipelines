@@ -131,6 +131,11 @@ def download_igvtools(outdir):
         shutil.copyfileobj(req, f)
     subprocess.check_call(['unzip', '-d', outdir, dest])
 
+def download_gwas_catalog(outdir):
+    src = ('https://www.ebi.ac.uk/gwas/api/search/downloads/alternative')
+    dest = os.path.join(outdir, 'gwas.tsv')
+    _download_file(src, dest)
+
 def download_encode_blacklist(outdir):
     src = ('https://www.encodeproject.org/files/ENCFF001TDO/@@download/'
            'ENCFF001TDO.bed.gz')
