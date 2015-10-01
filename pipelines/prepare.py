@@ -1,9 +1,7 @@
-# This notebook has commands to download some external data and software that
-# are needed in various notebooks. Rather than saving these into the `output`
-# directory with the output from other notebooks, I'll save them in the
-# directories `software` and `external_data` to denote that they are just
-# downloaded files, not files that I created. I also won't store these on
-# figshare.
+# This notebook has commands to download external data and software or parse
+# external data. These shouldn't be stored on figshare because they are
+# available over the web. In some instances I parse some of the external data
+# into more useful formats.
 
 import os
 import shutil
@@ -700,6 +698,14 @@ def download_gtfToGenePred(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
                   'linux.x86_64/gtfToGenePred')
     dest = os.path.join(outdir, 'gtfToGenePred')
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+    subprocess.check_call(['chmod', '755', '{}'.format(dest)])
+
+def download_liftOver(outdir):
+    req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/'
+                  'liftOver')
+    dest = os.path.join(outdir, 'liftOver')
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
