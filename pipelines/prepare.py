@@ -133,7 +133,7 @@ def download_igvtools(outdir):
 
 def download_gwas_catalog(outdir):
     src = ('https://www.ebi.ac.uk/gwas/api/search/downloads/alternative')
-    dest = os.path.join(outdir, 'gwas.tsv')
+    dest = os.path.join(outdir, 'gwas_catalog.tsv')
     _download_file(src, dest)
 
 def download_encode_blacklist(outdir):
