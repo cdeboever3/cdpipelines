@@ -1073,11 +1073,10 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
     job.write_end()
     return job.filename
 
-def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
-                           filter_remapped_reads_path, sample_name, outdir,
-                           tempdir, picard_path, strand_specific=False,
-                           picard_memory=12, conda_env='', shell=False,
-                           threads=6):
+def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, vcf,
+                           fasta, filter_remapped_reads_path, sample_name,
+                           outdir, tempdir, picard_path, picard_memory=12,
+                           conda_env='', shell=False, threads=6):
     """
     Write pbs or shell script for checking original mapping position of reads
     against remapping after swapping alleles using WASP, then count allele
@@ -1096,8 +1095,11 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
     remapped_bam : str
         Bam file with remapped reads.
 
-    snps : str
-        Path to TSV file with SNPs (made by wasp_allele_swap).
+    vcf : str
+        Path to VCF file with heterozygous SNVs.
+
+    fasta : str
+        Path to fasta file used to align data.
 
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py script.
@@ -1110,9 +1112,6 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
 
     tempdir : str
         Directory to store temporary files.
-
-    strand_specific : boolean
-        If false, data is not strand specific.
 
     conda_env : str
         If provided, load conda environment with this name.
@@ -1158,17 +1157,17 @@ def wasp_alignment_compare(to_remap_bam, to_remap_num, remapped_bam, snps,
         f.write('\nwait\n\n')
         
         # Count allele coverage.
-        from __init__ import scripts
-        count_script = os.path.join(scripts, 'count_alleles.py')
-        if strand_specific:
-            strand_info = ' --stranded '
-        else:
-            strand_info = ' '
         counts = os.path.join(job.outdir,
                               '{}_allele_counts.tsv'.format(sample_name))
-        f.write('python {}{}{} {} {}\n\n'.format(count_script, strand_info,
-                                                 coord_sorted_bam, snps,
-                                                 counts))
+        f.write('java -jar /raid3/software/GenomeAnalysisTK.jar \\\n')
+        f.write('\t-R {} \\\n'.format(fasta))
+        f.write('\t-T ASEReadCounter \\\n')
+        f.write('\t-o {} \\\n'.format(counts))
+        f.write('\t-I {} \\\n'.format(coord_sorted_bam))
+        f.write('\t-sites {} \\\n'.format(vcf))
+        f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
+        f.write('\t-U ALLOW_N_CIGAR_READS \n')
+
         f.write('\nwait\n\n')
     
     job.write_end()
