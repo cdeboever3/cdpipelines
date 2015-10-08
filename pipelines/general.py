@@ -1064,8 +1064,8 @@ def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
                                                          temp_vcf,
                                                          snp_directory,
                                                          all_snps))
-        f.write('{} view -b -q 255 {} > {}\n\n'.format(samtools_path, temp_bam,
-                                                       temp_uniq_bam))
+        f.write('{} view -b -q 255 -F 1024 {} > {}\n\n'.format(
+            samtools_path, temp_bam, temp_uniq_bam))
         f.write('wait\n\n')
         f.write('python {} -p {} {}\n\n'.format(find_intersecting_snps_path,
                                                 temp_uniq_bam, snp_directory))
