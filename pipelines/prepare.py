@@ -381,6 +381,23 @@ def download_samtools(outdir, lncurses=False):
     subprocess.check_call(('make prefix={} install > make_install.out 2> '
                            'make_install.err'.format(edir)), shell=True)
     os.chdir(cwd)
+
+def download_wgEncodeCrgMapabilityAlign100mer(outdir):
+    """
+    Download wgEncodeCrgMapabilityAlign100mer mappability bigwig track.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save wgEncodeCrgMapabilityAlign100mer mappability bigwig
+        track to.
+
+    """
+    req = urlopen(('http://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/'
+                   'wgEncodeMapability/wgEncodeCrgMapabilityAlign100mer.bigWig'))
+    dest = os.path.join(outdir, 'wgEncodeCrgMapabilityAlign100mer.bigWig')
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
     
 def download_hg19(outdir, samtools_path):
     """
@@ -711,6 +728,14 @@ def download_liftOver(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/'
                   'liftOver')
     dest = os.path.join(outdir, 'liftOver')
+    with open(dest, 'w') as d:
+        shutil.copyfileobj(req, d)
+    subprocess.check_call(['chmod', '755', '{}'.format(dest)])
+
+def download_bigWigAverageOverBed(outdir):
+    req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/'
+                  'bigWigAverageOverBed')
+    dest = os.path.join(outdir, 'bedGraphToBigWig')
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
