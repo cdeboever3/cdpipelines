@@ -735,7 +735,7 @@ def download_liftOver(outdir):
 def download_bigWigAverageOverBed(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/'
                   'bigWigAverageOverBed')
-    dest = os.path.join(outdir, 'bedGraphToBigWig')
+    dest = os.path.join(outdir, 'bigWigAverageOverBed')
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
