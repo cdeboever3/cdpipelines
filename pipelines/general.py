@@ -1385,6 +1385,8 @@ def _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile, sample_name,
 
 def run_mbased(
     infile, 
+    bed,
+    mbased_infile,
     outdir, 
     sample_name, 
     environment=None, 
@@ -1402,6 +1404,12 @@ def run_mbased(
     infile : str
         Tab-separated file with following columns: chrom, pos, ref_allele,
         alt_allele, locus, name, ref_count, alt_count.
+
+    bed : str
+        Path to bed file for assigning heterozygous SNVs to features.
+    
+    mbased_infile : str
+        Path to save MBASED input file to.
 
     outdir : str
         Directory to store PBS/shell file and MBASED results.
@@ -1422,6 +1430,21 @@ def run_mbased(
     threads : int
         Number of threads to reserve using PBS scheduler and for MBASED to use.
 
+    vcf : str
+        Path to gzipped, indexed VCF file with all variant calls (not just
+        heterozygous calls).
+
+    vcf_sample_name : str
+        If vcf is provided, this must be provided to specify the sample name of
+        this sample in the VCF file. Required if vcf is provided.
+
+    mappability : str
+        Path to bigwig file with mappability scores. A score of one should mean
+        uniquely mapping.
+
+    bigWigAverageOverBed_path : str
+        Path to bigWigAverageOverBed. Required if mappability is provided.
+
     shell : boolean
         If true, make a shell script rather than a PBS script.
     
@@ -1441,8 +1464,12 @@ def run_mbased(
     snv_outfile = os.path.join(job.outdir, '{}_snv.tsv'.format(sample_name))
     
     with open(job.filename, "a") as f:
-        lines = _mbased(infile, locus_outfile, snv_outfile, sample_name, 
-                        is_phased=is_phased, num_sim=num_sim, threads=threads)
+        lines = _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile,
+                        sample_name, is_phased=is_phased, num_sim=num_sim,
+                        threads=threads, vcf=vcf,
+                        vcf_sample_name=vcf_sample_name,
+                        mappability=mappability,
+                        bigWigAverageOverBed_path=bigWigAverageOverBed_path)
         f.write(lines)
         f.write('wait\n\n')
     
