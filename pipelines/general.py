@@ -1389,6 +1389,7 @@ def run_mbased(
     outdir, 
     sample_name, 
     environment=None, 
+    conda_env=None,
     is_phased=False,
     num_sim=1000000,
     threads=6, 
@@ -1457,7 +1458,8 @@ def run_mbased(
     assert threads >= 1
     job_suffix = 'mbased'
     job = JobScript(sample_name, job_suffix, outdir, threads, shell=False,
-                    queue='high', environment=environment, copy_input=True)
+                    queue='high', environment=environment, conda_env=conda_env,
+                    copy_input=True)
     
     # I'm going to define some file names used later.
     mbased_infile = os.path.join(job.outdir,
