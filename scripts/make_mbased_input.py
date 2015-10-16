@@ -275,7 +275,7 @@ def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
         ASEReadCounter results as a dataframe.
 
     out : str
-        Prefix for output files.
+        Output tsv file for MBASED.
 
     vcf : str
         Path to gzipped, indexed VCF file with all variant calls (not just
@@ -283,7 +283,7 @@ def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
 
     sample_name : str
         If vcf is provided, this must be provided to specify the sample name of
-        this sample in the VCF file.
+        this sample in the VCF file. Required if vcf is provided.
 
     mappability : str
         Path to bigwig file with mappability scores. A score of one should mean
@@ -291,11 +291,6 @@ def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
 
     bigWigAverageOverBed_path : str
         Path to bigWigAverageOverBed. Required if mappability is provided.
-
-    Returns
-    -------
-    XXX : pandas.DataFrame
-        Filtered ASEReadCounter results with nearby sites removed.
 
     """
     if mappability is not None:
@@ -347,7 +342,7 @@ def main():
         'creates an input file for MBASED. Binomal ASE p-values are also '
         'generated for comparison with the MBASED results.'))
     parser.add_argument('counts', help='Output file from ASEReadCounter.')
-    parser.add_argument('out', help='Prefix for output files.')
+    parser.add_argument('out', help='Output tsv file for MBASED.')
     h = ('Bed file for assigning SNVs to features. If a SNV overlaps more than '
          'one feature, it will be removed.')
     parser.add_argument('bed', help=h)

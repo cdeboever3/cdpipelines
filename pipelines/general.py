@@ -1307,8 +1307,10 @@ def wasp_remap(
     job.write_end()
     return job.filename
 
-def _mbased(infile, locus_outfile, snv_outfile, sample_name, 
-            is_phased=False, num_sim=1000000, threads=1):
+def _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile, sample_name,
+            is_phased=False, num_sim=1000000, threads=1, vcf=None,
+            vcf_sample_name=None, mappability=None,
+            bigWigAverageOverBed_path=None):
     """
     Make a PBS or shell script for running MBASED to determine allelic bias from
     sequencing reads.
@@ -1316,8 +1318,13 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name,
     Parameters
     ----------
     infile : str
-        Tab-separated file with following columns: chrom, pos, ref_allele,
-        alt_allele, locus, name, ref_count, alt_count.
+        Output file from GATK's ASEReadCounter.
+
+    bed : str
+        Path to bed file for assigning heterozygous SNVs to features.
+    
+    mbased_infile : str
+        Path to save MBASED input file to.
 
     locus_outfile : str
         Path to file to store locus-level results.
@@ -1330,7 +1337,7 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name,
 
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
-        assumed to be in phase. Note that this only matter locus by locus.
+        assumed to be in phase. Note that this only matters locus by locus.
 
     num_sim : int
         Number of simulations for MBASED to perform.
@@ -1338,6 +1345,21 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name,
     threads : int
         Number of threads for MBASED to use.
     
+    vcf : str
+        Path to gzipped, indexed VCF file with all variant calls (not just
+        heterozygous calls).
+
+    vcf_sample_name : str
+        If vcf is provided, this must be provided to specify the sample name of
+        this sample in the VCF file. Required if vcf is provided.
+
+    mappability : str
+        Path to bigwig file with mappability scores. A score of one should mean
+        uniquely mapping.
+
+    bigWigAverageOverBed_path : str
+        Path to bigWigAverageOverBed. Required if mappability is provided.
+
     Returns
     -------
     lines : str
@@ -1346,9 +1368,17 @@ def _mbased(infile, locus_outfile, snv_outfile, sample_name,
     """
     from __init__ import scripts
     is_phased = str(is_phased).upper()
+    script = os.path.join(scripts, 'make_mbased_input.py')
+    lines = 'python {} {} {} {}'.format(script, infile, mbased_infile, bed)
+    if vcf:
+        lines += ' \\\n-v {} -s {}'.format(vcf, vcf_sample_name)
+    if mappability:
+        lines += ' \\\n-m {} -p {}'.format(mappability,
+                                           bigWigAverageOverBed_path)
+    lines += '\n\n'
     script = os.path.join(scripts, 'mbased.R')
-    lines = 'Rscript '
-    lines += ' '.join([script, infile, locus_outfile, snv_outfile,
+    lines += 'Rscript '
+    lines += ' '.join([script, mbased_infile, locus_outfile, snv_outfile,
                       sample_name, is_phased, str(num_sim), str(threads)])
     lines += '\n'
     return lines
