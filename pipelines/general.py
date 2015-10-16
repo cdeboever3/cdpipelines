@@ -1386,7 +1386,6 @@ def _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile, sample_name,
 def run_mbased(
     infile, 
     bed,
-    mbased_infile,
     outdir, 
     sample_name, 
     environment=None, 
@@ -1408,9 +1407,6 @@ def run_mbased(
     bed : str
         Path to bed file for assigning heterozygous SNVs to features.
     
-    mbased_infile : str
-        Path to save MBASED input file to.
-
     outdir : str
         Directory to store PBS/shell file and MBASED results.
 
@@ -1460,6 +1456,8 @@ def run_mbased(
                     queue='high', environment=environment, copy_input=True)
     
     # I'm going to define some file names used later.
+    mbased_infile = os.path.join(job.outdir,
+                                 '{}_mbased_input.tsv'.format(sample_name))
     locus_outfile = os.path.join(job.outdir, '{}_locus.tsv'.format(sample_name))
     snv_outfile = os.path.join(job.outdir, '{}_snv.tsv'.format(sample_name))
     
