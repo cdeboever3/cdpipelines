@@ -1,7 +1,8 @@
 main <- function() {
 	args <- commandArgs(trailingOnly = TRUE)
-	# tsv file with following columns: chrom, pos, ref_allele, alt_allele, 
-	# locus, name, ref_count, alt_count
+	# tsv file with following columns: contig, position, refAllele,
+	# altAllele, feature, refCount, altCount and index column of type
+	# contig:position.
 	infile = args[1]
 	# Output file for locus level information
 	locus_outfile = args[2]
@@ -21,22 +22,22 @@ main <- function() {
 
 	t = read.table(infile, header=TRUE)
 
-	ranges = IRanges(start=t$pos, width=1)
+	ranges = IRanges(start=t$position, width=1)
 
 	snvs = GRanges(
-	    seqnames=as.character(t$chrom),
+	    seqnames=as.character(t$contig),
 	    ranges=ranges,
-	    aseID=as.character(t$locus),
-	    allele1=as.character(t$ref_allele),
-	    allele2=as.character(t$alt_allele)
+	    aseID=as.character(t$feature),
+	    allele1=as.character(t$refAllele),
+	    allele2=as.character(t$altAllele)
 	)
 	
-	names(snvs) = as.character(t$name)
+	names(snvs) = paste(t$feature, rownames(t), sep="_")
 	
 	se <- SummarizedExperiment(
 	    assays=list(
 	        lociAllele1Counts=matrix(
-	            t$ref_count,
+	            t$refCount,
 	            ncol=1,
 	            dimnames=list(
 	            names(snvs),
@@ -44,13 +45,21 @@ main <- function() {
 	            )
 	        ),
 	        lociAllele2Counts=matrix(
-	            t$alt_count,
+	            t$altCount,
 	            ncol=1,
 	            dimnames=list(
 	            names(snvs),
 	            sample
 	            )
-	        )
+	        ),
+		lociAllele1CountsNoASEProbs=matrix(
+			t$expectedRefFreq,
+			ncol=1,
+			dimnames=list(
+			names(snvs),
+			sample
+			)
+		)
 	    ),
 	rowData=snvs
 	)
