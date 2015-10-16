@@ -1392,6 +1392,10 @@ def run_mbased(
     is_phased=False,
     num_sim=1000000,
     threads=6, 
+    vcf=None,
+    vcf_sample_name=None,
+    mappability=None,
+    bigWigAverageOverBed_path=None,
     shell=False,
 ):
     """
