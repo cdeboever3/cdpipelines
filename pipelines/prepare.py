@@ -131,6 +131,17 @@ def download_igvtools(outdir):
         shutil.copyfileobj(req, f)
     subprocess.check_call(['unzip', '-d', outdir, dest])
 
+def download_grasp_database(outdir):
+    src = ('https://s3.amazonaws.com/NHLBI_Public/GRASP/GraspFullDataset2.zip')
+    dest = os.path.join(outdir, 'GraspFullDataset2.zip')
+    req = urlopen(src)
+    with open(dest, 'w') as f:
+        shutil.copyfileobj(req, f)
+    subprocess.check_call(['unzip', '-d', outdir, dest])
+    os.rename(os.path.join(outdir, 'GRASP2fullDataset'), 
+              os.path.join(outdir, 'GRASP2fullDataset.tsv'))
+    os.remove(dest)
+
 def download_gwas_catalog(outdir):
     src = ('https://www.ebi.ac.uk/gwas/api/search/downloads/alternative')
     dest = os.path.join(outdir, 'gwas_catalog.tsv')
