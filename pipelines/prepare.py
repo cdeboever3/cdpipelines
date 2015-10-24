@@ -826,6 +826,25 @@ def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
         command += ' --gtf {}'.format(gtf)
     subprocess.check_call(command, shell=True)
 
+def download_roadmap_gwas(outdir):
+    """
+    Download GWAS data compiled for Roadmap project.
+    """
+    import re
+    outdir = os.path.join(outdir, 'roadmap_gwas')
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+    url = 'http://www.broadinstitute.org/~anshul/roadmap/gwas'
+    s = urlopen(url).read()
+    compiled = re.compile('"EUR.*txt\.gz"')
+    res = [x.strip('"') for x in compiled.findall(s)]
+    to_download = ['{}/{}'.format(url, x) for x in res]
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_and_gunzip(src, dest)
+
 def download_roadmap_25_state_chromatin_model(outdir):
     """
     Download 25 state chromatin model from Roadmap Epigenomics. There is a bed
