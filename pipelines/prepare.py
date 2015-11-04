@@ -762,7 +762,7 @@ def download_ucsc_tools(outdir):
     to_download = ['{}/{}'.format(url, x) for x in res]
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
-        _download_file(url, dest)
+        _download_file(src, dest)
 
 def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
