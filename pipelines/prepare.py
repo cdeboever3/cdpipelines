@@ -751,6 +751,19 @@ def download_bigWigAverageOverBed(outdir):
         shutil.copyfileobj(req, d)
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
 
+def download_ucsc_tools(outdir):
+    import re
+    url = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64'
+    s = urlopen(url).read()
+    
+    compiled = re.compile('<a href=".*">')
+    res = compiled.findall(s)
+    res = [x.split('"')[-2] for x in res[2:]]
+    to_download = ['{}/{}'.format(url, x) for x in res]
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_file(url, dest)
+
 def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
                   'linux.x86_64/bedGraphToBigWig')
