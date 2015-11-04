@@ -514,7 +514,6 @@ def make_star_index(
         Path to STAR executable.
 
     """
-    dest = os.path.join(outdir, 'star_index')
     try:
         os.makedirs(dest)
     except OSError:
