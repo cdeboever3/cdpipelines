@@ -410,7 +410,11 @@ def download_wgEncodeCrgMapabilityAlign100mer(outdir):
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
     
-def download_hg19(outdir, samtools_path):
+def download_hg19(
+    outdir, 
+    samtools_path='samtools',
+    twoBitToFa_path='twoBitToFa',
+):
     """
     Download hg19.
 
@@ -423,7 +427,6 @@ def download_hg19(outdir, samtools_path):
         Path to Samtools executable needed to index fasta.
 
     """
-    outdir = os.path.join(outdir, 'hg19')
     try:
         os.makedirs(outdir)
     except OSError:
@@ -434,16 +437,16 @@ def download_hg19(outdir, samtools_path):
 
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
-    req = urlopen(
-        'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa')
-    dest = os.path.join(outdir, 'twoBitToFa')
-    with open(dest, 'w') as d:
-        shutil.copyfileobj(req, d)
-    subprocess.check_call('chmod 755 {}'.format(os.path.join(outdir, 
-                                                             'twoBitToFa')),
-                          shell=True)
+    # req = urlopen(
+    #     'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa')
+    # dest = os.path.join(outdir, 'twoBitToFa')
+    # with open(dest, 'w') as d:
+    #     shutil.copyfileobj(req, d)
+    # subprocess.check_call('chmod 755 {}'.format(os.path.join(outdir, 
+    #                                                          'twoBitToFa')),
+    #                       shell=True)
     subprocess.check_call('{} {} {}'.format(
-        os.path.join(outdir, 'twoBitToFa'), 
+        twoBitToFa_path,
         os.path.join(outdir, 'hg19.2bit'), 
         os.path.join(outdir, 'hg19.fa')),
                           shell=True)    
