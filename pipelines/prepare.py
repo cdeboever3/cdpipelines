@@ -820,9 +820,14 @@ def make_dexseq_annotation(gtf, out_gff):
     command = 'python {} -r no {} {}'.format(script, gtf, out_gff)
     subprocess.check_call(command, shell=True)
 
-def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
+def rsem_prepare_reference(
+    fasta, 
+    name, 
+    gtf=None,
+    rsem_prepare_reference_path='rsem-prepare-reference',
+):
     """
-    Run rsem-prepare-reference
+    Run rsem-prepare-reference to make an RSEM reference.
 
     Parameters
     ----------
@@ -840,7 +845,7 @@ def rsem_prepare_reference(fasta, name, rsem_path, gtf=None):
         Path to GTF file that defines genes and transcripts to provide to RSEM.
 
     """
-    command = '{}/rsem-prepare-reference {} {}'.format(rsem_path, fasta, name)
+    command = '{} {} {}'.format(rsem_prepare_reference_path, fasta, name)
     if gtf:
         command += ' --gtf {}'.format(gtf)
     subprocess.check_call(command, shell=True)
