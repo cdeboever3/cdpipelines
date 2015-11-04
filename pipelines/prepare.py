@@ -487,7 +487,12 @@ def download_star(outdir):
     dest = os.path.join(outdir, 'STAR_2.4.0h.tar.gz')
     _download_and_untar(url, dest, outdir)
 
-def make_star_index(outdir, threads, genome, gtf, star_path='STARstatic'):
+def make_star_index(
+    outdir, 
+    genome, 
+    gtf, 
+    threads=1,
+    star_path='STAR'):
     """
     Make index for STAR aligner.
 
@@ -496,14 +501,14 @@ def make_star_index(outdir, threads, genome, gtf, star_path='STARstatic'):
     outdir : str
         Directory to save index to.
 
-    threads : int
-        Number of threads to use to make the index.
-
     genome : str
         Path to genome fasta file.
 
     gtf : str
         Path to GTF gene annotation.
+
+    threads : int
+        Number of threads to use to make the index.
 
     star_path : str
         Path to STAR executable.
