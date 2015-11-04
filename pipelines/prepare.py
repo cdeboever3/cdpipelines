@@ -850,7 +850,6 @@ def download_roadmap_gwas(outdir):
     Download GWAS data compiled for Roadmap project.
     """
     import re
-    outdir = os.path.join(outdir, 'roadmap_gwas')
     try:
         os.makedirs(outdir)
     except OSError:
