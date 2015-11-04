@@ -718,7 +718,7 @@ def download_gencode_gtf(outdir):
     """
     src = ('ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/'
            'gencode.v19.annotation.gtf.gz')
-    dest = os.path.join(outdir, 'gencode_v19', 'gencode.v19.annotation.gtf.gz')
+    dest = os.path.join(outdir, 'gencode.v19.annotation.gtf.gz')
     _download_and_gunzip(src, dest)
 
 def download_kheradpour_motifs(outdir):
