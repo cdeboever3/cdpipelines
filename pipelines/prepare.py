@@ -752,6 +752,7 @@ def download_bigWigAverageOverBed(outdir):
     subprocess.check_call(['chmod', '755', '{}'.format(dest)])
 
 def download_ucsc_tools(outdir):
+    """Download all UCSC executables except blat."""
     import re
     url = 'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64'
     s = urlopen(url).read()
@@ -759,6 +760,7 @@ def download_ucsc_tools(outdir):
     compiled = re.compile('<a href=".*">')
     res = compiled.findall(s)
     res = [x.split('"')[-2] for x in res[2:]]
+    res = [x for x in res if '/' not in x]
     to_download = ['{}/{}'.format(url, x) for x in res]
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
