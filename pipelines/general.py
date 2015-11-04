@@ -420,7 +420,12 @@ def _picard_coord_sort(
 
     return lines
 
-def _cutadapt_trim(fastq, length, out, bg=False):
+def _cutadapt_trim(
+    fastq, 
+    length, 
+    out, 
+    bg=False,
+):
     """
     Cut a specified number of bases from a fastq file using cutadapt. Cutadapt
     should be installed in your python environment.
@@ -454,8 +459,12 @@ def _cutadapt_trim(fastq, length, out, bg=False):
         line += '\n\n'
     return line
 
-def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
-                        bedtools_path):
+def _bedgraph_to_bigwig(
+    bedgraph, 
+    bigwig,
+    bedgraph_to_bigwig_path='bedGraphToBigWig'
+    bedtools_path='bedtools',
+):
     bedtools_genome_path = os.path.join(
         os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
         'human.hg19.genome')
@@ -464,7 +473,11 @@ def _bedgraph_to_bigwig(bedgraph, bigwig, bedgraph_to_bigwig_path,
                        '{} &\n'.format(bigwig)])
     return lines
 
-def _flagstat(bam, stats_file, samtools_path, bg=False):
+def _flagstat(
+    bam, 
+    stats_file, 
+    samtools_path='samtools',
+    bg=False):
     """
     Run flagstat for a bam file.
 
@@ -492,7 +505,13 @@ def _flagstat(bam, stats_file, samtools_path, bg=False):
         lines += '\n\n'
     return lines
 
-def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
+def _coverage_bedgraph(
+    bam, 
+    bedgraph, 
+    sample_name, 
+    strand='.',
+    bedtools_path='bedtools',
+):
     """
     Make lines that create a coverage bedgraph file.
 
@@ -541,8 +560,14 @@ def _coverage_bedgraph(bam, bedgraph, bedtools_path, sample_name, strand='.'):
                               '\t> {} &\n\n'.format(bedgraph)])
     return lines
 
-def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
-                  bedtools_path, out_bigwig_minus=''):
+def _bigwig_files(
+    in_bam, 
+    out_bigwig, 
+    sample_name, 
+    out_bigwig_minus='',
+    bedgraph_to_bigwig_path='bedGraphToBigWig',
+    bedtools_path='bedtools',
+):
     """
     Make bigwig coverage files.
 
@@ -590,7 +615,10 @@ def _bigwig_files(in_bam, out_bigwig, sample_name, bedgraph_to_bigwig_path,
         lines += ('rm both.bg\n\n')
     return lines
     
-def _process_fastqs(fastqs, tempdir):
+def _process_fastqs(
+    fastqs, 
+    tempdir
+):
     """
     Create list of temporary fastq paths.
 
@@ -616,20 +644,25 @@ def _process_fastqs(fastqs, tempdir):
         temp_fastqs = [os.path.join(tempdir, os.path.split(fastqs)[1])]
     return temp_fastqs
 
-def _fastqc(fastqs, threads, outdir, fastqc_path):
+def _fastqc(
+    fastqs, 
+    outdir, 
+    threads=1,
+    fastqc_path='fastqc',
+):
     """
     Run FastQC
 
-Parameters
+    Parameters
     ----------
     fastqs : str or list
         Path to fastq file or list of paths to fastq files.
 
-    threads : int
-        Number of threads to run FastQC with.
-
     outdir : str
         Path to directory to store FastQC results to.
+
+    threads : int
+        Number of threads to run FastQC with.
 
     fastqc_path : str
         Path to FastQC.
@@ -700,6 +733,7 @@ def _make_softlink(fn, sample_name, link_dir):
     return lines, name
 
 class JobScript:
+    #TODO: update default queue for new cluster
     def __init__(self, sample_name, job_suffix, outdir, threads, tempdir=None,
                  shell=False, queue='high', conda_env=None, environment=None,
                  copy_input=True):
@@ -1020,7 +1054,12 @@ def _picard_merge(
         line += '\n\n'
     return line
 
-def _samtools_index(in_bam, samtools_path, index=None, bg=False):
+def _samtools_index(
+    in_bam, 
+    index=None, 
+    bg=False,
+    samtools_path='samtools',
+):
     """
     Index bam file using samtools.
 
@@ -1158,10 +1197,20 @@ def _wasp_snp_directory(vcf, directory, all_snps, sample_name=None):
             f.write('\n'.join(lines) + '\n')
             f.close()
 
-def wasp_allele_swap(bam, find_intersecting_snps_path, vcf, sample_name,
-                     outdir, samtools_path, tempdir, copy_vcf=True,
-                     vcf_sample_name=None, conda_env=None, shell=False,
-                     threads=6):
+def wasp_allele_swap(
+    bam, 
+    find_intersecting_snps_path, 
+    vcf, 
+    sample_name,
+    outdir, 
+    tempdir, 
+    copy_vcf=True,
+    vcf_sample_name=None, 
+    conda_env=None, 
+    shell=False,
+    threads=6,
+    samtools_path='samtools',
+):
     """
     Write pbs or shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
@@ -1381,8 +1430,6 @@ def wasp_remap(
     outdir, 
     sample_name, 
     star_index,
-    star_path,
-    samtools_path,
     seq_type,
     conda_env='',
     rgpl='ILLUMINA',
@@ -1392,6 +1439,8 @@ def wasp_remap(
     picard_path='$picard',
     picard_memory=15, 
     shell=False,
+    star_path='STAR',
+    samtools_path='samtools',
 ):
     """
     Make a PBS or shell script for re-aligning reads from with variants using
@@ -1508,10 +1557,21 @@ def wasp_remap(
     job.write_end()
     return job.filename
 
-def _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile, sample_name,
-            is_phased=False, num_sim=1000000, threads=1, vcf=None,
-            vcf_sample_name=None, mappability=None,
-            bigWigAverageOverBed_path=None):
+def _mbased(
+    infile, 
+    bed, 
+    mbased_infile, 
+    locus_outfile, 
+    snv_outfile, 
+    sample_name,
+    is_phased=False, 
+    num_sim=1000000, 
+    threads=1, 
+    vcf=None,
+    vcf_sample_name=None, 
+    mappability=None,
+    bigWigAverageOverBed_path='bigWigAverageOverBed',
+):
     """
     Make a PBS or shell script for running MBASED to determine allelic bias from
     sequencing reads.
@@ -1597,8 +1657,8 @@ def run_mbased(
     vcf=None,
     vcf_sample_name=None,
     mappability=None,
-    bigWigAverageOverBed_path=None,
     shell=False,
+    bigWigAverageOverBed_path='bigWigAverageOverBed',
 ):
     """
     Make a PBS or shell script for running MBASED to determine allelic bias from
@@ -1685,11 +1745,11 @@ def convert_sra_to_fastq(
     sra_files, 
     outdir, 
     sample_name, 
-    sra_toolkit_path,
     remove_sra_files=False,
     max_threads=32,
     threads_per_sra=4,
     shell=False,
+    fastq_dump_path='fastq-dump',
 ):
     """
     Make a PBS or shell script for converting one or more SRA files into fastq
@@ -1706,9 +1766,6 @@ def convert_sra_to_fastq(
 
     sample_name : str
         Sample name used for naming files etc.
-
-    sra_toolkit_path : str
-        Path to the SRA toolkit bin.
 
     remove_sra_files : bool
         Whether to remove original SRA files after conversion is complete.
@@ -1727,6 +1784,9 @@ def convert_sra_to_fastq(
     shell : boolean
         If true, make a shell script rather than a PBS script.
     
+    fastq-dump : str
+        Path to fastq-dump from the SRA toolkit.
+
     Returns
     -------
     fn : str
@@ -1791,7 +1851,7 @@ def convert_sra_to_fastq(
             n = c.next()
             for sra in n:
                 f.write('{} {} --split-files &\n'.format(
-                    os.path.join(sra_toolkit_path, 'fastq-dump'), sra))
+                    os.path.join(fastq_dump_path), sra))
             f.write('\nwait\n\n')
         except StopIteration:
             continue
@@ -1826,15 +1886,15 @@ def merge_bams(
     outdir, 
     tempdir,
     merged_name, 
-    picard_path='$picard',
-    picard_memory=2,
     index=True,
     bigwig=False,
-    bedgraph_to_bigwig_path=None,
-    bedtools_path=None,
     copy_bams=True,
     threads=8,
     shell=False,
+    bedgraph_to_bigwig_path='bedGraphToBigWig',
+    bedtools_path='bedtools',
+    picard_path='$picard',
+    picard_memory=2,
 ):
     """
     Make a PBS or shell script for combining multiple bam files using Picard.
@@ -1849,9 +1909,6 @@ def merge_bams(
 
     merged_name : str
         Name used for output directory, files etc.
-
-    picard_path : str
-        Path to Picard.
 
     index : bool
         Whether to index the merged bam file.
@@ -1922,8 +1979,10 @@ def merge_bams(
             f.write(lines)
 
         if bigwig:
-            lines = _bigwig_files(merged_bam, merged_bigwig, merged_name,
-                                  bedgraph_to_bigwig_path, bedtools_path)
+            lines = _bigwig_files(
+                merged_bam, merged_bigwig, merged_name,
+                bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
+                bedtools_path=bedtools_path)
             f.write(lines)
 
     job.write_end()
