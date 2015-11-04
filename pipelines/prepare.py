@@ -765,6 +765,7 @@ def download_ucsc_tools(outdir):
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
         _download_file(src, dest)
+        subprocess.check_call(['chmod', '755', '{}'.format(dest)])
 
 def download_bedGraphToBigWig(outdir):
     req = urlopen('http://hgdownload.cse.ucsc.edu/admin/exe/'
