@@ -515,16 +515,16 @@ def make_star_index(
 
     """
     try:
-        os.makedirs(dest)
+        os.makedirs(outdir)
     except OSError:
         pass
     subprocess.check_call([star_path, '--runThreadN', str(threads),
                            '--runMode', 'genomeGenerate',
                            '--sjdbOverhang', '250', '--genomeDir',
-                           dest, '--genomeFastaFiles',
+                           outdir, '--genomeFastaFiles',
                            genome, '--sjdbGTFfile', gtf],
                           shell=False)
-    shutil.move('Log.out', dest)
+    shutil.move('Log.out', outdir)
 
 def download_picard(outdir):
     """
