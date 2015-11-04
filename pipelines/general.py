@@ -462,7 +462,7 @@ def _cutadapt_trim(
 def _bedgraph_to_bigwig(
     bedgraph, 
     bigwig,
-    bedgraph_to_bigwig_path='bedGraphToBigWig'
+    bedgraph_to_bigwig_path='bedGraphToBigWig',
     bedtools_path='bedtools',
 ):
     bedtools_genome_path = os.path.join(
