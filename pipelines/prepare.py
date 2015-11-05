@@ -142,9 +142,9 @@ def download_grasp_database(outdir):
               os.path.join(outdir, 'GRASP2fullDataset.tsv'))
     os.remove(dest)
 
-def download_gwas_catalog(outdir):
+def download_nhgri_gwas_catalog(outdir):
     src = ('https://www.ebi.ac.uk/gwas/api/search/downloads/alternative')
-    dest = os.path.join(outdir, 'gwas_catalog.tsv')
+    dest = os.path.join(outdir, 'nhgri_gwas_catalog.tsv')
     _download_file(src, dest)
 
 def download_encode_blacklist(outdir):
