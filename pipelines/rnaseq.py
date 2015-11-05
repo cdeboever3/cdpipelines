@@ -16,8 +16,16 @@ from general import _picard_index
 from general import _picard_mark_duplicates
 from general import _process_fastqs
 
-def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
-                threads):
+def _star_align(
+    r1_fastq, 
+    r2_fastq, 
+    sample, 
+    rgpl, 
+    rgpu, 
+    star_index, 
+    threads,
+    star_path='STAR',
+):
     """
     Align paired fastq files with STAR.
 
@@ -39,10 +47,6 @@ def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
         Read Group platform unit (eg. run barcode). 
 
     """
-    # r1_fastqs.sort()
-    # r2_fastqs.sort()
-    # r1_fastqs = ','.join(r1_fastqs)
-    # r2_fastqs = ','.join(r2_fastqs)
     # I use threads - 2 for STAR so there are open processors for reading and
     # writing.
     line = (' \\\n'.join([star_path, 
@@ -51,7 +55,7 @@ def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
                           '\t--genomeLoad LoadAndRemove', 
                           '\t--readFilesCommand zcat',
                           '\t--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
-                          '\t--outSAMtype BAM Unsorted', 
+                          '\t--outSAMtype BAM SortedByCoordinate', 
                           '\t--outSAMattributes All', 
                           '\t--outSAMunmapped Within',
                           ('\t--outSAMattrRGline ID:1 ' + 
@@ -60,152 +64,11 @@ def _star_align(r1_fastq, r2_fastq, sample, rgpl, rgpu, star_index, star_path,
                            'LB:{0} SM:{0}'.format(sample)), 
                           '\t--outFilterMultimapNmax 20', 
                           '\t--outFilterMismatchNmax 999',
-                          '\t--outFilterMismatchNoverLmax 0.04',
-                          ('\t--outFilterIntronMotifs '
-                           'RemoveNoncanonicalUnannotated'),
-                           '\t--outSJfilterOverhangMin 6 6 6 6',
-                           '\t--seedSearchStartLmax 20',
-                           '\t--alignSJDBoverhangMin 1', 
-                          '\t--quantMode TranscriptomeSAM']) + '\n\n') 
+                          '\t--alignIntronMin 20',
+                          '\t--alignIntronMax 1000000',
+                          '\t--alignMatesGapMax 1000000',
+                          '\t--quantMode TranscriptomeSAM GeneCounts']) + '\n\n') 
     return line
-
-# deprecated
-# def _genome_browser_files(tracklines_file, link_dir, web_path_file,
-#                           coord_sorted_bam, bam_index, bigwig, sample_name,
-#                           outdir, bigwig_minus=''):
-#     """
-#     Make files and softlinks for displaying results on UCSC genome browser.
-# 
-#     Parameters
-#     ----------
-#     tracklines_file : str
-#         Path to file for writing tracklines. The tracklines will be added to the
-#         file; the contents of the file will not be overwritten. These tracklines
-#         can be pasted into the genome browser upload for custom data.
-# 
-#     link_dir : str
-#         Path to directory where softlink should be made.
-# 
-#     web_path_file : str
-#         File whose first line is the URL that points to link_dir. For example,
-#         if we make a link to the file s1_coord_sorted.bam in link_dir and
-#         web_path_file has http://site.com/files on its first line, then
-#         http://site.com/files/s1_coord_sorted.bam should be available on the
-#         web. If the web directory is password protected (it probably should be),
-#         then the URL should look like http://username:password@site.com/files.
-#         This is a file so you don't have to make the username/password combo
-#         public (although I'd recommend not using a sensitive password). You can
-#         just put the web_path_file in a directory that isn't tracked by git, 
-#         figshare, etc.
-# 
-#     coord_sorted_bam : str
-#         Path to coordinate sorted bam file.
-# 
-#     bam_index : str
-#         Path to index file for coordinate sorted bam file.
-# 
-#     bigwig : str
-#         Path to bigwig file. If bigwig_minus is provided, bigwig has the plus
-#         strand coverage.
-# 
-#     sample_name : str
-#         Sample name used for naming files.
-# 
-#     bigwig_minus : str
-#         Path to bigwig file for minus strand. If bigwig_minus is not provided,
-#         bigwig is assumed to have coverage for both plus and minus stand reads.
-# 
-#     Returns
-#     -------
-#     lines : str
-#         Lines to be printed to shell/PBS script.
-# 
-#     """
-#     lines = ''
-#     link_dir = os.path.join(link_dir, 'rna')
-# 
-#     with open(web_path_file) as wpf:
-#         web_path = wpf.readline().strip()
-#     web_path = web_path + '/rna'
-# 
-#     # File with UCSC tracklines.
-#     if os.path.exists(tracklines_file):
-#         with open(tracklines_file) as f:
-#             tf_lines = f.read()
-#     else:
-#         tf_lines = ''
-#     
-#     # Bam file and index.
-#     temp_link_dir = os.path.join(link_dir, 'bam')
-#     temp_web_path = web_path + '/bam'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     fn = os.path.join(outdir, os.path.split(coord_sorted_bam)[1])
-#     new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-# 
-#     fn = os.path.join(outdir, os.path.split(bam_index)[1])
-#     new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-# 
-#     tf_lines += ' '.join(['track', 'type=bam',
-#                           'name="{}_bam"'.format(sample_name),
-#                           'description="RNAseq for {}"'.format(sample_name),
-#                           'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
-#     
-#     # Bigwig file(s).
-#     temp_link_dir = os.path.join(link_dir, 'bw')
-#     temp_web_path = web_path + '/bw'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     if bigwig_minus != '':
-#         fn = os.path.join(outdir, os.path.split(bigwig)[1])
-#         new_lines, plus_name = _make_softlink(fn, sample_name, temp_link_dir)
-#         lines += new_lines
-#         
-#         fn = os.path.join(outdir, os.path.split(bigwig_minus)[1])
-#         new_lines, minus_name = _make_softlink(fn, sample_name, temp_link_dir)
-#         lines += new_lines
-#  
-#         tf_lines += ' '.join(['track', 'type=bigWig',
-#                               'name="{}_plus_cov"'.format(sample_name),
-#                               ('description="RNAseq plus strand coverage for '
-#                                '{}"'.format(sample_name)),
-#                               'visibility=0',
-#                               'db=hg19',
-#                               'bigDataUrl={}/{}\n'.format(temp_web_path,
-#                                                           plus_name)])
-#         tf_lines += ' '.join(['track', 'type=bigWig',
-#                               'name="{}_minus_cov"'.format(sample_name),
-#                               ('description="RNAseq minus strand coverage for '
-#                                '{}"'.format(sample_name)),
-#                               'visibility=0',
-#                               'db=hg19',
-#                               'bigDataUrl={}/{}\n'.format(temp_web_path,
-#                                                           minus_name)])
-#     else:
-#         fn = os.path.join(outdir, os.path.split(bigwig)[1])
-#         new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
-#         lines += new_lines
-# 
-#         tf_lines += ' '.join(['track', 'type=bigWig',
-#                               'name="{}_cov"'.format(sample_name),
-#                               ('description="RNAseq coverage for '
-#                                '{}"'.format(sample_name)),
-#                               'visibility=0',
-#                               'db=hg19',
-#                               'bigDataUrl={}/{}\n'.format(temp_web_path,
-#                                                           bigwig_name)])
-#     
-#     with open(tracklines_file, 'w') as tf:
-#         tf.write(tf_lines)
-#     
-#     lines += '\n'
-#     return lines
 
 def align_and_sort(
     r1_fastqs, 

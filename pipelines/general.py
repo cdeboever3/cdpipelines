@@ -735,10 +735,10 @@ def _make_softlink(fn, sample_name, link_dir):
 class JobScript:
     #TODO: update default queue for new cluster
     def __init__(self, sample_name, job_suffix, outdir, threads, tempdir=None,
-                 shell=False, queue='high', conda_env=None, environment=None,
-                 copy_input=True):
+                 shell=False, queue='high', conda_env=None, modules=None,
+                 copy_input=False):
         """
-        Create PBS/shell script object.
+        Create SGE/shell script object.
 
         Parameters
         ----------
@@ -752,23 +752,25 @@ class JobScript:
             Path to directory where final output files should be stored.
 
         threads : int
-            Number of threads to request for PBS scripts and to use for
+            Number of threads to request for SGE scripts and to use for
             multi-threaded software.
 
         tempdir : str
-            Path to directory where temporary directory should be made.
+            Path to directory where temporary directory should be made. If not
+            provided, the output directory will be used as the temp directory.
 
         shell : bool
-            True if making a shell script. False if making a PBS script.
+            True if making a shell script. False if making a SGE script.
 
         queue : str
-            PBS queue to use if writing PBS script.
+            SGE queue to use if writing SGE script.
 
         conda_env : str
             Path to conda environment to load when job begins.
 
-        environment : str
-            Path to file that should be sourced at beginning of script.
+        modules : str
+            Modules (separated by commas e.g. bedtools,samtools) to load at
+            beginning of script.
 
         copy_input : bool
             Whether to copy input files to temp directory. 
@@ -777,25 +779,23 @@ class JobScript:
         self.sample_name = sample_name
         self.job_suffix = job_suffix
         self.jobname = '{}_{}'.format(sample_name, job_suffix)
+        self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
         if tempdir:
             self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
         else:
-            self.tempdir = tempdir
-        self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
+            self.tempdir = self.outdir
         _make_dir(self.outdir)
         assert type(threads) is int
         self.threads = threads
         self.shell = shell
-        self.pbs = not shell
+        self.sge = not shell
         self.queue = queue
         self.conda_env = conda_env
-        self.environment = environment
+        self.modules = ','.split(modules)
        
         self.out = os.path.join(self.outdir, '{}.out'.format(self.jobname))
         self.err = os.path.join(self.outdir, '{}.err'.format(self.jobname))
 
-        # # self.files contains JobScriptFile objects.
-        # self.files = []
         self.copy_input = copy_input
         self.input_files_to_copy = []
         self.output_files_to_copy = []
@@ -805,15 +805,16 @@ class JobScript:
         self._write_header()
 
     def _set_filename(self):
-        """Make PBS/shell script filename."""
-        if self.pbs:
+        """Make SGE/shell script filename."""
+        if self.sge:
             self.filename = os.path.join(self.outdir, 
-                                         '{}.pbs'.format(self.jobname))
+                                         '{}.sge'.format(self.jobname))
         else:
             self.filename = os.path.join(self.outdir, 
                                          '{}.sh'.format(self.jobname))
-
+    
     def _write_header(self):
+        # TODO: Update this for SGE.
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
             if self.pbs:
@@ -831,35 +832,24 @@ class JobScript:
                 f.write('mkdir -p {}\n'.format(self.tempdir))
                 f.write('cd {}\n\n'.format(self.tempdir))
 
-    # def add_file(self, fn, copy_to_tempdir=True, delete_temp=True,
-    #              copy_to_outdir=False):
-    #     f = JobScriptFile(fn, copy_to_tempdir=copy_to_tempdir,
-    #                       delete_temp=delete_temp,
-    #                       copy_to_outdir=copy_to_outdir, tempdir=self.tempdir)
-    #     self.files.append(f)
-    #     if copy_to_tempdir:
-    #         self.input_files_to_copy.append(f.filename)
-    #     if delete_temp:
-    #         self.files_to_delete.append(f.temp_filename)
-    #     if copy_to_outdir:
-    #         self.output_files_to_copy.append(f.temp_filename)
-    #     return f
-
     def add_softlink(self, target, link):
         """Add a target, link pair to the JobScript instance so that a softlink
-        from target to link is made at the end of the jobscript."""
+        from target to link is made at the end of the jobscript. This happens at
+        the end of the script so that the files actually exist and the softlink
+        works. Useful for linking files into web directories for instance."""
         self.softlinks.append([target, link])
 
     def add_temp_file(self, fn, copy=False):
-        """Add temporary file to self.temp_files_to_delete, add to
-        self.output_files_to_copy if copy, and return temp path"""
+        """Add temporary file to self.temp_files_to_delete. If copy == True,
+        add to self.output_files_to_copy. Returns temp path."""
         if copy:
             self.output_files_to_copy.append(fn)
         return self.temp_file_path(fn)
 
     def add_input_file(self, fn, copy=None):
-        """Add input file to self.input_files_to_copy (if self.copy_input or
-        copy) and return temp path"""
+        """Add input file to self.input_files_to_copy if self.copy_input or
+        copy == True. Return temp path. If both self.copy_input and copy are
+        False, the realpath of the input file is returned."""
         if copy:
             self.input_files_to_copy.append(fn)
         elif copy == False:
@@ -880,15 +870,17 @@ class JobScript:
     def copy_input_files(self):
         if len(self.input_files_to_copy) > 0:
             with open(self.filename, "a") as f:
-                f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
+                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.input_files_to_copy),
                     self.tempdir))
+            # We will delete any input files we copy over.
             self.temp_files_to_delete += [
                 os.path.join(self.tempdir, os.path.split(x)[1]) for x in
                 self.input_files_to_copy]
 
     def _copy_output_files(self):
-        if len(self.output_files_to_copy) > 0 and self.tempdir != self.outdir:
+        if len(self.output_files_to_copy) > 0 and 
+        os.path.realpath(self.tempdir) != os.path.realpath(self.outdir):
             with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.output_files_to_copy),
@@ -896,7 +888,8 @@ class JobScript:
 
     def _delete_temp_files(self):
         if len(self.temp_files_to_delete) > 0:
-            if self.tempdir == self.outdir or self.tempdir is None:
+            if os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
+            or self.tempdir is None:
                 self.temp_files_to_delete = [
                     x for x in self.temp_files_to_delete if x not in
                     self.output_files_to_copy
@@ -906,7 +899,8 @@ class JobScript:
                     ' \\\n\t'.join(self.temp_files_to_delete)))
 
     def _delete_tempdir(self):
-        if self.tempdir and (self.tempdir != self.outdir):
+        if self.tempdir and (os.path.realpath(self.tempdir) !=
+                             os.path.realpath(self.outdir)):
             with open(self.filename, "a") as f:
                 f.write('rm -r {}\n'.format(self.tempdir))
 
