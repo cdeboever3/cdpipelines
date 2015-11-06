@@ -6,7 +6,6 @@ from general import _coverage_bedgraph
 from general import _fastqc
 from general import JobScript
 from general import _make_softlink
-from general import _pbs_header
 from general import _picard_bam_index_stats
 from general import _picard_coord_sort
 from general import _picard_collect_multiple_metrics
@@ -79,24 +78,24 @@ def align_and_sort(
     tracklines_file,
     link_dir,
     web_path_file,
-    star_path,
-    picard_path,
-    bedtools_path,
-    bedgraph_to_bigwig_path,
-    fastqc_path,
     ref_flat, 
     rrna_intervals,
     rgpl='ILLUMINA',
     rgpu='',
-    tempdir='/scratch', 
-    threads=10, 
-    picard_memory=15,
+    tempdir=None,
+    threads=8,
+    memory=TODO,
+    picard_memory=TODO,
     strand_specific=True, 
-    shell=False
+    star_path='STAR',
+    picard_path='$picard',
+    bedtools_path='bedtools',
+    bedgraph_to_bigwig_path='bedGraphToBigWig',
+    fastqc_path='fastqc',
 ):
     """
-    Make a PBS or shell script for aligning RNA-seq reads with STAR. The
-    defaults are set for use on the Frazer lab's PBS scheduler on FLC.
+    Make a shell script for aligning RNA-seq reads with STAR. The defaults are
+    set for use on the Frazer lab's SGE scheduler on flh1/flh2.
 
     Parameters
     ----------
@@ -109,7 +108,7 @@ def align_and_sort(
         single gzipped fastq file with R2 reads.
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and aligment results.
 
     sample_name : str
         Sample name used for naming files etc.
@@ -165,7 +164,7 @@ def align_and_sort(
         Directory to store files as STAR runs.
 
     threads : int
-        Number of threads to reserve using PBS scheduler. This number of threads
+        Number of threads to reserve using SGE scheduler. This number of threads
         minus 2 will be used by STAR, so this must be at least 3.
 
     picard_memory : int
@@ -174,13 +173,10 @@ def align_and_sort(
     strand_specific : boolean
         If false, data is not strand specific.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-
     Returns
     -------
     fn : str
-        Path to PBS/shell script.
+        Path to shell script.
 
     """
     assert threads >= 3
@@ -425,8 +421,13 @@ def align_and_sort(
     job.write_end()
     return job.filename
 
-def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
-                  strand_specific=False, samtools_path='.'):
+def _dexseq_count(
+    bam, 
+    counts_file, 
+    dexseq_annotation, 
+    paired=True,
+    strand_specific=True, 
+    samtools_path='samtools'):
     """
     Count reads overlapping exonic bins for DEXSeq.
 
@@ -450,7 +451,7 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     name : str
         File name for the softlink.
@@ -479,8 +480,14 @@ def _dexseq_count(bam, counts_file, dexseq_annotation, paired=True,
     )
     return lines
 
-def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
-                 strand_specific=False):
+def _htseq_count(
+    bam, 
+    counts_file, 
+    stats_file, 
+    gtf, 
+    strand_specific=False,
+    samtools_path='samtools',
+):
     """
     Count reads overlapping genes for use with DESeq etc.
 
@@ -504,7 +511,7 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     name : str
         File name for the softlink.
@@ -527,12 +534,25 @@ def _htseq_count(bam, counts_file, stats_file, gtf, samtools_path,
 
     return lines
 
-def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
-               samtools_path, conda_env='', r_env='', paired=True,
-               strand_specific=False, shell=False):
+# TODO: I want to split out the DEXSeq counting. I don't need the HTSeq counting
+# anymore. This needs to be refactored for JobScript as well.
+def get_counts(
+    bam, 
+    outdir, 
+    sample_name, 
+    tempdir, 
+    dexseq_annotation, 
+    gtf,
+    threads=1,
+    conda_env=None,
+    r_env='', # TODO: get rid of this and replace with modules
+    paired=True,
+    strand_specific=False,
+    samtools_path='samtools',
+):
     """
-    Make a PBS or shell script for counting reads that overlap genes for DESeq2
-    and exonic bins for DEXSeq.
+    Make a shell script for counting reads that overlap genes for DESeq2 and
+    exonic bins for DEXSeq.
 
     Parameters
     ----------
@@ -540,7 +560,7 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
         Coordinate sorted bam file (genomic coordinates).
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and aligment results.
 
     sample_name : str
         Sample name used for naming files etc.
@@ -566,17 +586,7 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
     strand_specific : boolean
         True if the data is strand-specific. False otherwise.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-
     """
-    threads = 6
-
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
     tempdir = os.path.join(tempdir, '{}_counts'.format(sample_name))
     outdir = os.path.join(outdir, '{}_counts'.format(sample_name))
 
@@ -616,7 +626,7 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    if conda_env != '':
+    if conda_env:
         f.write('source activate {}\n\n'.format(conda_env))
     if r_env != '':
         f.write('source {}\n\n'.format(r_env))
@@ -644,8 +654,15 @@ def get_counts(bam, outdir, sample_name, tempdir, dexseq_annotation, gtf,
 
     return fn
 
-def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
-                               threads=1, ci_mem=1024, strand_specific=False): 
+def _rsem_calculate_expression(
+    bam, 
+    reference, 
+    sample_name,
+    threads=1, 
+    ci_mem=1024, 
+    strand_specific=False,
+    rsem_calculate_expression_path='rsem-calculate-expression',
+):
     """
     Estimate expression using RSEM.
 
@@ -656,9 +673,6 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
 
     reference : str
         RSEM reference.
-
-    rsem_path : str
-        Path to RSEM executables.
 
     sample_name : str
         Sample name for RSEM to name files.
@@ -674,30 +688,37 @@ def _rsem_calculate_expression(bam, reference, rsem_path, sample_name,
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     name : str
         File name for the softlink.
 
     """
-    # line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
-    #         '--no-bam-output --seed 3272015 --calc-pme --calc-ci '
-    #         '--ci-memory {} --estimate-rspd {} {} {}'.format(
-    #             rsem_path, threads, ci_mem, bam, reference, sample_name))
-    line = ('{}/rsem-calculate-expression --bam --paired-end --num-threads {} '
+    line = ('{} --bam --paired-end --num-threads {} '
             '--no-bam-output --seed 3272015 --calc-ci '
             '--ci-memory {} --estimate-rspd {} {} {}'.format(
-                rsem_path, threads, ci_mem, bam, reference, sample_name))
+                rsem_calculate_expression_path, threads, ci_mem, bam, reference,
+                sample_name))
     if strand_specific:
         line += ' --forward-prob 0'
     line += '\n'
     return line
 
-def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
-                    rsem_reference, ci_mem=1024, r_env='', threads=32,
-                    strand_specific=False, shell=False):
+# Needs to be refactored for JobScript.
+def rsem_expression(
+    bam, 
+    outdir, 
+    sample_name, 
+    rsem_reference, 
+    ci_mem=1024, 
+    r_env='', # TODO: replace with modules
+    threads=32,
+    tempdir=None,
+    strand_specific=False,
+    rsem_calculate_expression_path='rsem-calculate-expression',
+):
     """
-    Make a PBS or shell script for estimating expression using RSEM.
+    Make a shell script for estimating expression using RSEM.
 
     Parameters
     ----------
@@ -705,16 +726,13 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
         Coordinate sorted bam file (genomic coordinates).
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and aligment results.
 
     sample_name : str
         Sample name used for naming files etc.
 
     tempdir : str
         Directory to store temporary files.
-
-    rsem_path : str
-        Path to directory with RSEM executables.
 
     rsem_reference : str
         RSEM reference.
@@ -729,15 +747,7 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
     strand_specific : boolean
         True if the data is strand-specific. False otherwise.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-
     """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
     tempdir = os.path.join(tempdir, '{}_rsem'.format(sample_name))
     outdir = os.path.join(outdir, '{}_rsem'.format(sample_name))
 
@@ -776,7 +786,8 @@ def rsem_expression(bam, outdir, sample_name, tempdir, rsem_path,
     f.write('cd {}\n'.format(tempdir))
     f.write('rsync -avz {} .\n\n'.format(bam))
 
-    lines = _rsem_calculate_expression(temp_bam, rsem_reference, rsem_path,
+    lines = _rsem_calculate_expression(temp_bam, rsem_reference,
+                                       rsem_calculate_expression_path,
                                        sample_name, threads=threads,
                                        ci_mem=ci_mem,
                                        strand_specific=strand_specific)
