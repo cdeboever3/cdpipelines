@@ -734,9 +734,9 @@ def _make_softlink(fn, sample_name, link_dir):
 
 class JobScript:
     #TODO: update default queue for new cluster
-    def __init__(self, sample_name, job_suffix, outdir, threads, tempdir=None,
-                 shell=False, queue='high', conda_env=None, modules=None,
-                 copy_input=False):
+    def __init__(self, sample_name, job_suffix, outdir, threads, memory,
+                 tempdir=None, shell=False, queue='high', conda_env=None,
+                 modules=None, copy_input=False):
         """
         Create SGE/shell script object.
 
@@ -754,6 +754,9 @@ class JobScript:
         threads : int
             Number of threads to request for SGE scripts and to use for
             multi-threaded software.
+
+        memory : int
+            Amount of memory in Gb to request for SGE scripts.
 
         tempdir : str
             Path to directory where temporary directory should be made. If not
@@ -787,6 +790,8 @@ class JobScript:
         _make_dir(self.outdir)
         assert type(threads) is int
         self.threads = threads
+        assert type(memory) is int
+        self.memory = memory
         self.shell = shell
         self.sge = not shell
         self.queue = queue
@@ -814,18 +819,20 @@ class JobScript:
                                          '{}.sh'.format(self.jobname))
     
     def _write_header(self):
-        # TODO: Update this for SGE.
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
-            if self.pbs:
-                f.write('#PBS -q {}\n'.format(self.queue))
-                f.write('#PBS -N {}\n'.format(self.jobname))
-                f.write('#PBS -l nodes=1:ppn={}\n'.format(self.threads))
-                f.write('#PBS -o {}\n'.format(self.out))
-                f.write('#PBS -e {}\n\n'.format(self.err))
+            if self.pbs: 
+                f.write('#$ -q {}\n'.format(self.queue))
+                f.write('#$ -N {}\n'.format(self.jobname))
+                f.write('#$ -l h_vmem={}\n'.format(self.memory))
+                f.write('#$ -pe {}\n'.format(self.threads))
+                f.write('#$ -S /bin/bash\n')
+                f.write('#$ -o {}\n'.format(self.out))
+                f.write('#$ -e {}\n\n'.format(self.err))
             f.write('# Git repository version:\n# {}\n\n'.format(_git_info()))
-            if self.environment:
-                f.write('source {}\n\n'.format(self.environment))
+            if self.modules:
+                for module in modules:
+                    f.write('module load {}\n\n'.format(module))
             if self.conda_env:
                 f.write('source activate {}\n\n'.format(self.conda_env))
             if self.tempdir:
@@ -879,8 +886,8 @@ class JobScript:
                 self.input_files_to_copy]
 
     def _copy_output_files(self):
-        if len(self.output_files_to_copy) > 0 and 
-        os.path.realpath(self.tempdir) != os.path.realpath(self.outdir):
+        if (len(self.output_files_to_copy) > 0 and 
+            os.path.realpath(self.tempdir) != os.path.realpath(self.outdir)):
             with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
                     '\\\n\t'.join(self.output_files_to_copy),
@@ -888,8 +895,8 @@ class JobScript:
 
     def _delete_temp_files(self):
         if len(self.temp_files_to_delete) > 0:
-            if os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
-            or self.tempdir is None:
+            if (os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
+                or self.tempdir is None):
                 self.temp_files_to_delete = [
                     x for x in self.temp_files_to_delete if x not in
                     self.output_files_to_copy
