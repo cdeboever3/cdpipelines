@@ -449,7 +449,7 @@ def _cutadapt_trim(
     Returns
     -------
     lines : str
-        Lines to be written to PBS/shell script.
+        Lines to be written to shell script.
 
     """
     line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
@@ -495,7 +495,7 @@ def _flagstat(
     Returns
     -------
     lines : str
-        Lines to be written to PBS/shell script.
+        Lines to be written to shell script.
 
     """
     lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
@@ -536,7 +536,7 @@ def _coverage_bedgraph(
     Returns
     -------
     lines : str
-        Lines to be written to PBS/shell script.
+        Lines to be written to shell script.
 
     """
     if strand == '+' or strand == '-':
@@ -588,7 +588,7 @@ def _bigwig_files(
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     """
     lines = ''
@@ -670,7 +670,7 @@ def _fastqc(
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     """
     if type(fastqs) == list:
@@ -694,7 +694,7 @@ def _softlink(target, link):
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     """
     lines = 'ln -s {} {}\n'.format(target, link)
@@ -719,7 +719,7 @@ def _make_softlink(fn, sample_name, link_dir):
     Returns
     -------
     lines : str
-        Lines to be printed to shell/PBS script.
+        Lines to be printed to shell script.
 
     name : str
         File name for the softlink.
@@ -735,8 +735,8 @@ def _make_softlink(fn, sample_name, link_dir):
 class JobScript:
     #TODO: update default queue for new cluster
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
-                 tempdir=None, shell=False, queue='high', conda_env=None,
-                 modules=None, copy_input=False):
+                 tempdir=None, queue='high', conda_env=None, modules=None,
+                 copy_input=False):
         """
         Create SGE/shell script object.
 
@@ -761,9 +761,6 @@ class JobScript:
         tempdir : str
             Path to directory where temporary directory should be made. If not
             provided, the output directory will be used as the temp directory.
-
-        shell : bool
-            True if making a shell script. False if making a SGE script.
 
         queue : str
             SGE queue to use if writing SGE script.
@@ -792,8 +789,6 @@ class JobScript:
         self.threads = threads
         assert type(memory) is int
         self.memory = memory
-        self.shell = shell
-        self.sge = not shell
         self.queue = queue
         self.conda_env = conda_env
         self.modules = ','.split(modules)
@@ -811,24 +806,18 @@ class JobScript:
 
     def _set_filename(self):
         """Make SGE/shell script filename."""
-        if self.sge:
-            self.filename = os.path.join(self.outdir, 
-                                         '{}.sge'.format(self.jobname))
-        else:
-            self.filename = os.path.join(self.outdir, 
-                                         '{}.sh'.format(self.jobname))
+        self.filename = os.path.join(self.outdir, '{}.sh'.format(self.jobname))
     
     def _write_header(self):
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
-            if self.pbs: 
-                f.write('#$ -q {}\n'.format(self.queue))
-                f.write('#$ -N {}\n'.format(self.jobname))
-                f.write('#$ -l h_vmem={}\n'.format(self.memory))
-                f.write('#$ -pe {}\n'.format(self.threads))
-                f.write('#$ -S /bin/bash\n')
-                f.write('#$ -o {}\n'.format(self.out))
-                f.write('#$ -e {}\n\n'.format(self.err))
+            f.write('#$ -q {}\n'.format(self.queue))
+            f.write('#$ -N {}\n'.format(self.jobname))
+            f.write('#$ -l h_vmem={}\n'.format(self.memory))
+            f.write('#$ -pe {}\n'.format(self.threads))
+            f.write('#$ -S /bin/bash\n')
+            f.write('#$ -o {}\n'.format(self.out))
+            f.write('#$ -e {}\n\n'.format(self.err))
             f.write('# Git repository version:\n# {}\n\n'.format(_git_info()))
             if self.modules:
                 for module in modules:
@@ -922,6 +911,8 @@ class JobScript:
         self._delete_tempdir()
         self._make_softlinks()
 
+# The method below needs to be phased out of all code. That can probably
+# coincide with refactoring all pipelines to use JobScript.
 def _pbs_header(out, err, name, threads, queue='high'):
     """
     Write header for PBS script
@@ -983,7 +974,7 @@ def _picard_index(
     Returns
     -------
     line : str
-        Line to print to shell/pbs script.
+        Line to print to shell script.
 
     """
     line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
@@ -1035,7 +1026,7 @@ def _picard_merge(
     Returns
     -------
     line : str
-        Line to print to shell/pbs script.
+        Line to print to shell script.
 
     """
     merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
@@ -1208,12 +1199,11 @@ def wasp_allele_swap(
     copy_vcf=True,
     vcf_sample_name=None, 
     conda_env=None, 
-    shell=False,
     threads=6,
     samtools_path='samtools',
 ):
     """
-    Write pbs or shell script for identifying reads in a bam file that overlap
+    Write shell script for identifying reads in a bam file that overlap
     specified variants and switching the variant allele. This is done using
     find_intersecting_snps.py from WASP.
 
@@ -1232,7 +1222,7 @@ def wasp_allele_swap(
         Sample name used for naming files etc.
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and results.
 
     tempdir : str
         Directory to store temporary files.
@@ -1247,16 +1237,13 @@ def wasp_allele_swap(
     conda_env : str
         If provided, load conda environment with this name.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
     threads : int
         Number of threads to request for PBS script.
 
     """
     job_suffix = 'wasp_allele_swap'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, conda_env=conda_env)
+                    conda_env=conda_env)
     
     if not vcf_sample_name:
         vcf_sample_name = sample_name
@@ -1317,12 +1304,11 @@ def wasp_alignment_compare(
     picard_path='$picard',
     picard_memory=12,
     conda_env='', 
-    shell=False, 
     threads=6):
     """
-    Write pbs or shell script for checking original mapping position of reads
-    against remapping after swapping alleles using WASP, then count allele
-    coverage for each SNP.
+    Write shell script for checking original mapping position of reads against
+    remapping after swapping alleles using WASP, then count allele coverage for
+    each SNP.
 
     Parameters
     ----------
@@ -1350,7 +1336,7 @@ def wasp_alignment_compare(
         Sample name used for naming files etc.
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and results.
 
     tempdir : str
         Directory to store temporary files.
@@ -1358,16 +1344,13 @@ def wasp_alignment_compare(
     conda_env : str
         If provided, load conda environment with this name.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-
     threads : int
-        Number of threads to request for PBS script.
+        Number of threads to request for SGE script.
 
     """
     job_suffix = 'wasp_alignment_compare'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, conda_env=conda_env)
+                    conda_env=conda_env)
 
     # Input files.
     temp_to_remap_bam = job.add_input_file(to_remap_bam)
@@ -1439,13 +1422,12 @@ def wasp_remap(
     threads=10, 
     picard_path='$picard',
     picard_memory=15, 
-    shell=False,
     star_path='STAR',
     samtools_path='samtools',
 ):
     """
-    Make a PBS or shell script for re-aligning reads from with variants using
-    STAR. The defaults are set for use on the Frazer lab's PBS scheduler on FLC.
+    Make a shell script for re-aligning reads from with variants using STAR. The
+    defaults are set for use on the Frazer lab's SGE scheduler on flh1/flh2.
 
     Parameters
     ----------
@@ -1456,7 +1438,7 @@ def wasp_remap(
         R2 reads from find_intersecting_snps.py to be remapped.
 
     outdir : str
-        Directory to store PBS/shell file and aligment results.
+        Directory to store shell file and results.
 
     sample_name : str
         Sample name used for naming files etc.
@@ -1487,7 +1469,7 @@ def wasp_remap(
         Directory to store files as STAR runs.
 
     threads : int
-        Number of threads to reserve using PBS scheduler. This number of threads
+        Number of threads to reserve using SGE scheduler. This number of threads
         minus 2 will be used by STAR, so this must be at least 3.
 
     picard_path : str
@@ -1496,13 +1478,10 @@ def wasp_remap(
     picard_memory : int
         Amount of memory (in gb) to give Picard Tools.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
     Returns
     -------
     fn : str
-        Path to PBS/shell script.
+        Path to shell script.
 
     """
     assert threads >= 3
@@ -1511,8 +1490,7 @@ def wasp_remap(
                                    'seq_type'.format(', '.join(seq_types)))
     job_suffix = 'wasp_remap'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, queue='high', conda_env=conda_env,
-                    environment=None, copy_input=True)
+                    queue='high', conda_env=conda_env, copy_input=True)
     
     # Input files.
     temp_r1 = job.add_input_file(r1_fastq)
@@ -1574,7 +1552,7 @@ def _mbased(
     bigWigAverageOverBed_path='bigWigAverageOverBed',
 ):
     """
-    Make a PBS or shell script for running MBASED to determine allelic bias from
+    Make a shell script for running MBASED to determine allelic bias from
     sequencing reads.
 
     Parameters
@@ -1625,7 +1603,7 @@ def _mbased(
     Returns
     -------
     lines : str
-        Lines to be printed to PBS/shell script.
+        Lines to be printed to shell script.
 
     """
     from __init__ import scripts
@@ -1650,7 +1628,7 @@ def run_mbased(
     bed,
     outdir, 
     sample_name, 
-    environment=None, 
+    modules=None,
     conda_env=None,
     is_phased=False,
     num_sim=1000000,
@@ -1658,11 +1636,10 @@ def run_mbased(
     vcf=None,
     vcf_sample_name=None,
     mappability=None,
-    shell=False,
     bigWigAverageOverBed_path='bigWigAverageOverBed',
 ):
     """
-    Make a PBS or shell script for running MBASED to determine allelic bias from
+    Make a shell script for running MBASED to determine allelic bias from
     sequencing reads.
 
     Parameters
@@ -1675,13 +1652,14 @@ def run_mbased(
         Path to bed file for assigning heterozygous SNVs to features.
     
     outdir : str
-        Directory to store PBS/shell file and MBASED results.
+        Directory to store shell file and MBASED results.
 
     sample_name : str
         Sample name used for naming files etc.
 
-    environment : str
-        This file will be sourced to set PATH variables for R.
+    modules : str
+        Modules (separated by commas e.g. bedtools,samtools) to load at
+        beginning of script.
 
     is_phased : bool
         Whether the input file is phased. If so, the reference alleles are
@@ -1691,7 +1669,7 @@ def run_mbased(
         Number of simulations for MBASED to perform.
 
     threads : int
-        Number of threads to reserve using PBS scheduler and for MBASED to use.
+        Number of threads to reserve using SGE scheduler and for MBASED to use.
 
     vcf : str
         Path to gzipped, indexed VCF file with all variant calls (not just
@@ -1708,19 +1686,16 @@ def run_mbased(
     bigWigAverageOverBed_path : str
         Path to bigWigAverageOverBed. Required if mappability is provided.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
     Returns
     -------
     fn : str
-        Path to PBS/shell script.
+        Path to shell script.
 
     """
     assert threads >= 1
     job_suffix = 'mbased'
-    job = JobScript(sample_name, job_suffix, outdir, threads, shell=False,
-                    queue='high', environment=environment, conda_env=conda_env,
+    job = JobScript(sample_name, job_suffix, outdir, threads, queue='high',
+                    modules=modules, conda_env=conda_env,
                     copy_input=True)
     
     # I'm going to define some file names used later.
@@ -1742,145 +1717,135 @@ def run_mbased(
     job.write_end()
     return job.filename
 
-def convert_sra_to_fastq(
-    sra_files, 
-    outdir, 
-    sample_name, 
-    remove_sra_files=False,
-    max_threads=32,
-    threads_per_sra=4,
-    shell=False,
-    fastq_dump_path='fastq-dump',
-):
-    """
-    Make a PBS or shell script for converting one or more SRA files into fastq
-    files. All R1 and R2 files will be concatenated and gzipped into two single
-    output files.
-
-    Parameters
-    ----------
-    sra_files : list
-        List of SRA files to convert.
-
-    outdir : str
-        Directory to store PBS/shell file and gzipped fastq files.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    remove_sra_files : bool
-        Whether to remove original SRA files after conversion is complete.
-
-    max_threads : int
-        Maximum number of threads to request from PBS scheduler.
-
-    threads_per_sra : int
-        Request this many threads per SRA input file. max_threads /
-        threads_per_sra SRA files will be converted at a time. For instance, if
-        you provide 3 SRA files, threads_per_sra=4, and max_threads=10, then the
-        first two SRA files will be converted at the same time. After they are
-        done, the last file will be converted. This is done naively using
-        background processes (&).
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    fastq-dump : str
-        Path to fastq-dump from the SRA toolkit.
-
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    threads = min(threads_per_sra * len(sra_files), max_threads)
-
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_sra_fastq'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_sra_fastq'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    r1 = os.path.join(tempdir, '{}.R1.fastq.gz'.format(sample_name))
-    r2 = os.path.join(tempdir, '{}.R2.fsatq.gz'.format(sample_name))
-    temp_sra_files = [os.path.join(tempdir, os.path.split(x)[1]) for x in
-                      sra_files]
-    
-    # Files to copy to output directory.
-    files_to_copy = [r1, r2]
-    
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = temp_sra_files
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_sra_fastq.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_sra_fastq.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_sra_fastq.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_sra_fastq.err'.format(sample_name))
-        job_name = '{}_sra_fastq'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-        ' \\\n\t'.join(sra_files), tempdir))
-
-    def chunks(l, n):
-        """Yield successive n-sized chunks from l."""
-        for i in xrange(0, len(l), n):
-            yield l[i:i+n]
-    
-    c = chunks(temp_sra_files, threads / threads_per_sra)
-    while True:
-        try:
-            n = c.next()
-            for sra in n:
-                f.write('{} {} --split-files &\n'.format(
-                    os.path.join(fastq_dump_path), sra))
-            f.write('\nwait\n\n')
-        except StopIteration:
-            continue
-        
-    # Concatenate files, pass through awk to remove unneeded stuff, gzip.
-    f.write('cat *_1.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
-            'if (NR % 4 == 3) {print "+"}}\' | '
-            'gzip -c > ' + r1 + ' &\n\n')
-    f.write('cat *_2.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
-            'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
-            'if (NR % 4 == 3) {print "+"}}\' | '
-            'gzip -c > ' + r2 + '\n\n')
-    f.write('wait\n\n')
-
-    if remove_sra_files:
-        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(sra_files)))
-            
-    f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-        ' \\\n\t'.join(files_to_copy),
-        outdir))
-    f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
+# The method below needs to be updated for SGE and JobScript. I've done a little
+# already.
+# def convert_sra_to_fastq(
+#     sra_files, 
+#     outdir, 
+#     sample_name, 
+#     remove_sra_files=False,
+#     max_threads=32,
+#     threads_per_sra=4,
+#     fastq_dump_path='fastq-dump',
+# ):
+#     """
+#     Make a shell script for converting one or more SRA files into fastq files.
+#     All R1 and R2 files will be concatenated and gzipped into two single output
+#     files.
+# 
+#     Parameters
+#     ----------
+#     sra_files : list
+#         List of SRA files to convert.
+# 
+#     outdir : str
+#         Directory to store shell file and gzipped fastq files.
+# 
+#     sample_name : str
+#         Sample name used for naming files etc.
+# 
+#     remove_sra_files : bool
+#         Whether to remove original SRA files after conversion is complete.
+# 
+#     max_threads : int
+#         Maximum number of threads to request from SGE scheduler.
+# 
+#     threads_per_sra : int
+#         Request this many threads per SRA input file. max_threads /
+#         threads_per_sra SRA files will be converted at a time. For instance, if
+#         you provide 3 SRA files, threads_per_sra=4, and max_threads=10, then the
+#         first two SRA files will be converted at the same time. After they are
+#         done, the last file will be converted. This is done naively using
+#         background processes (&).
+# 
+#     fastq-dump : str
+#         Path to fastq-dump from the SRA toolkit.
+# 
+#     Returns
+#     -------
+#     fn : str
+#         Path to shell script.
+# 
+#     """
+#     threads = min(threads_per_sra * len(sra_files), max_threads)
+# 
+#     tempdir = os.path.join(tempdir, '{}_sra_fastq'.format(sample_name))
+#     outdir = os.path.join(outdir, '{}_sra_fastq'.format(sample_name))
+# 
+#     # I'm going to define some file names used later.
+#     r1 = os.path.join(tempdir, '{}.R1.fastq.gz'.format(sample_name))
+#     r2 = os.path.join(tempdir, '{}.R2.fsatq.gz'.format(sample_name))
+#     temp_sra_files = [os.path.join(tempdir, os.path.split(x)[1]) for x in
+#                       sra_files]
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = [r1, r2]
+#     
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = temp_sra_files
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     fn = os.path.join(outdir, '{}_sra_fastq.sh'.format(sample_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir, '{}_sra_fastq.out'.format(sample_name))
+#         err = os.path.join(outdir, '{}_sra_fastq.err'.format(sample_name))
+#         job_name = '{}_sra_fastq'.format(sample_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+# 
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+#     f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#         ' \\\n\t'.join(sra_files), tempdir))
+# 
+#     def chunks(l, n):
+#         """Yield successive n-sized chunks from l."""
+#         for i in xrange(0, len(l), n):
+#             yield l[i:i+n]
+#     
+#     c = chunks(temp_sra_files, threads / threads_per_sra)
+#     while True:
+#         try:
+#             n = c.next()
+#             for sra in n:
+#                 f.write('{} {} --split-files &\n'.format(
+#                     os.path.join(fastq_dump_path), sra))
+#             f.write('\nwait\n\n')
+#         except StopIteration:
+#             continue
+#         
+#     # Concatenate files, pass through awk to remove unneeded stuff, gzip.
+#     f.write('cat *_1.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
+#             'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+#             'if (NR % 4 == 3) {print "+"}}\' | '
+#             'gzip -c > ' + r1 + ' &\n\n')
+#     f.write('cat *_2.fastq | awk \'{if (NR % 4 == 1) {print "@"$2} '
+#             'if (NR % 4 == 2 || NR % 4 == 0) {print $1} '
+#             'if (NR % 4 == 3) {print "+"}}\' | '
+#             'gzip -c > ' + r2 + '\n\n')
+#     f.write('wait\n\n')
+# 
+#     if remove_sra_files:
+#         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(sra_files)))
+#             
+#     f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#         ' \\\n\t'.join(files_to_copy),
+#         outdir))
+#     f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if tempdir != outdir:
+#         f.write('rm -r {}\n'.format(tempdir))
+#     f.close()
+# 
+#     return fn
 
 def merge_bams(
     bams, 
@@ -1891,14 +1856,13 @@ def merge_bams(
     bigwig=False,
     copy_bams=True,
     threads=8,
-    shell=False,
     bedgraph_to_bigwig_path='bedGraphToBigWig',
     bedtools_path='bedtools',
     picard_path='$picard',
     picard_memory=2,
 ):
     """
-    Make a PBS or shell script for combining multiple bam files using Picard.
+    Make a shell script for combining multiple bam files using Picard.
 
     Parameters
     ----------
@@ -1906,7 +1870,7 @@ def merge_bams(
         List of SRA files to convert.
 
     outdir : str
-        Directory to store PBS/shell file and merged bam file.
+        Directory to store shell file and merged bam file.
 
     merged_name : str
         Name used for output directory, files etc.
@@ -1922,15 +1886,12 @@ def merge_bams(
         necessary if temp directory is on the same file system as bam files.
 
     threads : int
-        Number of threads to request from PBS scheduler.
+        Number of threads to request from SGE scheduler.
 
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
     Returns
     -------
     fn : str
-        Path to PBS/shell script.
+        Path to shell script.
 
     """
     if bigwig:
@@ -1940,7 +1901,7 @@ def merge_bams(
 
     job_suffix = 'merged_bam'
     job = JobScript(merged_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, copy_input=not shell)
+                    copy_input=False)
     
     # I'm going to define some file names used later.
     merged_bam = job.add_temp_file('{}_merged.bam'.format(merged_name),
