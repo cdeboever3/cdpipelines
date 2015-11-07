@@ -62,8 +62,13 @@ def _download_and_untar(url, dest, outdir, remove_tarball=False):
     if remove_tarball:
         os.remove(dest)
 
-def make_rna_seq_metrics_files(outdir, gencode_gtf, genome_fasta, picard_path,
-                               gtfToGenePred_path):
+def make_rna_seq_metrics_files(
+    outdir, 
+    gencode_gtf, 
+    genome_fasta, 
+    picard_path='$picard',
+    gtfToGenePred_path='gtfToGenePred',
+):
     """Make refFlat file and rRNA interval list"""
     import HTSeq
     import itertools as it
