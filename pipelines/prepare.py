@@ -708,10 +708,10 @@ def download_install_rpy2(r_path, outdir):
     sys.stdout.write('Downloading and installing rpy2.\n\n')
     sys.stdout.flush()
 
-    url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.4.2.tar.gz')
-    dest = os.path.join(outdir, 'rpy2-2.4.2.tar.gz')
+    url = ('https://pypi.python.org/packages/source/r/rpy2/rpy2-2.7.3.tar.gz')
+    dest = os.path.join(outdir, 'rpy2-2.7.3.tar.gz')
     _download_and_untar(url, dest, outdir)
-    os.chdir(os.path.join(outdir, 'rpy2-2.4.2'))
+    os.chdir(os.path.join(outdir, 'rpy2-2.7.3'))
     r_home = os.path.split(os.path.split(r_path)[0])[0]
     subprocess.check_call('python setup.py build --r-home ' + 
                           '{} install >& '.format(r_home) + 
