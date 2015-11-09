@@ -297,7 +297,7 @@ def align_and_sort(
     
         # Align reads.
         lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
-                            rgpu, star_index, star_path, threads)
+                            rgpu, star_index, threads)
         f.write(lines)
         f.write('wait\n\n')
 
