@@ -23,6 +23,7 @@ def _star_align(
     rgpu, 
     star_index, 
     threads,
+    genome_load='LoadAndRemove',
     star_path='STAR',
 ):
     """
@@ -47,7 +48,11 @@ def _star_align(
 
     """
     # I use threads - 2 for STAR so there are open processors for reading and
-    # writing.
+    # writing. sort_mem for limitBAMsortRAM assumes 36Gb for the human genome
+    # and splits the rest of 128Gb of RAM among the number of possible STAR jobs
+    # given that the jobs are using "threads" number of threads. limitBAMsortRAM
+    # wants memory in bytes I believe.
+    sort_mem = (128 - 36) / (32 / threads) * 1000000000
     line = (' \\\n'.join([star_path, 
                           '\t--runThreadN {}'.format(threads - 2),
                           '\t--genomeDir {}'.format(star_index), 
@@ -55,6 +60,7 @@ def _star_align(
                           '\t--readFilesCommand zcat',
                           '\t--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
                           '\t--outSAMtype BAM SortedByCoordinate', 
+                          '\t--limitBAMsortRAM {}'.format(sort_mem),
                           '\t--outSAMattributes All', 
                           '\t--outSAMunmapped Within',
                           ('\t--outSAMattrRGline ID:1 ' + 
@@ -66,7 +72,8 @@ def _star_align(
                           '\t--alignIntronMin 20',
                           '\t--alignIntronMax 1000000',
                           '\t--alignMatesGapMax 1000000',
-                          '\t--quantMode TranscriptomeSAM GeneCounts']) + '\n\n') 
+                          '\t--quantMode TranscriptomeSAM GeneCounts']) + '\n\n')
+    line += 'rm -r _STARtmp\n\n'
     return line
 
 def align_and_sort(
@@ -75,20 +82,20 @@ def align_and_sort(
     outdir, 
     sample_name, 
     star_index,
-    tracklines_file,
     link_dir,
     web_path_file,
     ref_flat, 
     rrna_intervals,
     conda_env=None,
     modules=None,
+    queue=None,
+    star_genome_load='LoadAndRemove',
     rgpl='ILLUMINA',
     rgpu='',
+    strand_specific=True, 
     tempdir=None,
     threads=8,
     memory=32,
-    picard_memory=30,
-    strand_specific=True, 
     star_path='STAR',
     picard_path='$picard',
     bedtools_path='bedtools',
@@ -118,11 +125,6 @@ def align_and_sort(
     star_index : str
         Path to STAR index.
 
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
     link_dir : str
         Path to directory where softlinks for genome browser should be made.
 
@@ -138,6 +140,27 @@ def align_and_sort(
         just put the web_path_file in a directory that isn't tracked by git, 
         figshare, etc.
 
+    ref_flat : str
+        Path to refFlat file with non-rRNA genes. Can ge gzipped.
+
+    rrna_intervals : str
+        Path to interval list file with rRNA intervals.
+
+    conda_env : str
+        Conda environment to load at the beginning of the script.
+
+    modules : str
+        Comma-separated list of modules to load at the beginning of the script.
+
+    rgpl : str
+        Read Group platform (e.g. illumina, solid). 
+
+    rgpu : str
+        Read Group platform unit (eg. run barcode). 
+
+    strand_specific : boolean
+        If false, data is not strand specific.
+
     star_path : str
         Path to STAR aligner.
 
@@ -150,30 +173,12 @@ def align_and_sort(
     bedgraph_to_bigwig_path : str
         Path bedGraphToBigWig executable.
 
-    ref_flat : str
-        Path to refFlat file with non-rRNA genes. Can ge gzipped.
-
-    rrna_intervals : str
-        Pato to interval list file with rRNA intervals.
-
-    rgpl : str
-        Read Group platform (e.g. illumina, solid). 
-
-    rgpu : str
-        Read Group platform unit (eg. run barcode). 
-
     tempdir : str
         Directory to store files as STAR runs.
 
     threads : int
         Number of threads to reserve using SGE scheduler. This number of threads
         minus 2 will be used by STAR, so this must be at least 3.
-
-    picard_memory : int
-        Amount of memory (in gb) to give Picard Tools.
-
-    strand_specific : boolean
-        If false, data is not strand specific.
 
     Returns
     -------
@@ -188,30 +193,20 @@ def align_and_sort(
     link_dir = os.path.join(link_dir, 'rna')
     job_suffix = 'alignment'
     job = JobScript(sample_name, job_suffix, outdir, threads, memory,
-                    tempdir=tempdir, queue='high', conda_env=conda_env,
+                    tempdir=tempdir, queue=queue, conda_env=conda_env,
                     modules=modules)
-
-    # I'm going to handle the copying and deleting of the fastqs myself rather
-    # than have the JobScript do it because I don't want to the fastqs to sit
-    # around on the disk the whole time after I'm done with them.
-    temp_r1_fastqs = _process_fastqs(r1_fastqs, job.tempdir)
-    temp_r2_fastqs = _process_fastqs(r2_fastqs, job.tempdir)
-    if type(r1_fastqs) != list:
-        r1_fastqs = [r1_fastqs]
-    if type(r2_fastqs) != list:
-        r2_fastqs = [r2_fastqs]
-    combined_r1 = os.path.join(
-        job.tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
-    combined_r2 = os.path.join(
-        job.tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
-
+    tracklines_file = os.path.join(outdir, 'alignment_tracklines.txt')
+    
     # Files that will be created.
-    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    job.temp_files_to_delete.append(aligned_bam)
+    combined_r1 = os.path.join(
+        job.tempdir, '{}_R1.fastq.gz'.format(sample_name))
+    job.temp_files_to_delete.append(combined_r1)
+    combined_r2 = os.path.join(
+        job.tempdir, '{}_R2.fastq.gz'.format(sample_name))
+    job.temp_files_to_delete.append(combined_r2)
     coord_sorted_bam = os.path.join(
-        job.tempdir, '{}_sorted.bam'.format(sample_name))
+        job.tempdir, 'Aligned.sortedByCoord.out.bam'.format(sample_name))
     job.temp_files_to_delete.append(coord_sorted_bam)
-    job.temp_files_to_delete.append('_STARtmp')
     out_bam = os.path.join(
         job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
     bam_index = '{}.bai'.format(out_bam)
@@ -224,6 +219,7 @@ def align_and_sort(
         'Log.final.out', 
         'Log.progress.out', 
         'SJ.out.tab', 
+        'ReadsPerGene.out.tab',
         'Aligned.toTranscriptome.out.bam',
     ]
 
@@ -242,41 +238,14 @@ def align_and_sort(
     job.output_files_to_copy.append(out_bigwig)
     
     with open(job.filename, "a") as f:
-        # I'm going to copy the fastq files here rather than have the JobScript
-        # class do it because I want to delete them as soon as I've combined
-        # them into a single file.
-        f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
-            '\\\n\t'.join(r1_fastqs + r2_fastqs), job.tempdir))
-        # f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
-        #     '\\\n\t'.join(r1_fastqs + r2_fastqs),
-        #     job.tempdir))
-
-        # Combine fastq files.
-        if len(temp_r1_fastqs) > 1:
-            f.write('cat \\\n{} \\\n\t> {} &\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
-                combined_r1))
-        else:
-            f.write('mv {} {}\n\n'.format(temp_r1_fastqs[0], combined_r1))
-
-        if len(temp_r2_fastqs) > 1:
-            f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
-                combined_r2))
-        else:
-            f.write('mv {} {}\n\n'.format(temp_r2_fastqs[0], combined_r2))
+        # If multiple fastq files, we want to cat them together.
+        lines = _combine_fastqs(r1_fastqs, combined_r1)
+        f.write(lines)
+        lines = _combine_fastqs(r2_fastqs, combined_r2)
+        f.write(lines)
         f.write('wait\n\n')
 
-        # Remove temp fastqs.
-        if len(temp_r1_fastqs) > 1:
-            f.write('rm \\\n{} &\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs])))
-        if len(temp_r2_fastqs) > 1:
-            f.write('rm \\\n{}\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
-            f.write('wait\n\n')
-
-        # Run FASTQC.
+        # Run fastQC.
         lines = _fastqc([combined_r1, combined_r2], threads, job.outdir,
                         fastqc_path)
         f.write(lines)
@@ -297,13 +266,8 @@ def align_and_sort(
     
         # Align reads.
         lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
-                            rgpu, star_index, threads)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        # Coordinate sort bam file.
-        lines = _picard_coord_sort(aligned_bam, coord_sorted_bam, picard_path,
-                                   picard_memory, job.tempdir)
+                            rgpu, star_index, threads,
+                            genome_load=star_genome_load)
         f.write(lines)
         f.write('wait\n\n')
 
@@ -313,8 +277,8 @@ def align_and_sort(
         lines = _picard_mark_duplicates(coord_sorted_bam, out_bam,
                                         duplicate_metrics,
                                         picard_path=picard_path,
-                                        picard_memory=picard_memory,
-                                        tempdir=job.tempdir)
+                                        picard_memory=job.memory,
+                                        picard_tempdir=job.tempdir)
         f.write(lines)
         f.write('wait\n\n')
         name = os.path.split(out_bam)[1]
@@ -328,18 +292,21 @@ def align_and_sort(
             tf.write(tf_lines)
 
         # Index bam file.
-        lines = _picard_index(out_bam, bam_index, picard_memory / 3,
-                              picard_path, job.tempdir, bg=True)
+        lines = _picard_index(out_bam, bam_index, picard_path=picard_path,
+                              picard_memory=job.memory/ 3,
+                              picard_tempdir=job.tempdir, bg=True)
         f.write(lines)
         f.write('wait\n\n')
         name = os.path.split(bam_index)[1]
         job.add_softlink(os.path.join(job.outdir, name), 
                          os.path.join(link_dir, 'bam', name))
 
-        # Collect insert size metrics, bam index stats, GC bias, RNA seq QC.
+        # Collect insert size metrics, bam index stats, RNA seq QC.
         lines = _picard_collect_multiple_metrics(out_bam, sample_name,
-                                                 picard_path, picard_memory / 3,
-                                                 job.tempdir, bg=True)
+                                                 picard_path=picard_path, 
+                                                 picard_memory=job.memory/ 3,
+                                                 picard_tempdir=job.tempdir,
+                                                 bg=True)
         f.write(lines)
         for fn in ['{}.{}'.format(sample_name, x) for x in 
             'alignment_summary_metrics', 
@@ -363,11 +330,11 @@ def align_and_sort(
             metrics, 
             chart, 
             sample_name,
-            picard_path, 
-            picard_memory / 3,
-            job.tempdir,
             ref_flat, 
             rrna_intervals,
+            picard_path=picard_path,
+            picard_memory=job.memory / 3,
+            picard_tempdir=job.tempdir,
             strand_specific=strand_specific, 
             bg=True)
         f.write(lines)
@@ -377,15 +344,6 @@ def align_and_sort(
             out_bam, os.path.join(job.outdir, '{}.md5'.format(
                 os.path.split(out_bam)[1]))))
         
-        # metrics = os.path.join(job.outdir,
-        #                        '{}_gc_bias_metrics.txt'.format(sample_name))
-        # chart = os.path.join(job.outdir, '{}_gc_bias.pdf'.format(sample_name))
-        # out = os.path.join(job.outdir, '{}_gc_bias.txt'.format(sample_name))
-        # lines = _picard_gc_bias_metrics(out_bam, metrics, chart, out,
-        #                                 picard_path, picard_memory / 4,
-        #                                 job.tempdir, bg=False)
-        # f.write(lines)
-
         # Make bigwig files for displaying coverage.
         # TODO: update for strand specific eventually.
         lines = _bigwig_files(out_bam, out_bigwig, sample_name,
@@ -408,7 +366,9 @@ def align_and_sort(
         index_err = os.path.join(job.outdir,
                                  '{}_index_stats.err'.format(sample_name))
         lines = _picard_bam_index_stats(out_bam, index_out, index_err,
-                                        picard_path, picard_memory, tempdir,
+                                        picard_path=picard_path,
+                                        picard_memory=job.memory,
+                                        picard_tempdir=job.tempdir,
                                         bg=True)
         f.write(lines)
         f.write('wait\n\n')

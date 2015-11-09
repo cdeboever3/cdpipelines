@@ -449,7 +449,7 @@ def _cutadapt_trim(
     Returns
     -------
     lines : str
-        Lines to be written to shell script.
+        Lines to write to shell script.
 
     """
     line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
@@ -495,7 +495,7 @@ def _flagstat(
     Returns
     -------
     lines : str
-        Lines to be written to shell script.
+        Lines to write to shell script.
 
     """
     lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
@@ -536,7 +536,7 @@ def _coverage_bedgraph(
     Returns
     -------
     lines : str
-        Lines to be written to shell script.
+        Lines to write to shell script.
 
     """
     if strand == '+' or strand == '-':
@@ -593,34 +593,31 @@ def _bigwig_files(
     """
     lines = ''
     if out_bigwig_minus != '':
-        lines += _coverage_bedgraph(in_bam, 'plus.bg', bedtools_path,
-                                    sample_name, strand='+')
-        lines += _coverage_bedgraph(in_bam, 'minus.bg', bedtools_path,
-                                    sample_name, strand='-')
+        lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name, strand='+')
+        lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name, strand='-')
         lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig,
-                                      bedgraph_to_bigwig_path, bedtools_path))
-        lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus,
-                                      bedgraph_to_bigwig_path, bedtools_path))
+        lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
+        lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
+                                      
         lines += ('\nwait\n\n')
         lines += ('rm plus.bg minus.bg\n\n')
     
     else:
-        lines = _coverage_bedgraph(in_bam, 'both.bg', bedtools_path,
-                                   sample_name)
+        lines = _coverage_bedgraph(in_bam, 'both.bg', sample_name)
         lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig,
-                                      bedgraph_to_bigwig_path, bedtools_path))
+        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
         lines += ('wait\n\n')
         lines += ('rm both.bg\n\n')
     return lines
     
-def _process_fastqs(
-    fastqs, 
-    tempdir
+def _combine_fastqs(
+    fastqs,
+    out_fastq,
 ):
     """
-    Create list of temporary fastq paths.
+    If fastqs is a string with a path to a single fastq file, make a softlink to
+    out_fastq. If fastqs is a list of fastqs, cat the fastqs together into the
+    file out_fastq.
 
     Parameters
     ----------
@@ -628,21 +625,21 @@ def _process_fastqs(
         Either a list of paths to gzipped fastq files or path to a single
         gzipped fastq file.
 
-    tempdir : str
-        Path to temporary directory where fastq files will be copied to.
+    out_fastq : str
+        Path to single output fastq file.
 
     Returns
     -------
-    temp_fastqs : list
-        List of paths to temporary fastq files.
+    lines : str
+        Lines to write to shell script.
 
     """
     if type(fastqs) == list:
-        fns = [os.path.split(x)[1] for x in fastqs]
-        temp_fastqs = sorted([os.path.join(tempdir, x) for x in fns])
+        lines = 'cat \\\n\t{} \\\n> {}\n\n'.format(' \\\n\t'.join(fastqs),
+                                                   out_fastq)
     elif type(fastqs) == str:
-        temp_fastqs = [os.path.join(tempdir, os.path.split(fastqs)[1])]
-    return temp_fastqs
+        lines = 'ln -s {} {}\n\n'.format(fastqs, out_fastqs)
+    return lines
 
 def _fastqc(
     fastqs, 
@@ -674,9 +671,9 @@ def _fastqc(
 
     """
     if type(fastqs) == list:
-        fastqs = ' '.join(fastqs)
-    lines = ('{} --outdir {} --nogroup \\\n'.format(fastqc_path, outdir) + 
-             '\t--extract --threads {} {}\n\n'.format(threads, fastqs))
+        fastqs = ' \\\n\t'.join(fastqs)
+    lines = ('{} --outdir {} --nogroup --extract --threads {} \\\n'
+             '\t{}\n'.format(fastqc_path, outdir, threads, fastqs))
     return lines
 
 def _softlink(target, link):
@@ -733,9 +730,8 @@ def _make_softlink(fn, sample_name, link_dir):
     return lines, name
 
 class JobScript:
-    #TODO: update default queue for new cluster
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
-                 tempdir=None, queue='high', conda_env=None, modules=None,
+                 tempdir=None, queue=None, conda_env=None, modules=None,
                  copy_input=False):
         """
         Create SGE/shell script object.
@@ -763,7 +759,8 @@ class JobScript:
             provided, the output directory will be used as the temp directory.
 
         queue : str
-            SGE queue to use if writing SGE script.
+            SGE queue to use if writing SGE script. If not provided, jobs will
+            go into the default week queue.
 
         conda_env : str
             Path to conda environment to load when job begins.
@@ -779,7 +776,7 @@ class JobScript:
         self.sample_name = sample_name
         self.job_suffix = job_suffix
         self.jobname = '{}_{}'.format(sample_name, job_suffix)
-        self.outdir = os.path.realpath(os.path.join(outdir, self.jobname))
+        self.outdir = outdir
         if tempdir:
             self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
         else:
@@ -791,7 +788,10 @@ class JobScript:
         self.memory = memory
         self.queue = queue
         self.conda_env = conda_env
-        self.modules = ','.split(modules)
+        if modules:
+            self.modules = ','.split(modules)
+        else:
+            self.modules = None
        
         self.out = os.path.join(self.outdir, '{}.out'.format(self.jobname))
         self.err = os.path.join(self.outdir, '{}.err'.format(self.jobname))
@@ -811,7 +811,9 @@ class JobScript:
     def _write_header(self):
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
-            f.write('#$ -q {}\n'.format(self.queue))
+            if self.queue:
+                assert self.queue in ['short', 'long']
+                f.write('#$ -q {}\n'.format(self.queue))
             f.write('#$ -N {}\n'.format(self.jobname))
             f.write('#$ -l h_vmem={}\n'.format(self.memory))
             f.write('#$ -pe {}\n'.format(self.threads))
@@ -1416,6 +1418,7 @@ def wasp_remap(
     star_index,
     seq_type,
     conda_env='',
+    modules='',
     rgpl='ILLUMINA',
     rgpu='',
     tempdir='/scratch', 
@@ -1490,7 +1493,8 @@ def wasp_remap(
                                    'seq_type'.format(', '.join(seq_types)))
     job_suffix = 'wasp_remap'
     job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    queue='high', conda_env=conda_env, copy_input=True)
+                    queue=queue, conda_env=conda_env, modules=modules,
+                    copy_input=True)
     
     # Input files.
     temp_r1 = job.add_input_file(r1_fastq)
@@ -1630,6 +1634,7 @@ def run_mbased(
     sample_name, 
     modules=None,
     conda_env=None,
+    queue=None,
     is_phased=False,
     num_sim=1000000,
     threads=6, 
@@ -1694,7 +1699,7 @@ def run_mbased(
     """
     assert threads >= 1
     job_suffix = 'mbased'
-    job = JobScript(sample_name, job_suffix, outdir, threads, queue='high',
+    job = JobScript(sample_name, job_suffix, outdir, threads, queue=queue,
                     modules=modules, conda_env=conda_env,
                     copy_input=True)
     
