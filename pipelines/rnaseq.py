@@ -187,8 +187,9 @@ def align_and_sort(
     web_path = web_path + '/rna'
     link_dir = os.path.join(link_dir, 'rna')
     job_suffix = 'alignment'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    queue='high', conda_env=conda_env, modules=modules)
+    job = JobScript(sample_name, job_suffix, outdir, threads, memory,
+                    tempdir=tempdir, queue='high', conda_env=conda_env,
+                    modules=modules)
 
     # I'm going to handle the copying and deleting of the fastqs myself rather
     # than have the JobScript do it because I don't want to the fastqs to sit
