@@ -8,6 +8,7 @@ from general import _fastqc
 from general import JobScript
 from general import _make_dir
 from general import _make_softlink
+from general import _mbased
 from general import _picard_bam_index_stats
 from general import _picard_coord_sort
 from general import _picard_collect_multiple_metrics
@@ -100,6 +101,7 @@ def pipeline(
     rsem_reference,
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
+    genome_fasta,
     vcf, 
     vcf_sample_name=None,
     is_phased=False,
@@ -111,8 +113,6 @@ def pipeline(
     rgpu='',
     strand_specific=True, 
     tempdir=None,
-    threads=8,
-    memory=32,
     mappability=None,
     star_path='STAR',
     picard_path='$picard',
@@ -219,11 +219,7 @@ def pipeline(
         Path bedGraphToBigWig executable.
 
     tempdir : str
-        Directory to store files as STAR runs.
-
-    threads : int
-        Number of threads to reserve using SGE scheduler. This number of threads
-        minus 2 will be used by STAR, so this must be at least 3.
+        Directory to store temporary files.
 
     Returns
     -------
@@ -231,7 +227,6 @@ def pipeline(
         Path to shell script.
 
     """
-    assert threads >= 3
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
     tracklines_file = os.path.join(outdir, 'tracklines.txt')
@@ -273,7 +268,7 @@ def pipeline(
 
     wasp_alignment_compare_jobname = '{}_{}'.format(sample_name,
                                                     'wasp_alignment_compare')
-    job_holds[wasp_alignment_compare] = [wasp_remap_jobname]
+    job_holds[wasp_alignment_compare_jobname] = [wasp_remap_jobname]
 
     mbased_jobname = '{}_{}'.format(sample_name, 'mbased')
     job_holds[mbased_jobname] = [wasp_alignment_compare_jobname]
@@ -283,7 +278,7 @@ def pipeline(
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(alignment_jobname))):
         job = JobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'alignment'), threads, memory,
+                        os.path.join(outdir, 'alignment'), threads=8, memory=32,
                         tempdir=tempdir, queue=queue, conda_env=conda_env,
                         modules=modules)
         
@@ -337,7 +332,7 @@ def pipeline(
         
             # Align reads.
             lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
-                                rgpu, star_index, threads,
+                                rgpu, star_index, 8,
                                 genome_load=star_genome_load)
             f.write(lines)
             f.write('wait\n\n')
@@ -531,7 +526,7 @@ def pipeline(
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(rsem_jobname))):
         job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
-                        threads=1, memory=4, tempdir=tempdir, queue=queue,
+                        threads=8, memory=4, tempdir=tempdir, queue=queue,
                         conda_env=conda_env, modules=modules)
         
         with open(job.filename, "a") as f:
@@ -540,8 +535,9 @@ def pipeline(
                 '{}.isoforms.results'.format(sample_name),
                 '{}.stat'.format(sample_name)]
             lines = _rsem_calculate_expression(
-                transcriptome_bam, rsem_reference, sample_name, threads=threads,
-                ci_mem=1024, strand_specific=strand_specific,
+                transcriptome_bam, rsem_reference, sample_name,
+                threads=job.threads, ci_mem=1024,
+                strand_specific=strand_specific,
                 rsem_calculate_expression_path=rsem_calculate_expression_path,
             )
             f.write(lines)
@@ -591,13 +587,15 @@ def pipeline(
                 snp_directory = os.path.join(job.tempdir, 'snps')
                 all_snps = os.path.join(job.outdir, 'snps.tsv')
                 temp_bam = os.path.join(job.outdir, 'uniq.bam')
-                f.write('python {} -s {} {} {} {} & \n\n'.format(
-                    input_script, vcf_sample_name, vcf, snp_directory,
-                    all_snps))
-                f.write('{} view -b -q 255 -F 1024 {} > {}\n\n'.format(
-                    samtools_path, temp_bam, temp_uniq_bam))
+                f.write('python {} -s \\\n\t{} \\\n\t{} \\\n\t{} '
+                        '\\\n\t{} & \n\n'.format(
+                            input_script, vcf_sample_name, vcf, snp_directory,
+                            all_snps))
+                f.write('{} view -b -q 255 -F 1024 \\\n\t{} '
+                        '\\\n\t> {}\n\n'.format(
+                            samtools_path, temp_bam, temp_uniq_bam))
                 f.write('wait\n\n')
-                f.write('python {} -s -p {} {}\n\n'.format(
+                f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
                     find_intersecting_snps_path, temp_uniq_bam, snp_directory))
         job.write_end()
     
@@ -606,7 +604,7 @@ def pipeline(
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(wasp_remap_jobname))):
         job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
-                        threads=threads, memory=10, tempdir=tempdir,
+                        threads=8, memory=10, tempdir=tempdir,
                         queue=queue, conda_env=conda_env, modules=modules)
         
         with open(job.filename, "a") as f:
@@ -625,7 +623,7 @@ def pipeline(
 
             # Remap using STAR.
             lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
-                                rgpu, star_index, threads,
+                                rgpu, star_index, threads=job.threads,
                                 genome_load=star_genome_load, sort=False,
                                 transcriptome_align=False)
             f.write(lines)
@@ -654,15 +652,16 @@ def pipeline(
    
             with open(job.filename, "a") as f:
                 # Run WASP alignment compare.
-                f.write('python {} -p {} {} {} {}\n\n'.format(
-                    filter_remapped_reads_path, to_remap_bam,
-                    remapped_bam, temp_filtered_bam, to_remap_num))
+                f.write('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} '
+                        '\\\n\t{}\n\n'.format(
+                            filter_remapped_reads_path, to_remap_bam,
+                            remapped_bam, temp_filtered_bam, to_remap_num))
 
                 # Coordinate sort and index.
-                lines = _picard_coord_sort(temp_filtered_bam, wasp_filtered_bam
+                lines = _picard_coord_sort(temp_filtered_bam, wasp_filtered_bam,
                                            bam_index=bam_index,
                                            picard_path=picard_path,
-                                           picard_memory=picard_memory,
+                                           picard_memory=job.memory,
                                            picard_tempdir=job.tempdir)
 
                 f.write(lines)
@@ -672,7 +671,7 @@ def pipeline(
                 counts = os.path.join(
                     job.outdir, '{}_allele_counts.tsv'.format(sample_name))
                 f.write('java -jar $gatk \\\n')
-                f.write('\t-R {} \\\n'.format(fasta))
+                f.write('\t-R {} \\\n'.format(genome_fasta))
                 f.write('\t-T ASEReadCounter \\\n')
                 f.write('\t-o {} \\\n'.format(counts))
                 f.write('\t-I {} \\\n'.format(wasp_filtered_bam))
@@ -696,9 +695,9 @@ def pipeline(
         snv_outfile = os.path.join(job.outdir, '{}_snv.tsv'.format(sample_name))
     
         with open(job.filename, "a") as f:
-            lines = _mbased(wasp_filtered_bam, bed, mbased_infile,
+            lines = _mbased(wasp_filtered_bam, gene_gtf, mbased_infile,
                             locus_outfile, snv_outfile, sample_name,
-                            is_phased=is_phased, threads=8, vcf=vcf,
+                            is_phased=is_phased, threads=job.threads, vcf=vcf,
                             vcf_sample_name=vcf_sample_name,
                             mappability=mappability,
                             bigWigAverageOverBed_path=bigWigAverageOverBed_path)
@@ -714,10 +713,9 @@ def pipeline(
         f.write('#!/bin/bash\n\n')
         while True:
             try:
-                jn = job_holds.popitem(False)
+                jn,holds = job_holds.popitem(False)
             except:
                 break
-            holds = job_holds[jn]
             if holds:
                 f.write('qsub -hold_jid {} {}.sh\n'.format(
                     ','.join(holds), os.path.join(outdir, jn)))
@@ -778,10 +776,10 @@ def _dexseq_count(
     else:
         s = 'no'
     lines = (
-        '{} view -h -f 2 {} | '.format(samtools_path, bam) +
-        'cut -f1-16,20- | python {} '.format(script) + 
-        '-p {} -s {} -a 0 -r pos -f sam '.format(p, s) + 
-        '{} - {}\n\n'.format(dexseq_annotation, counts_file)
+        '{} view -h -f 2 {} \\\n\t'.format(samtools_path, bam) +
+        '| cut -f1-16,20- \\\n\t| python {} \\\n\t'.format(script) + 
+        '-p {} -s {} -a 0 -r pos -f sam \\\n\t'.format(p, s) + 
+        '{} \\\n\t- {}\n\n'.format(dexseq_annotation, counts_file)
     )
     return lines
 
@@ -828,9 +826,9 @@ def _htseq_count(
     else:
         s = 'no'
     script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
-    lines = ('python {} -f bam -r pos -s {} '.format(script, s) + 
-             '-a 0 -t exon -i gene_id -m union ' + 
-             '{} {} > temp_out.tsv\n'.format(bam, gtf))
+    lines = ('python {} \\\n\t-f bam -r pos -s {} '.format(script, s) + 
+             '-a 0 -t exon -i gene_id -m union \\\n\t' + 
+             '{} \\\n\t{} \\\n\t> temp_out.tsv\n'.format(bam, gtf))
     lines += 'tail -n 5 temp_out.tsv > {}\n'.format(stats_file)
     lines += 'lines=$(wc -l <temp_out.tsv)\n'
     lines += 'wanted=`expr $lines - 5`\n'
@@ -1001,11 +999,11 @@ def _rsem_calculate_expression(
     """
     line = ('{} --bam --paired-end --num-threads {} '
             '--no-bam-output --seed 3272015 --calc-ci '
-            '--ci-memory {} --estimate-rspd {} {} {}'.format(
+            '--ci-memory {} --estimate-rspd \\\n\t{} \\\n\t{} {}'.format(
                 rsem_calculate_expression_path, threads, ci_mem, bam, reference,
                 sample_name))
     if strand_specific:
-        line += ' --forward-prob 0'
+        line += '\\\n\t--forward-prob 0'
     line += '\n'
     return line
 

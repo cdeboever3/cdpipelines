@@ -465,12 +465,16 @@ def _bedgraph_to_bigwig(
     bedgraph_to_bigwig_path='bedGraphToBigWig',
     bedtools_path='bedtools',
 ):
-    bedtools_genome_path = os.path.join(
-        os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
-        'human.hg19.genome')
-    lines =  ' '.join(['{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
-                       '{}'.format(bedtools_genome_path),
-                       '{} &\n'.format(bigwig)])
+    # If bedtools is in the path, I'll assume the genome file is as well.
+    if bedtools_path == 'bedtools':
+        bedtools_genome_path = 'human.hg19.genome'
+    else:
+        bedtools_genome_path = os.path.join(
+            os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+            'human.hg19.genome')
+    lines =  ' \\\n\t'.join(['{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
+                             '{}'.format(bedtools_genome_path),
+                             '{} &\n'.format(bigwig)])
     return lines
 
 def _flagstat(
@@ -1262,17 +1266,13 @@ def wasp_allele_swap(
     with open(job.filename, "a") as f:
         snp_directory = os.path.join(job.tempdir, 'snps')
         all_snps = os.path.join(job.outdir, 'snps.tsv')
-        f.write('python {} -s {} {} {} {} & \n\n'.format(input_script,
-                                                         vcf_sample_name,
-                                                         temp_vcf,
-                                                         snp_directory,
-                                                         all_snps))
-        f.write('{} view -b -q 255 -F 1024 {} > {}\n\n'.format(
+        f.write('python {} -s \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{} & \n\n'.format(
+            input_script, vcf_sample_name, temp_vcf, snp_directory, all_snps))
+        f.write('{} view -b -q 255 -F 1024 \\\n\t{} \\\n\t> {}\n\n'.format(
             samtools_path, temp_bam, temp_uniq_bam))
         f.write('wait\n\n')
-        f.write('python {} -s -p {} {}\n\n'.format(find_intersecting_snps_path,
-                                                   temp_uniq_bam,
-                                                   snp_directory))
+        f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
+            find_intersecting_snps_path, temp_uniq_bam, snp_directory))
     
     job.write_end()
     return job.filename
@@ -1356,7 +1356,7 @@ def wasp_alignment_compare(
    
     with open(job.filename, "a") as f:
         # Run WASP alignment compare.
-        f.write('python {} -p {} {} {} {}\n\n'.format(
+        f.write('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
             filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
             temp_filtered_bam, temp_to_remap_num))
 
@@ -1588,17 +1588,19 @@ def _mbased(
     from __init__ import scripts
     is_phased = str(is_phased).upper()
     script = os.path.join(scripts, 'make_mbased_input.py')
-    lines = 'python {} {} {} {}'.format(script, infile, mbased_infile, bed)
+    lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
+        script, infile, mbased_infile, bed)
     if vcf:
-        lines += ' \\\n-v {} -s {}'.format(vcf, vcf_sample_name)
+        lines += ' \\\n\t-v {} -s {}'.format(vcf, vcf_sample_name)
     if mappability:
-        lines += ' \\\n-m {} -p {}'.format(mappability,
-                                           bigWigAverageOverBed_path)
+        lines += ' \\\n\t-m {} -p {}'.format(mappability,
+                                             bigWigAverageOverBed_path)
     lines += '\n\n'
     script = os.path.join(scripts, 'mbased.R')
     lines += 'Rscript '
-    lines += ' '.join([script, mbased_infile, locus_outfile, snv_outfile,
-                      sample_name, is_phased, str(num_sim), str(threads)])
+    lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile, snv_outfile,
+                             sample_name, is_phased, str(num_sim),
+                             str(threads)])
     lines += '\n'
     return lines
 
