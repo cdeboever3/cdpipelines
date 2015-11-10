@@ -256,6 +256,8 @@ def pipeline(
             'SJ.out.tab', 
             'Aligned.toTranscriptome.out.bam',
         ]
+        transcriptome_bam = os.path.join(job.outdir,
+                                         'Aligned.toTranscriptome.out.bam')
 
         with open(job.filename, "a") as f:
             # If multiple fastq files, we want to cat them together.
@@ -507,8 +509,8 @@ def pipeline(
                 '{}.isoforms.results'.format(sample_name),
                 '{}.stat'.format(sample_name)]
             lines = _rsem_calculate_expression(
-                mdup_bam, rsem_reference, sample_name, threads=threads,
-                ci_mem=job.memory, strand_specific=strand_specific,
+                transcriptome_bam, rsem_reference, sample_name, threads=threads,
+                ci_mem=1024, strand_specific=strand_specific,
                 rsem_calculate_expression_path=rsem_calculate_expression_path,
             )
             f.write(lines)
