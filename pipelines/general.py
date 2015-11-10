@@ -613,6 +613,7 @@ def _bigwig_files(
 def _combine_fastqs(
     fastqs,
     out_fastq,
+    bg=False,
 ):
     """
     If fastqs is a string with a path to a single fastq file, make a softlink to
@@ -635,10 +636,14 @@ def _combine_fastqs(
 
     """
     if type(fastqs) == list:
-        lines = 'cat \\\n\t{} \\\n> {}\n\n'.format(' \\\n\t'.join(fastqs),
+        lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
                                                    out_fastq)
     elif type(fastqs) == str:
-        lines = 'ln -s {} {}\n\n'.format(fastqs, out_fastqs)
+        lines = 'ln -s {} {}'.format(fastqs, out_fastq)
+    if bg:
+        lines += ' &\n\n'
+    else:
+        lines += '\n\n'
     return lines
 
 def _fastqc(
@@ -789,12 +794,15 @@ class JobScript:
         self.queue = queue
         self.conda_env = conda_env
         if modules:
-            self.modules = ','.split(modules)
+            self.modules = modules.split(',')
         else:
             self.modules = None
        
-        self.out = os.path.join(self.outdir, '{}.out'.format(self.jobname))
-        self.err = os.path.join(self.outdir, '{}.err'.format(self.jobname))
+        _make_dir(os.path.join(os.path.split(outdir)[0], 'logs'))
+        self.out = os.path.join(os.path.split(self.outdir)[0], 'logs',
+                                '{}.out'.format(self.jobname))
+        self.err = os.path.join(os.path.split(self.outdir)[0], 'logs',
+                                '{}.err'.format(self.jobname))
 
         self.copy_input = copy_input
         self.input_files_to_copy = []
@@ -806,7 +814,9 @@ class JobScript:
 
     def _set_filename(self):
         """Make SGE/shell script filename."""
-        self.filename = os.path.join(self.outdir, '{}.sh'.format(self.jobname))
+        _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
+        self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
+                                     '{}.sh'.format(self.jobname))
     
     def _write_header(self):
         with open(self.filename, "a") as f:
@@ -815,8 +825,9 @@ class JobScript:
                 assert self.queue in ['short', 'long']
                 f.write('#$ -q {}\n'.format(self.queue))
             f.write('#$ -N {}\n'.format(self.jobname))
-            f.write('#$ -l h_vmem={}\n'.format(self.memory))
-            f.write('#$ -pe {}\n'.format(self.threads))
+            f.write('#$ -l h_vmem={}\n'.format(
+                self.memory / float(self.threads)))
+            f.write('#$ -pe smp {}\n'.format(self.threads))
             f.write('#$ -S /bin/bash\n')
             f.write('#$ -o {}\n'.format(self.out))
             f.write('#$ -e {}\n\n'.format(self.err))
@@ -912,33 +923,6 @@ class JobScript:
         self._delete_temp_files()
         self._delete_tempdir()
         self._make_softlinks()
-
-# The method below needs to be phased out of all code. That can probably
-# coincide with refactoring all pipelines to use JobScript.
-def _pbs_header(out, err, name, threads, queue='high'):
-    """
-    Write header for PBS script
-
-    Parameters
-    ----------
-    out : str
-        Path to file for recording standard out.
-
-    err : str
-        Path to file for recording standard error.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    lines = ('\n'.join(['#PBS -q {}'.format(queue),
-                        '#PBS -N {}'.format(name),
-                        '#PBS -l nodes=1:ppn={}'.format(threads),
-                        '#PBS -o {}'.format(out),
-                        '#PBS -e {}\n\n'.format(err)]))
-    return lines
 
 def _picard_index(
     in_bam, 
@@ -1381,34 +1365,25 @@ def wasp_alignment_compare(
                                    bam_index=bam_index, picard_path=picard_path,
                                    picard_memory=picard_memory,
                                    picard_tempdir=job.tempdir)
+        f.write(lines)
+        f.write('\nwait\n\n')
+        
+        # Count allele coverage.
+        counts = os.path.join(job.outdir,
+                              '{}_allele_counts.tsv'.format(sample_name))
+        f.write('java -jar /raid3/software/GenomeAnalysisTK.jar \\\n')
+        f.write('\t-R {} \\\n'.format(fasta))
+        f.write('\t-T ASEReadCounter \\\n')
+        f.write('\t-o {} \\\n'.format(counts))
+        f.write('\t-I {} \\\n'.format(coord_sorted_bam))
+        f.write('\t-sites {} \\\n'.format(vcf))
+        f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
+        f.write('\t-U ALLOW_N_CIGAR_READS \n')
 
-# I'm not sure what this code is. I think it needs to be deleted.
-# def _picard_coord_sort(
-#     in_bam, 
-#     out_bam, 
-#     bam_index=None,
-#     picard_path='$picard',
-#     picard_memory=2, 
-#     picard_tempdir='.',
-#         f.write(lines)
-#         f.write('\nwait\n\n')
-#         
-#         # Count allele coverage.
-#         counts = os.path.join(job.outdir,
-#                               '{}_allele_counts.tsv'.format(sample_name))
-#         f.write('java -jar /raid3/software/GenomeAnalysisTK.jar \\\n')
-#         f.write('\t-R {} \\\n'.format(fasta))
-#         f.write('\t-T ASEReadCounter \\\n')
-#         f.write('\t-o {} \\\n'.format(counts))
-#         f.write('\t-I {} \\\n'.format(coord_sorted_bam))
-#         f.write('\t-sites {} \\\n'.format(vcf))
-#         f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
-#         f.write('\t-U ALLOW_N_CIGAR_READS \n')
-# 
-#         f.write('\nwait\n\n')
-#     
-#     job.write_end()
-#     return job.filename
+        f.write('\nwait\n\n')
+    
+    job.write_end()
+    return job.filename
 
 def wasp_remap(
     r1_fastq, 

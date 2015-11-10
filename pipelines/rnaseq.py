@@ -2,9 +2,11 @@ import os
 
 from general import _bedgraph_to_bigwig
 from general import _bigwig_files
+from general import _combine_fastqs
 from general import _coverage_bedgraph
 from general import _fastqc
 from general import JobScript
+from general import _make_dir
 from general import _make_softlink
 from general import _picard_bam_index_stats
 from general import _picard_coord_sort
@@ -13,7 +15,6 @@ from general import _picard_collect_rna_seq_metrics
 from general import _picard_gc_bias_metrics
 from general import _picard_index
 from general import _picard_mark_duplicates
-from general import _process_fastqs
 
 def _star_align(
     r1_fastq, 
@@ -56,7 +57,7 @@ def _star_align(
     line = (' \\\n'.join([star_path, 
                           '\t--runThreadN {}'.format(threads - 2),
                           '\t--genomeDir {}'.format(star_index), 
-                          '\t--genomeLoad LoadAndRemove', 
+                          '\t--genomeLoad {}'.format(genome_load),
                           '\t--readFilesCommand zcat',
                           '\t--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
                           '\t--outSAMtype BAM SortedByCoordinate', 
@@ -72,11 +73,11 @@ def _star_align(
                           '\t--alignIntronMin 20',
                           '\t--alignIntronMax 1000000',
                           '\t--alignMatesGapMax 1000000',
-                          '\t--quantMode TranscriptomeSAM GeneCounts']) + '\n\n')
-    line += 'rm -r _STARtmp\n\n'
+                          '\t--quantMode TranscriptomeSAM']) + '\n\n')
+    line += 'if [ -d _STARtmp ] ; then rm -r _STARtmp ; fi\n\n'
     return line
 
-def align_and_sort(
+def pipeline(
     r1_fastqs, 
     r2_fastqs, 
     outdir, 
@@ -86,6 +87,12 @@ def align_and_sort(
     web_path_file,
     ref_flat, 
     rrna_intervals,
+    dexseq_annotation,
+    gene_gtf,
+    rsem_reference,
+    find_intersecting_snps_path, 
+    vcf, 
+    vcf_sample_name=None,
     conda_env=None,
     modules=None,
     queue=None,
@@ -101,6 +108,8 @@ def align_and_sort(
     bedtools_path='bedtools',
     bedgraph_to_bigwig_path='bedGraphToBigWig',
     fastqc_path='fastqc',
+    samtools_path='samtools',
+    rsem_calculate_expression_path='rsem-calculate-expression',
 ):
     """
     Make a shell script for aligning RNA-seq reads with STAR. The defaults are
@@ -146,6 +155,26 @@ def align_and_sort(
     rrna_intervals : str
         Path to interval list file with rRNA intervals.
 
+    dexseq_annotation : str
+        Path to DEXSeq exonic bins GFF file.
+
+    gene_gtf : str
+        Path to GTF file with gene annotations.
+
+    rsem_reference : str
+        Directory with RSEM reference.
+
+    find_intersecting_snps_path : str
+        Path to find_intersecting_snps.py from WASP.
+
+    vcf : str
+        VCF file containing exonic variants used for ASE.
+    
+    vcf_sample_name : str
+        Sample name of this sample in the VCF file (if different than
+        sample_name). For instance, the sample name in the VCF file may be the
+        sample name for WGS data which may differ from the RNA-seq sample name.
+
     conda_env : str
         Conda environment to load at the beginning of the script.
 
@@ -189,199 +218,459 @@ def align_and_sort(
     assert threads >= 3
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
-    web_path = web_path + '/rna'
-    link_dir = os.path.join(link_dir, 'rna')
+    tracklines_file = os.path.join(outdir, 'tracklines.txt')
+    
+    # List of job scripts.
+    jobs = []
+    # Dict whose keys are job scripts and whose values are lists of job names
+    # that the script must wait on (i.e. -hold_jid).
+    job_holds = {}
+
+    ##### Job 1: Combine fastqs, run fastQC, STAR alignment #####
     job_suffix = 'alignment'
-    job = JobScript(sample_name, job_suffix, outdir, threads, memory,
-                    tempdir=tempdir, queue=queue, conda_env=conda_env,
-                    modules=modules)
-    tracklines_file = os.path.join(outdir, 'alignment_tracklines.txt')
-    
-    # Files that will be created.
-    combined_r1 = os.path.join(
-        job.tempdir, '{}_R1.fastq.gz'.format(sample_name))
-    job.temp_files_to_delete.append(combined_r1)
-    combined_r2 = os.path.join(
-        job.tempdir, '{}_R2.fastq.gz'.format(sample_name))
-    job.temp_files_to_delete.append(combined_r2)
-    coord_sorted_bam = os.path.join(
-        job.tempdir, 'Aligned.sortedByCoord.out.bam'.format(sample_name))
-    job.temp_files_to_delete.append(coord_sorted_bam)
-    out_bam = os.path.join(
-        job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
-    bam_index = '{}.bai'.format(out_bam)
-    job.output_files_to_copy += [out_bam, bam_index]
-
-    # Other STAR Files to copy to output directory.
-    # TODO: Eventually, I'd like all filenames to include the sample name.
-    job.output_files_to_copy += [
-        'Log.out', 
-        'Log.final.out', 
-        'Log.progress.out', 
-        'SJ.out.tab', 
-        'ReadsPerGene.out.tab',
-        'Aligned.toTranscriptome.out.bam',
-    ]
-
-    # if strand_specific:
-        # TODO: I need to think about how to calculate coverage for strand
-        # specific data to make sure I'm doing it correctly and what the best
-        # way is to display the data. Maybe I could make a hub and color the two
-        # strand differently?
-        # out_bigwig_plus = os.path.join(job.tempdir,
-        #                                '{}_plus_rna.bw'.format(sample_name))
-        # out_bigwig_minus = os.path.join(job.tempdir,
-        #                                 '{}_minus_rna.bw'.format(sample_name))
-        # files_to_copy.append(out_bigwig_plus)
-        # files_to_copy.append(out_bigwig_minus)
-    out_bigwig = os.path.join(job.tempdir, '{}_rna.bw'.format(sample_name))
-    job.output_files_to_copy.append(out_bigwig)
-    
-    with open(job.filename, "a") as f:
-        # If multiple fastq files, we want to cat them together.
-        lines = _combine_fastqs(r1_fastqs, combined_r1)
-        f.write(lines)
-        lines = _combine_fastqs(r2_fastqs, combined_r2)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        # Run fastQC.
-        lines = _fastqc([combined_r1, combined_r2], threads, job.outdir,
-                        fastqc_path)
-        f.write(lines)
-        f.write('wait\n\n')
-        r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(job.outdir, r1), 
-                         os.path.join(link_dir, 'fastqc', r1))
-        r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(job.outdir, r2), 
-                         os.path.join(link_dir, 'fastqc', r2))
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                web_path, r1))
-            tf.write(tf_lines)
-            tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                web_path, r2))
-            tf.write(tf_lines)
-    
-        # Align reads.
-        lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
-                            rgpu, star_index, threads,
-                            genome_load=star_genome_load)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        # Mark duplicates.
-        duplicate_metrics = os.path.join(
-            job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
-        lines = _picard_mark_duplicates(coord_sorted_bam, out_bam,
-                                        duplicate_metrics,
-                                        picard_path=picard_path,
-                                        picard_memory=job.memory,
-                                        picard_tempdir=job.tempdir)
-        f.write(lines)
-        f.write('wait\n\n')
-        name = os.path.split(out_bam)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bam', name))
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bam name="{}_rna_bam" '
-                        'description="RNAseq for {}" '
-                        'bigDataUrl={}/bam/{}\n'.format(
-                            sample_name, sample_name, web_path, name))
-            tf.write(tf_lines)
-
-        # Index bam file.
-        lines = _picard_index(out_bam, bam_index, picard_path=picard_path,
-                              picard_memory=job.memory/ 3,
-                              picard_tempdir=job.tempdir, bg=True)
-        f.write(lines)
-        f.write('wait\n\n')
-        name = os.path.split(bam_index)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bam', name))
-
-        # Collect insert size metrics, bam index stats, RNA seq QC.
-        lines = _picard_collect_multiple_metrics(out_bam, sample_name,
-                                                 picard_path=picard_path, 
-                                                 picard_memory=job.memory/ 3,
-                                                 picard_tempdir=job.tempdir,
-                                                 bg=True)
-        f.write(lines)
-        for fn in ['{}.{}'.format(sample_name, x) for x in 
-            'alignment_summary_metrics', 
-            'quality_by_cycle.pdf', 
-            'base_distribution_by_cycle.pdf', 
-            'quality_by_cycle_metrics', 
-            'base_distribution_by_cycle_metrics', 
-            'quality_distribution.pdf', 
-            'insert_size_histogram.pdf', 
-            'quality_distribution_metrics', 
-            'insert_size_metrics'
-                  ]:
-            job.output_files_to_copy.append(fn)
-
-        metrics = os.path.join(job.outdir,
-                               '{}_rna_seq_metrics.txt'.format(sample_name))
-        chart = os.path.join(job.outdir,
-                             '{}_5_3_coverage.pdf'.format(sample_name))
-        lines = _picard_collect_rna_seq_metrics(
-            out_bam, 
-            metrics, 
-            chart, 
-            sample_name,
-            ref_flat, 
-            rrna_intervals,
-            picard_path=picard_path,
-            picard_memory=job.memory / 3,
-            picard_tempdir=job.tempdir,
-            strand_specific=strand_specific, 
-            bg=True)
-        f.write(lines)
-
-        # Make md5 hash for output bam file.
-        f.write('md5sum {} > {} &\n\n'.format(
-            out_bam, os.path.join(job.outdir, '{}.md5'.format(
-                os.path.split(out_bam)[1]))))
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, 
+                        os.path.join(outdir, 'alignment'), threads, memory,
+                        tempdir=tempdir, queue=queue, conda_env=conda_env,
+                        modules=modules)
+        job_holds[job.filename] = None
+        alignment_jobname = job.jobname
+        jobs.append(alignment_jobname)
         
-        # Make bigwig files for displaying coverage.
-        # TODO: update for strand specific eventually.
-        lines = _bigwig_files(out_bam, out_bigwig, sample_name,
-                              bedgraph_to_bigwig_path, bedtools_path)
-        f.write(lines)
-        f.write('wait\n\n')
-        name = os.path.split(out_bigwig)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bw', name))
+        # Files that will be created.
+        combined_r1 = os.path.join(
+            job.tempdir, '{}_R1.fastq.gz'.format(sample_name))
+        job.temp_files_to_delete.append(combined_r1)
+        combined_r2 = os.path.join(
+            job.tempdir, '{}_R2.fastq.gz'.format(sample_name))
+        job.temp_files_to_delete.append(combined_r2)
+        coord_sorted_bam = os.path.join(
+            job.tempdir, 'Aligned.sortedByCoord.out.bam'.format(sample_name))
 
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bigWig name="{}_rna_cov" '
-                        'description="RNAseq coverage for {}" '
-                        'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
-                            sample_name, sample_name, web_path, name))
-            tf.write(tf_lines)
+        # Other STAR Files to copy to output directory.
+        job.output_files_to_copy += [
+            'Log.out', 
+            'Log.final.out', 
+            'Log.progress.out', 
+            'SJ.out.tab', 
+            'Aligned.toTranscriptome.out.bam',
+        ]
 
-        index_out = os.path.join(job.outdir,
-                                 '{}_index_stats.txt'.format(sample_name))
-        index_err = os.path.join(job.outdir,
-                                 '{}_index_stats.err'.format(sample_name))
-        lines = _picard_bam_index_stats(out_bam, index_out, index_err,
-                                        picard_path=picard_path,
-                                        picard_memory=job.memory,
-                                        picard_tempdir=job.tempdir,
-                                        bg=True)
-        f.write(lines)
-        f.write('wait\n\n')
+        with open(job.filename, "a") as f:
+            # If multiple fastq files, we want to cat them together.
+            lines = _combine_fastqs(r1_fastqs, combined_r1, bg=True)
+            f.write(lines)
+            lines = _combine_fastqs(r2_fastqs, combined_r2, bg=True)
+            f.write(lines)
+            f.write('wait\n\n')
 
-        # Make softlinks and tracklines for genome browser.
-        # TODO: update for strand specific eventually.
-        # lines = _genome_browser_files(tracklines_file, link_dir, web_path_file,
-        #                               out_bam, bam_index, out_bigwig,
-        #                               sample_name, job.outdir)
-        # f.write(lines)
-        # f.write('wait\n\n')
+            # Run fastQC.
+            lines = _fastqc([combined_r1, combined_r2], job.outdir, job.threads,
+                            fastqc_path)
+            f.write(lines)
+            f.write('wait\n\n')
+            r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
+            job.add_softlink(os.path.join(job.outdir, r1), 
+                             os.path.join(link_dir, 'fastqc', r1))
+            r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
+            job.add_softlink(os.path.join(job.outdir, r2), 
+                             os.path.join(link_dir, 'fastqc', r2))
+            with open(tracklines_file, "a") as tf:
+                tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+                    web_path, r1))
+                tf.write(tf_lines)
+                tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+                    web_path, r2))
+                tf.write(tf_lines)
+        
+            # Align reads.
+            lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
+                                rgpu, star_index, threads,
+                                genome_load=star_genome_load)
+            f.write(lines)
+            f.write('wait\n\n')
+        job.write_end()
+
+    ##### Job 2: Mark duplicates and index bam #####
+    job_suffix = 'dup_index'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, 
+                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
+                        tempdir=tempdir, queue=queue, conda_env=conda_env,
+                        modules=modules)
+        job_holds[job.filename] = [alignment_jobname]
+        dup_index_jobname = job.jobname
+        jobs.append(dup_index_jobname)
+        
+        with open(job.filename, "a") as f:
+            # Mark duplicates.
+            mdup_bam = os.path.join(
+                job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
+            job.output_files_to_copy.append(mdup_bam)
+            job.temp_files_to_delete.append(coord_sorted_bam)
+            duplicate_metrics = os.path.join(
+                job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
+            lines = _picard_mark_duplicates(coord_sorted_bam, mdup_bam,
+                                            duplicate_metrics,
+                                            picard_path=picard_path,
+                                            picard_memory=job.memory,
+                                            picard_tempdir=job.tempdir)
+            f.write(lines)
+            f.write('wait\n\n')
+            name = os.path.split(mdup_bam)[1]
+            job.add_softlink(os.path.join(job.outdir, name), 
+                             os.path.join(link_dir, 'bam', name))
+            with open(tracklines_file, "a") as tf:
+                tf_lines = ('track type=bam name="{}_rna_bam" '
+                            'description="RNAseq for {}" '
+                            'bigDataUrl={}/bam/{}\n'.format(
+                                sample_name, sample_name, web_path, name))
+                tf.write(tf_lines)
+
+            # Index bam file.
+            bam_index = '{}.bai'.format(mdup_bam)
+            job.output_files_to_copy.append(bam_index)
+            lines = _picard_index(mdup_bam, bam_index, picard_path=picard_path,
+                                  picard_memory=job.memory,
+                                  picard_tempdir=job.tempdir, bg=False)
+            f.write(lines)
+            f.write('wait\n\n')
+            name = os.path.split(bam_index)[1]
+            job.add_softlink(os.path.join(job.outdir, name), 
+                             os.path.join(link_dir, 'bam', name))
+        job.write_end()
+
+    ##### Job 3: Collect Picard metrics. #####
+    job_suffix = 'picard_metrics'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'qc'),
+                        threads=1, memory=4, tempdir=tempdir, queue=queue,
+                        conda_env=conda_env, modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        picard_metrics_jobname = job.jobname
+        jobs.append(picard_metrics_jobname)
+        
+        with open(job.filename, "a") as f:
+            # Collect insert size metrics, bam index stats, RNA seq QC.
+            lines = _picard_collect_multiple_metrics(mdup_bam, sample_name,
+                                                     picard_path=picard_path, 
+                                                     picard_memory=job.memory,
+                                                     picard_tempdir=job.tempdir,
+                                                     bg=False)
+            f.write(lines)
+            for fn in ['{}.{}'.format(sample_name, x) for x in 
+                'alignment_summary_metrics', 
+                'quality_by_cycle.pdf', 
+                'base_distribution_by_cycle.pdf', 
+                'quality_by_cycle_metrics', 
+                'base_distribution_by_cycle_metrics', 
+                'quality_distribution.pdf', 
+                'insert_size_histogram.pdf', 
+                'quality_distribution_metrics', 
+                'insert_size_metrics'
+                      ]:
+                job.output_files_to_copy.append(fn)
+
+            metrics = os.path.join(job.outdir,
+                                   '{}_rna_seq_metrics.txt'.format(sample_name))
+            chart = os.path.join(job.outdir,
+                                 '{}_5_3_coverage.pdf'.format(sample_name))
+            lines = _picard_collect_rna_seq_metrics(
+                mdup_bam, 
+                metrics, 
+                chart, 
+                sample_name,
+                ref_flat, 
+                rrna_intervals,
+                picard_path=picard_path,
+                picard_memory=job.memory,
+                picard_tempdir=job.tempdir,
+                strand_specific=strand_specific, 
+                bg=False)
+            f.write(lines)
+
+            index_out = os.path.join(job.outdir,
+                                     '{}_index_stats.txt'.format(sample_name))
+            index_err = os.path.join(job.outdir,
+                                     '{}_index_stats.err'.format(sample_name))
+            lines = _picard_bam_index_stats(mdup_bam, index_out, index_err,
+                                            picard_path=picard_path,
+                                            picard_memory=job.memory,
+                                            picard_tempdir=job.tempdir,
+                                            bg=False)
+            f.write(lines)
+            f.write('wait\n\n')
+        job.write_end()
+
+    ##### Job 4: Make md5 has for final bam file. #####
+    job_suffix = 'md5'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, 
+                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
+                        tempdir=tempdir, queue=queue, conda_env=conda_env,
+                        modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        md5_jobname = job.jobname
+        jobs.append(md5_jobname)
+        
+        with open(job.filename, "a") as f:
+            # Make md5 hash for output bam file.
+            f.write('md5sum {} > {}\n'.format(
+                mdup_bam, os.path.join(job.outdir, '{}.md5'.format(
+                    os.path.split(mdup_bam)[1]))))
+        job.write_end()
+       
+    ##### Job 5: Make bigwig for final bam file. #####
+    job_suffix = 'bigwig'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, 
+                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
+                        tempdir=tempdir, queue=queue, conda_env=conda_env,
+                        modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        bigwig_jobname = job.jobname
+        jobs.append(bigwig_jobname)
+        
+        with open(job.filename, "a") as f:
+            # Make bigwig file for displaying coverage.
+            out_bigwig = os.path.join(job.tempdir, '{}_rnaseq.bw'.format(sample_name))
+            job.output_files_to_copy.append(out_bigwig)
+        
+            lines = _bigwig_files(
+                mdup_bam, out_bigwig, sample_name, 
+                bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
+                bedtools_path=bedtools_path)
+            f.write(lines)
+            f.write('wait\n\n')
+            name = os.path.split(out_bigwig)[1]
+            job.add_softlink(os.path.join(job.outdir, name), 
+                             os.path.join(link_dir, 'bw', name))
+
+            with open(tracklines_file, "a") as tf:
+                tf_lines = ('track type=bigWig name="{}_rna_cov" '
+                            'description="RNAseq coverage for {}" '
+                            'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
+                                sample_name, sample_name, web_path, name))
+                tf.write(tf_lines)
+        job.write_end()
     
-    job.write_end()
+    ##### Job 6: Get HTSeq and DEXSeq counts. #####
+    job_suffix = 'counts'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, 
+                        os.path.join(outdir, 'counts'), threads=1, memory=4,
+                        tempdir=tempdir, queue=queue, conda_env=conda_env,
+                        modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        counts_jobname = job.jobname
+        jobs.append(counts_jobname)
+        
+        with open(job.filename, "a") as f:
+            gene_counts = os.path.join(job.outdir, 'gene_counts.tsv')
+            gene_count_stats = os.path.join(job.outdir, 'gene_count_stats.tsv')
+            lines = _htseq_count(
+                mdup_bam, 
+                gene_counts, 
+                gene_count_stats, 
+                gene_gtf, 
+                strand_specific=strand_specific,
+                samtools_path=samtools_path)
+            f.write(lines)
+            dexseq_counts = os.path.join(
+                job.outdir, '{}_dexseq_counts.tsv'.format(job.sample_name))
+            lines = _dexseq_count(mdup_bam, dexseq_counts, dexseq_annotation,
+                                  paired=True, strand_specific=strand_specific,
+                                  samtools_path=samtools_path)
+            f.write(lines)
+        job.write_end()
+    
+    ##### Job 7: Run RSEM. #####
+    job_suffix = 'rsem'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
+                        threads=1, memory=4, tempdir=tempdir, queue=queue,
+                        conda_env=conda_env, modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        rsem_jobname = job.jobname
+        jobs.append(rsem_jobname)
+        
+        with open(job.filename, "a") as f:
+            job.output_files_to_copy += [
+                '{}.genes.results'.format(sample_name),
+                '{}.isoforms.results'.format(sample_name),
+                '{}.stat'.format(sample_name)]
+            lines = _rsem_calculate_expression(
+                mdup_bam, rsem_reference, sample_name, threads=threads,
+                ci_mem=job.memory, strand_specific=strand_specific,
+                rsem_calculate_expression_path=rsem_calculate_expression_path,
+            )
+            f.write(lines)
+        job.write_end()
+    
+    ##### Job 8: WASP first step. #####
+    job_suffix = 'wasp_allele_swap'
+    js = '{}_{}.sh'.format(sample_name, job_suffix)
+    if not os.path.exists(os.path.join(outdir, 'sh', js)):
+        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
+                        threads=1, memory=4, tempdir=tempdir, queue=queue,
+                        conda_env=conda_env, modules=modules)
+        job_holds[job.filename] = [dup_index_jobname]
+        wasp_allele_swap_jobname = job.jobname
+        jobs.append(wasp_allele_swap_jobname)
+        
+        with open(job.filename, "a") as f:
+            if not vcf_sample_name:
+                vcf_sample_name = sample_name
+
+            # Files that will be created.
+            temp_uniq_bam = os.path.join(
+                job.tempdir, '{}_uniq.bam'.format(sample_name))
+            job.temp_files_to_delete.append(temp_uniq_bam)
+            
+            # Files to copy to output directory.
+            prefix = '{}_uniq'.format(sample_name)
+            fns = [
+                '{}.keep.bam'.format(prefix),
+                '{}.remap.fq1.gz'.format(prefix),
+                '{}.remap.fq2.gz'.format(prefix),
+                '{}.to.remap.bam'.format(prefix),
+                '{}.to.remap.num.gz'.format(prefix)
+            ]
+            job.output_files_to_copy += fns
+
+            from __init__ import scripts
+            input_script = os.path.join(scripts, 'make_wasp_input.py')
+
+            # Run WASP to swap alleles.
+            with open(job.filename, "a") as f:
+                snp_directory = os.path.join(job.tempdir, 'snps')
+                all_snps = os.path.join(job.outdir, 'snps.tsv')
+                temp_bam = os.path.join(job.outdir, 'uniq.bam')
+                f.write('python {} -s {} {} {} {} & \n\n'.format(
+                    input_script, vcf_sample_name, vcf, snp_directory,
+                    all_snps))
+                f.write('{} view -b -q 255 -F 1024 {} > {}\n\n'.format(
+                    samtools_path, temp_bam, temp_uniq_bam))
+                f.write('wait\n\n')
+                f.write('python {} -s -p {} {}\n\n'.format(
+                    find_intersecting_snps_path, temp_uniq_bam, snp_directory))
+        job.write_end()
+    
+    # ##### Job 9: WASP second step. #####
+    # job_suffix = 'wasp_remap'
+    # js = '{}_{}.sh'.format(sample_name, job_suffix)
+    # if not os.path.exists(os.path.join(outdir, 'sh', js)):
+    #     job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
+    #                     threads=threads, memory=10, tempdir=tempdir,
+    #                     queue=queue, conda_env=conda_env, modules=modules)
+    #     job_holds[job.filename] = [wasp_allele_swap_jobname]
+    #     wasp_remap_jobname = job.jobname
+    #     jobs.append(wasp_remap_jobname)
+    #     
+    #     with open(job.filename, "a") as f:
+    #         # Input files.
+    #         temp_r1 = job.add_input_file(r1_fastq)
+    #         temp_r2 = job.add_input_file(r2_fastq)
+    #         job.copy_input_files()
+
+    #         # Files that will be created.
+    #         aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
+    #         job.output_files_to_copy.append(aligned_bam)
+    #         # job.temp_files_to_delete.append(aligned_bam)
+    #         # coord_sorted_bam = os.path.join(
+    #         #     job.tempdir, '{}_sorted.bam'.format(sample_name))
+    #         # job.output_files_to_copy.append(coord_sorted_bam)
+    #         job.temp_files_to_delete.append('_STARtmp')
+
+    #         # Files to copy to output directory.
+    #         job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
+    #                                      'SJ.out.tab']
+
+    #         # Align with STAR and coordinate sort.
+    #         lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
+    #                             rgpu, star_index, threads,
+    #                             genome_load=star_genome_load)
+    #         f.write(lines)
+    #         f.write('wait\n\n')
+    #     job.write_end()
+    # 
+    # ##### Job 10: WASP third step. #####
+    # job_suffix = 'wasp_alignment_compare'
+    # js = '{}_{}.sh'.format(sample_name, job_suffix)
+    # if not os.path.exists(os.path.join(outdir, 'sh', js)):
+    #     job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
+    #                     threads=1, memory=4, tempdir=tempdir, queue=queue,
+    #                     conda_env=conda_env, modules=modules)
+    #     job_holds[job.filename] = [wasp_remap_jobname]
+    #     wasp_alignment_compare_jobname = job.jobname
+    #     jobs.append(wasp_alignment_compare_jobname )
+    #     
+    #     with open(job.filename, "a") as f:
+    #         # Input files.
+    #         temp_to_remap_bam = job.add_input_file(to_remap_bam)
+    #         temp_to_remap_num = job.add_input_file(to_remap_num)
+    #         temp_remapped_bam = job.add_input_file(remapped_bam)
+    #         job.copy_input_files()
+
+    #         # Files that will be created.
+    #         temp_filtered_bam = os.path.join(
+    #             job.tempdir, '{}_filtered.bam'.format(sample_name))
+    #         job.temp_files_to_delete.append(temp_filtered_bam)
+    #         coord_sorted_bam = os.path.join(
+    #             job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
+    #         job.output_files_to_copy.append(coord_sorted_bam)
+    #         bam_index = coord_sorted_bam + '.bai'
+    #         job.output_files_to_copy.append(bam_index)
+   
+    #         with open(job.filename, "a") as f:
+    #             # Run WASP alignment compare.
+    #             f.write('python {} -p {} {} {} {}\n\n'.format(
+    #                 filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
+    #                 temp_filtered_bam, temp_to_remap_num))
+
+    #             # Coordinate sort and index.
+    #             lines = _picard_coord_sort(temp_filtered_bam, coord_sorted_bam,
+    #                                        bam_index=bam_index, picard_path=picard_path,
+    #                                        picard_memory=picard_memory,
+    #                                        picard_tempdir=job.tempdir)
+
+    #             f.write(lines)
+    #             f.write('\nwait\n\n')
+    #             
+    #             # Count allele coverage.
+    #             counts = os.path.join(job.outdir,
+    #                                   '{}_allele_counts.tsv'.format(sample_name))
+    #             f.write('java -jar /raid3/software/GenomeAnalysisTK.jar \\\n')
+    #             f.write('\t-R {} \\\n'.format(fasta))
+    #             f.write('\t-T ASEReadCounter \\\n')
+    #             f.write('\t-o {} \\\n'.format(counts))
+    #             f.write('\t-I {} \\\n'.format(coord_sorted_bam))
+    #             f.write('\t-sites {} \\\n'.format(vcf))
+    #             f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
+    #             f.write('\t-U ALLOW_N_CIGAR_READS \n')
+    #             f.write('\nwait\n\n')
+    #     job.write_end()
+    # 
+    # ##### Job 11: Run MBASED for ASE. #####
+    # job_suffix = 'mbased'
+    # job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'mbased'),
+    #                 threads=1, memory=4, tempdir=tempdir, queue=queue,
+    #                 conda_env=conda_env, modules=modules)
+    # job_holds[job.filename] = [wasp_alignment_compare_jobname]
+    # mbased_jobname = job.jobname
+    # jobs.append(mbased_jobname)
+    # 
+    # with open(job.filename, "a") as f:
+    #     f.write(lines)
+    # job.write_end()
+    
     return job.filename
 
 def _dexseq_count(
@@ -439,7 +728,7 @@ def _dexseq_count(
         '{} view -h -f 2 {} | '.format(samtools_path, bam) +
         'cut -f1-16,20- | python {} '.format(script) + 
         '-p {} -s {} -a 0 -r pos -f sam '.format(p, s) + 
-        '{} - {} &\n\n'.format(dexseq_annotation, counts_file)
+        '{} - {}\n\n'.format(dexseq_annotation, counts_file)
     )
     return lines
 

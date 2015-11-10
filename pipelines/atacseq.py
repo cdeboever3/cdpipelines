@@ -2,17 +2,17 @@ import os
 
 from general import _bedgraph_to_bigwig
 from general import _bigwig_files
+from general import _combine_fastqs
 from general import _cutadapt_trim
 from general import _fastqc
 from general import JobScript
 from general import _flagstat
 from general import _picard_insert_size_metrics
 from general import _make_softlink
-from general import _pbs_header
+# from general import _pbs_header
 from general import _picard_coord_sort
 from general import _picard_query_sort
 from general import _picard_mark_duplicates
-from general import _process_fastqs
 from general import _samtools_index
 
 def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
