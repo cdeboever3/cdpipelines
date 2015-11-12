@@ -639,6 +639,7 @@ def _combine_fastqs(
         Lines to write to shell script.
 
     """
+    fastqs = sorted(fastqs)
     if type(fastqs) == list:
         lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
                                                    out_fastq)
@@ -1120,10 +1121,11 @@ def _picard_mark_duplicates(
         lines += '\n\n'
     return lines
 
-def _wasp_snp_directory(vcf, directory, all_snps, sample_name=None):
+def _wasp_snp_directory(vcf, directory, sample_name, regions,
+                        bcftools_path='bcftools'):
     """
     Convert VCF file into input files directory and files needed for WASP. Only
-    bi-allelic heterozygous sites are used.
+    bi-allelic heterozygous sites are used. Both SNPs and indels are included.
 
     Parameters:
     -----------
@@ -1131,53 +1133,32 @@ def _wasp_snp_directory(vcf, directory, all_snps, sample_name=None):
         Path to VCF file.
 
     directory : str
-        Output directory. This is the directory that will hold the files for
-        WASP.
-
-    all_snps : str
-        Path to output file for all information on all SNPs. This can be used
-        later to count coverage.
+        Output directory. A directory snps will be output in this directory with
+        the variants for WASP.
 
     sample_name : str
-        If provided, use this sample name to get heterozygous SNPs from VCF
-        file.
+        Use this sample name to get heterozygous SNPs from VCF file.
+
+    regions : str
+        Path to bed file to define regions of interests (e.g. exons, peaks,
+        etc.). These regions should be non-overlapping.
 
     """
-    import gzip
-    import pandas as pd
-    import vcf as pyvcf
-    chrom = []
-    pos = []
-    ref = []
-    alt = []
-    vcf_reader = pyvcf.Reader(open(vcf, 'r'))
-    if sample_name:
-        def condition(record, sample_name):
-            return sample_name in [x.sample for x in record.get_hets()]
-    else:
-        def condition(record, sample_name):
-            return len(record.get_hets()) > 0
-    for record in vcf_reader:
-        if condition(record, sample_name):
-            if len(record.ALT) == 1:
-                chrom.append(record.CHROM)
-                pos.append(record.POS)
-                ref.append(record.REF)
-                alt.append(record.ALT[0].sequence)
-    df = pd.DataFrame([chrom, pos, ref, alt], 
-                      index=['chrom', 'position', 'ref', 'alt']).T
-    df.to_csv(all_snps, sep='\t', index=False)
+    import glob
+    # First we extract all heterozygous variants for this sample.
     if not os.path.exists(directory):
         os.makedirs(directory)
-    for c in set(df.chrom):
-        tdf = df[df.chrom == c]
-        if tdf.shape[0] > 0:
-            f = gzip.open(os.path.join(directory, '{}.snps.txt.gz'.format(c)),
-                          'wb')
-            lines = (tdf.position.astype(str) + '\t' + tdf.ref + '\t' +
-                     tdf.alt)
-            f.write('\n'.join(lines) + '\n')
-            f.close()
+
+    c = ('{} view -O u -m2 -M2 -R {} -s {} {} | {} view -g het | grep -v ^\\# '
+         '| cut -f1,2,4,5 | '
+         'awk \'{{print $2"\\t"$3"\\t"$4 >> ("{}/"$1".snps.txt")}}\''.format(
+             bcftools_path, regions, sample_name, vcf, bcftools_path,
+             directory))
+    subprocess.check_call(c, shell=True)
+
+    # Now we gzip the files.
+    for fn in fns:
+        subprocess.check_call('gzip {}'.format(fn), shell=True)
 
 def wasp_allele_swap(
     bam, 

@@ -76,12 +76,12 @@ def _star_align(
                           '\t--alignMatesGapMax 1000000',
                          ]))
     if transcriptome_align:
-        line +=  '\t--quantMode TranscriptomeSAM \\\n'
+        line +=  ' \\\n\t--quantMode TranscriptomeSAM'
     if sort:
-        line += ('\t--outSAMtype BAM SortedByCoordinate \\\n'
-                 '\t--limitBAMsortRAM {} \\\n'.format(sort_mem))
+        line += (' \\\n\t--outSAMtype BAM SortedByCoordinate'
+                 ' \\\n\t--limitBAMsortRAM {}'.format(sort_mem))
     else:
-        line += '\t--outSAMtype BAM Unsorted \\\n'
+        line += ' \\\n\t--outSAMtype BAM Unsorted'
     line += '\n\n'
     line += 'if [ -d _STARtmp ] ; then rm -r _STARtmp ; fi\n\n'
     return line
@@ -98,6 +98,7 @@ def pipeline(
     rrna_intervals,
     dexseq_annotation,
     gene_gtf,
+    exon_bed,
     rsem_reference,
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
@@ -123,6 +124,7 @@ def pipeline(
     rsem_calculate_expression_path='rsem-calculate-expression',
     gatk_path='$gatk',
     bigWigAverageOverBed_path='bigWigAverageOverBed',
+    bcftools_path='bcftools',
 ):
     """
     Make a shell script for aligning RNA-seq reads with STAR. The defaults are
@@ -173,6 +175,10 @@ def pipeline(
 
     gene_gtf : str
         Path to GTF file with gene annotations.
+
+    exon_bed : str
+        Path to bed file with exon definitions. The exons should be merged so
+        that no bed file entries overlap each other.
 
     rsem_reference : str
         Directory with RSEM reference.
@@ -585,15 +591,14 @@ def pipeline(
             # Run WASP to swap alleles.
             with open(job.filename, "a") as f:
                 snp_directory = os.path.join(job.tempdir, 'snps')
-                all_snps = os.path.join(job.outdir, 'snps.tsv')
-                temp_bam = os.path.join(job.outdir, 'uniq.bam')
-                f.write('python {} -s \\\n\t{} \\\n\t{} \\\n\t{} '
-                        '\\\n\t{} & \n\n'.format(
-                            input_script, vcf_sample_name, vcf, snp_directory,
-                            all_snps))
+                # temp_bam = os.path.join(job.outdir, 'uniq.bam')
+                f.write('python {} \\\n\t{} \\\n\t{} \\\n\t{} '
+                        '\\\n\t{} \\\n\t-b {}\n\n'.format(
+                            input_script, vcf, vcf_sample_name, snp_directory,
+                            exon_bed, bcftools_path))
                 f.write('{} view -b -q 255 -F 1024 \\\n\t{} '
                         '\\\n\t> {}\n\n'.format(
-                            samtools_path, temp_bam, temp_uniq_bam))
+                            samtools_path, mdup_bam, temp_uniq_bam))
                 f.write('wait\n\n')
                 f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
                     find_intersecting_snps_path, temp_uniq_bam, snp_directory))
