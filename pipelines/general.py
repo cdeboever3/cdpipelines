@@ -1157,6 +1157,7 @@ def _wasp_snp_directory(vcf, directory, sample_name, regions,
     subprocess.check_call(c, shell=True)
 
     # Now we gzip the files.
+    fns = glob.glob(os.path.join(directory, '*.snps.txt'))
     for fn in fns:
         subprocess.check_call('gzip {}'.format(fn), shell=True)
 
