@@ -1,20 +1,25 @@
 import os
-from setuptools import setup, find_packages
+from setuptools import setup
 
-def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+try:
+    import pypandoc
+    long_description = pypandoc.convert('README.md', 'rst', format='md')
+except(IOError, ImportError):
+    long_description = open('README.md').read()
 
+# I need to add a download_url before pushing to pypi:
+# download_url = 'https://github.com/cdeboever3/cdpybio/tarball/0.0.6',
 setup(
-    name = 'pipelines',
-    version = '0.1.0',
+    name = 'cdpipelines',
+    packages=['cdpipelines'],
+    version = '0.0.1',
     author = 'Christopher DeBoever',
     author_email = 'cdeboever3@gmail.com',
-    description = ('Various computational pipelines from the Frazer Lab.'),
-    packages=find_packages(),
+    description = ('Various bioinformatics pipelines.'),
     license = 'MIT',
-    keywords = 'bioinformatics pipeline',
-    url = 'https://github.com/frazer-lab/pipelines',
-    long_description=read('README.md'),
+    keywords = ['bioinformatics'],
+    url = 'https://github.com/cdeboever3/cdpipelines',
+    long_description=long_description,
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Science/Research',

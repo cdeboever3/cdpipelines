@@ -1,6 +1,6 @@
 import argparse
 
-import pipelines as ps
+import cdpipelines as ps
 
 def main():
     parser = argparse.ArgumentParser(description=(

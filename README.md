@@ -1,7 +1,7 @@
-Frazer Lab Pipelines
+cdpipelines
 =========
 
-This repository holds various computational pipelines.
+This repository holds various bioinformatics pipelines.
 
 ## Dependencies
 
