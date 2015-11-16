@@ -21,724 +21,6 @@ def _make_dir(d):
     except OSError:
         pass
 
-def _picard_collect_rna_seq_metrics(
-    in_bam, 
-    metrics, 
-    chart, 
-    sample_name,
-    ref_flat, 
-    rrna_intervals,
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    strand_specific=True, 
-    bg=False,
-):
-    """
-    Collect RNA-seq metrics using Picard. The input bam file is assumed to be
-    sorted.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    metrics : str
-        Path to output metrics file.
-
-    chart : str
-        Path to output PDF file.
-
-    sample_name : str
-        Sample name used to name output files.
-
-    ref_flat : str
-        Path to refFlat file with non-rRNA genes. Can be gzipped.
-
-    rrna_intervals : str
-        Pato to interval list file with rRNA intervals.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    if strand_specific:
-        ss = '\tSTRAND_SPECIFICITY=SECOND_READ_TRANSCRIPTION_STRAND'
-    else:
-        ss = '\tSTRAND_SPECIFICITY=NONE'
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} CollectRnaSeqMetrics'.format(
-                               picard_path),
-                           '\tI={}'.format(in_bam),
-                           '\tREF_FLAT={}'.format(ref_flat),
-                           ss,
-                           '\tRIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
-                           '\tASSUME_SORTED=TRUE',
-                           '\tCHART_OUTPUT={}'.format(chart),
-                           '\tO={}'.format(metrics)]))
-
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_collect_multiple_metrics(
-    in_bam, 
-    sample_name, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Collect multiple metrics using Picard. The input bam file is assumed to be
-    sorted.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    sample_name : str
-        Sample name used to name output files.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} CollectMultipleMetrics'.format(
-                               picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tASSUME_SORTED=TRUE',
-                           '\tI={}'.format(in_bam), 
-                           '\tO={}'.format(sample_name)]))
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_gc_bias_metrics(
-    in_bam, 
-    metrics, 
-    chart, 
-    out, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Collect GC bias metrics using Picard. The input bam file is assumed to
-    be sorted.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    metrics : str
-        Path to output metrics file.
-
-    chart : str
-        Path to output PDF chart.
-
-    out : str
-        Path to picard output file.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} CollectGcBiasMetrics'.format(
-                               picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI={}'.format(in_bam), 
-                           '\tO={}'.format(out),
-                           '\tCHART_OUTPUT={}'.format(chart),
-                           '\tSUMMARY_OUTPUT={}'.format(metrics),
-                           '\tASSUME_SORTED=TRUE']))
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_bam_index_stats(
-    in_bam, 
-    out, 
-    err, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False):
-    """
-    Collect bam index stats with Picard.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out : str
-        Path to write stdout to. This contains the index stats.
-
-    err : str
-        Path to write stderr to. This contains picard stuff.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} BamIndexStats'.format(
-                               picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI={}'.format(in_bam),
-                           '\t> {}'.format(out),
-                           '\t2> {}'.format(err)]))
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_insert_size_metrics(
-    in_bam, 
-    out_metrics, 
-    out_hist, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Collect insert size metrics using Picard. The input bam file is assumed to
-    be sorted.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out_metrics : str
-        Path to output metrics file.
-
-    out_hist : str
-        Path to output histogram PDF.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} CollectInsertSizeMetrics'.format(
-                               picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI={}'.format(in_bam), 
-                           '\tO={}'.format(out_metrics),
-                           '\tHISTOGRAM_FILE={}'.format(out_hist),
-                           '\tASSUME_SORTED=TRUE']))
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_query_sort(
-    in_bam, 
-    out_bam, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Query sort using Picard Tools.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out_bam : str
-        Path to output bam file.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} SortSam'.format(picard_path),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tI={}'.format(in_bam), 
-                           '\tO={}'.format(out_bam),
-                           '\tSO=queryname']))
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _picard_coord_sort(
-    in_bam, 
-    out_bam, 
-    bam_index=None,
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-):
-    """
-    Coordinate sort using Picard Tools.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
-
-    out_bam : str
-        Path to output bam file.
-
-    bam_index : str
-        File name for bam index file. If provided, the index will be generated
-        and moved to this file name.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    """
-    if bam_index:
-        lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                               '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                               '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                               '\t-jar {} SortSam'.format(picard_path),
-                               '\tVALIDATION_STRINGENCY=SILENT',
-                               '\tCREATE_INDEX=TRUE', 
-                               '\tI={}'.format(in_bam), 
-                               '\tO={}'.format(out_bam),
-                               '\tSO=coordinate\n']))
-        index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
-        lines += 'mv {} {}\n\n'.format(index, bam_index)
-    else:
-        lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                               '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                               '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                               '\t-jar {} SortSam'.format(picard_path),
-                               '\tVALIDATION_STRINGENCY=SILENT',
-                               '\tI={}'.format(in_bam), 
-                               '\tO={}'.format(out_bam),
-                               '\tSO=coordinate\n']))
-
-    return lines
-
-def _cutadapt_trim(
-    fastq, 
-    length, 
-    out, 
-    bg=False,
-):
-    """
-    Cut a specified number of bases from a fastq file using cutadapt. Cutadapt
-    should be installed in your python environment.
-
-    Parameters
-    ----------
-    fastq : str
-        Fastq or gzipped/bzipped fastq.
-
-    length : int
-        Positive or negative integer. Positive numbers remove bases at the front
-        of the read and negative numbers remove bases at the end of the read.
-
-    out : str
-        Path to output (optionally gzipped/bzipped) fastq files.
-
-    bg : boolean
-        Whether to run the process in the background (i.e. include an ampersand
-        at the end of the command).
-
-    Returns
-    -------
-    lines : str
-        Lines to write to shell script.
-
-    """
-    line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
-    if bg:
-        line += ' &\n\n'
-    else:
-        line += '\n\n'
-    return line
-
-def _bedgraph_to_bigwig(
-    bedgraph, 
-    bigwig,
-    bedgraph_to_bigwig_path='bedGraphToBigWig',
-    bedtools_path='bedtools',
-):
-    # If bedtools is in the path, I'll assume the genome file is as well.
-    if bedtools_path == 'bedtools':
-        bedtools_genome_path = 'human.hg19.genome'
-    else:
-        bedtools_genome_path = os.path.join(
-            os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
-            'human.hg19.genome')
-    lines =  ' \\\n\t'.join(['{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
-                             '{}'.format(bedtools_genome_path),
-                             '{} &\n'.format(bigwig)])
-    return lines
-
-def _flagstat(
-    bam, 
-    stats_file, 
-    samtools_path='samtools',
-    bg=False):
-    """
-    Run flagstat for a bam file.
-
-    Parameters
-    ----------
-    bam : str
-        Bam file to calculate coverage for.
-
-    stats_file : str
-        File to write flagstats to.
-
-    samtools_path : str
-        Path to samtools executable.
-
-    Returns
-    -------
-    lines : str
-        Lines to write to shell script.
-
-    """
-    lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _coverage_bedgraph(
-    bam, 
-    bedgraph, 
-    sample_name, 
-    strand='.',
-    bedtools_path='bedtools',
-):
-    """
-    Make lines that create a coverage bedgraph file.
-
-    Parameters
-    ----------
-    bam : str
-        Bam file to calculate coverage for.
-
-    bedgraph : str
-        Path to output bedgraph file.
-
-    bedtools_path : str
-        Path to bedtools.
-
-    sample_name : str
-        Sample name for naming files etc.
-
-    strand : str
-        If '+' or '-', calculate strand-specific coverage. Otherwise, calculate
-        coverage using all reads.
-
-    Returns
-    -------
-    lines : str
-        Lines to write to shell script.
-
-    """
-    if strand == '+' or strand == '-':
-        if strand == '+':
-            name = '{}_plus'.format(sample_name)
-        else:
-            name = '{}_minus'.format(sample_name)
-        lines = ' \\\n'.join(['{} genomecov -ibam'.format(bedtools_path),
-                              '\t{}'.format(bam),
-                              '\t-g hg19.genome -split -bg ',
-                              '\t-strand {} -trackline'.format(strand),
-                              '\t-trackopts \'name="{}"\''.format(name),
-                              '\t> {} &\n\n'.format(bedgraph)])
-    else:
-        name = sample_name
-        lines = ' \\\n'.join(['{} genomecov -ibam'.format(bedtools_path),
-                              '\t{}'.format(bam),
-                              '\t-g hg19.genome -split -bg ',
-                              '\t-trackline'.format(strand),
-                              '\t-trackopts \'name="{}"\''.format(name),
-                              '\t> {} &\n\n'.format(bedgraph)])
-    return lines
-
-def _bigwig_files(
-    in_bam, 
-    out_bigwig, 
-    sample_name, 
-    out_bigwig_minus='',
-    bedgraph_to_bigwig_path='bedGraphToBigWig',
-    bedtools_path='bedtools',
-):
-    """
-    Make bigwig coverage files.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to bam file to create bigwigs for.
-
-    out_bigwig : str
-        Path to output bigwig file. If out_bigwig_minus is provided, out_bigwig
-        has the plus strand coverage.
-
-    out_bigwig_minus : str
-        Path to output bigwig file for minus strand. If out_bigwig_minus is not
-        provided, the coverage is calculated using reads from both strands and
-        written to out_bigwig.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    """
-    lines = ''
-    if out_bigwig_minus != '':
-        lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name, strand='+')
-        lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name, strand='-')
-        lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
-        lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
-                                      
-        lines += ('\nwait\n\n')
-        lines += ('rm plus.bg minus.bg\n\n')
-    
-    else:
-        lines = _coverage_bedgraph(in_bam, 'both.bg', sample_name)
-        lines += ('wait\n\n')
-        lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
-        lines += ('wait\n\n')
-        lines += ('rm both.bg\n\n')
-    return lines
-    
-def _combine_fastqs(
-    fastqs,
-    out_fastq,
-    bg=False,
-):
-    """
-    If fastqs is a string with a path to a single fastq file, make a softlink to
-    out_fastq. If fastqs is a list of fastqs, cat the fastqs together into the
-    file out_fastq.
-
-    Parameters
-    ----------
-    fastqs : list or str
-        Either a list of paths to gzipped fastq files or path to a single
-        gzipped fastq file.
-
-    out_fastq : str
-        Path to single output fastq file.
-
-    Returns
-    -------
-    lines : str
-        Lines to write to shell script.
-
-    """
-    fastqs = sorted(fastqs)
-    if type(fastqs) == list:
-        lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
-                                                   out_fastq)
-    elif type(fastqs) == str:
-        lines = 'ln -s {} {}'.format(fastqs, out_fastq)
-    if bg:
-        lines += ' &\n\n'
-    else:
-        lines += '\n\n'
-    return lines
-
-def _fastqc(
-    fastqs, 
-    outdir, 
-    threads=1,
-    fastqc_path='fastqc',
-):
-    """
-    Run FastQC
-
-    Parameters
-    ----------
-    fastqs : str or list
-        Path to fastq file or list of paths to fastq files.
-
-    outdir : str
-        Path to directory to store FastQC results to.
-
-    threads : int
-        Number of threads to run FastQC with.
-
-    fastqc_path : str
-        Path to FastQC.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    """
-    if type(fastqs) == list:
-        fastqs = ' \\\n\t'.join(fastqs)
-    lines = ('{} --outdir {} --nogroup --extract --threads {} \\\n'
-             '\t{}\n'.format(fastqc_path, outdir, threads, fastqs))
-    return lines
-
-def _softlink(target, link):
-    """
-    Make softlink from target to link.
-
-    Parameters
-    ----------
-    target : str
-        Full path to file to make link to.
-
-    link : str
-        Full path to softlink.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    """
-    lines = 'ln -s {} {}\n'.format(target, link)
-    return lines
-
-def _make_softlink(fn, sample_name, link_dir):
-    """
-    Make softlink for file fn in link_dir. sample_name followed by an underscore
-    will be appended to the front of fn if the sample_name isn't in fn.
-
-    Parameters
-    ----------
-    fn : str
-        Full path to file to make link to.
-
-    sample_name : str
-        Sample name used for naming files.
-
-    link_dir : str
-        Path to directory where softlink should be made.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    name : str
-        File name for the softlink.
-
-    """
-    if sample_name not in os.path.split(fn)[1]:
-        name = '{}_{}'.format(sample_name, os.path.split(fn)[1])
-    else:
-        name = os.path.split(fn)[1]
-    lines = 'ln -s {} {}\n'.format(fn, os.path.join(link_dir, name))
-    return lines, name
-
 class JobScript:
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
                  tempdir=None, queue=None, conda_env=None, modules=None,
@@ -929,197 +211,1029 @@ class JobScript:
         self._delete_tempdir()
         self._make_softlinks()
 
-def _picard_index(
-    in_bam, 
-    index, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Index bam file using Picard Tools.
+    def _picard_collect_rna_seq_metrics(
+        self,
+        in_bam, 
+        ref_flat, 
+        rrna_intervals,
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        strand_specific=True, 
+        bg=False,
+    ):
+        """
+        Collect RNA-seq metrics using Picard. The input bam file is assumed to
+        be coordinate sorted.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input coordinate sorted bam file.
+    
+        ref_flat : str
+            Path to refFlat file with non-rRNA genes. Can be gzipped.
+    
+        rrna_intervals : str
+            Pato to interval list file with rRNA intervals.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
 
-    Parameters
-    ----------
-    in_bam : str
-        Path to file input bam file.
+        Returns
+        -------
+        metrics : str
+            Path to output metrics file.
+    
+        chart : str
+            Path to output PDF file.
+    
+        """
+        metrics = os.path.join(job.tempdir,
+                               '{}_rna_seq_metrics.txt'.format(job.sample_name))
+        chart = os.path.join(job.tempdir,
+                             '{}_5_3_coverage.pdf'.format(job.sample_name))
+        if strand_specific:
+            ss = 'SECOND_READ_TRANSCRIPTION_STRAND'
+        else:
+            ss = 'NONE'
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} CollectRnaSeqMetrics'.format( picard_path),
+            'I={}'.format(in_bam),
+            'REF_FLAT={}'.format(ref_flat),
+            'STRAND_SPECIFICITY={}'.format(ss),
+            'RIBOSOMAL_INTERVALS={}'.format(rrna_intervals),
+            'ASSUME_SORTED=TRUE',
+            'CHART_OUTPUT={}'.format(chart),
+            'O={}'.format(metrics)]))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return metrics, chart
 
-    index : str
-        Path to index file for input bam file.
+    def _picard_collect_multiple_metrics(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Collect multiple metrics using Picard. The input bam file is assumed to
+        be sorted.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input coordinate sorted bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
 
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    Returns
-    -------
-    line : str
-        Line to print to shell script.
-
-    """
-    line = (' \\\n'.join(['java -Xmx{}g -jar'.format(picard_memory),
-                          '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                          '\t-Djava.io.tmpdir={}'.format(picard_tempdir),
-                          '\t-jar {} BuildBamIndex'.format(picard_path),
-                          '\tI={}'.format(in_bam),
-                          '\tO={}'.format(index)]))
-    if bg:
-        line += ' &\n\n'
-    else:
-        line += '\n\n'
-    return line
-
-def _picard_merge(
-    bams, 
-    out_bam, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    bg=False,
-):
-    """
-    Merge bam files using Picard. Input bam files are assumed to be coordinate
-    sorted.
-
-    Parameters
-    ----------
-    bams : str
-        Bam files to merge.
-
-    out_bam : str
-        Path to output merged bam file.
-
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
-
-    picard_memory : int
-        Amount of memory in Gb to give picard.
-
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    bg : boolean
-        Whether to run the process in the background.
-
-    Returns
-    -------
-    line : str
-        Line to print to shell script.
-
-    """
-    merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
-    lines = ['java -Xmx{}g -jar'.format(picard_memory),
-             '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-             '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-             '\t-jar {} MergeSamFiles'.format(picard_path),
-             '\tASSUME_SORTED=TRUE',
-             '\tUSE_THREADING=TRUE']
-    for bam in bams:
-        lines.append('\tI={}'.format(bam))
-    lines.append('\tO={}'.format(out_bam))
-    line = (' \\\n'.join(lines))
-    if bg:
-        line += ' &\n\n'
-    else:
-        line += '\n\n'
-    return line
-
-def _samtools_index(
-    in_bam, 
-    index=None, 
-    bg=False,
-    samtools_path='samtools',
-):
-    """
-    Index bam file using samtools.
-
-    Parameters
-    ----------
-    in_bam : str
-        Path to file input bam file.
-
-    index : str
-        Path to index file to be written. If not provided, the index is written
-        to the samtools default {in_bam}.bai in the current working directory.
-
-    Returns
-    -------
-    index : str
-        Path to index file for input bam file.
-
-    """
-    if index: 
-        line = '{} index {} {}'.format(samtools_path, in_bam, index)
-    else:
+        Returns
+        -------
+        output : tuple
+            Tuple of the paths to the following output files:
+                alignment_summary_metrics quality_by_cycle.pdf
+                base_distribution_by_cycle.pdf quality_by_cycle_metrics
+                base_distribution_by_cycle_metrics quality_distribution.pdf
+                insert_size_histogram.pdf quality_distribution_metrics
+                insert_size_metrics.
+    
+        """
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} CollectMultipleMetrics'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'ASSUME_SORTED=TRUE',
+            'I={}'.format(in_bam), 
+            'O={}'.format(job.sample_name)]))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        output = [os.path.join(job.tempdir, '{}.{}'.format(job.sample_name, x))
+                               for x in [
+                                   'alignment_summary_metrics',
+                                   'quality_by_cycle.pdf',
+                                   'base_distribution_by_cycle.pdf',
+                                   'quality_by_cycle_metrics',
+                                   'base_distribution_by_cycle_metrics',
+                                   'quality_distribution.pdf',
+                                   'insert_size_histogram.pdf',
+                                   'quality_distribution_metrics',
+                                   'insert_size_metrics']]
+        return tuple(output)
+    
+    def _picard_index(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Index bam file using Picard Tools.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to file input bam file.
+    
+        index : str
+            Path to index file for input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
+    
+        Returns
+        -------
+        index : str
+            Path to output index file.
+    
+        """
+        index = os.path.join(job.tempdir, os.path.splitext(in_bam)[0] + '.bai')
+        line = (' \\\n\t'.join([
+            'java -Xmx{}g -jar'.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} BuildBamIndex'.format(picard_path),
+            'I={}'.format(in_bam),
+            'O={}'.format(index)]))
+        if bg:
+            line += ' &\n\n'
+        else:
+            line += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return index
+    
+    def _picard_merge(
+        self,
+        bams, 
+        out_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Merge bam files using Picard. Input bam files are assumed to be
+        coordinate sorted.
+    
+        Parameters
+        ----------
+        bams : str
+            Bam files to merge.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output merged bam file.
+    
+        """
+        merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
+        lines = ['java -Xmx{}g -jar'.format(picard_memory),
+                 '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                 '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
+                 '\t-jar {} MergeSamFiles'.format(picard_path),
+                 '\tASSUME_SORTED=TRUE',
+                 '\tUSE_THREADING=TRUE']
+        for bam in bams:
+            lines.append('\tI={}'.format(bam))
+        lines.append('\tO={}'.format(out_bam))
+        lines = (' \\\n'.join(lines))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out_bam
+    
+    def _samtools_index(
+        in_bam, 
+        bg=False,
+        samtools_path='samtools',
+    ):
+        """
+        Index bam file using samtools.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to file input bam file.
+    
+        index : str
+            Path to index file to be written. If not provided, the index is
+            written to the samtools default {in_bam}.bai in the current working
+            directory.
+    
+        Returns
+        -------
+        index : str
+            Path to index file for input bam file.
+    
+        """
+        index = os.path.join(job.tempdir, os.path.splitext(in_bam)[0] + '.bai')
         line = '{} index {}'.format(samtools_path, in_bam)
-    if bg:
-        line += ' &\n'
-    else:
-        line += '\n'
-    return line
+        if bg:
+            line += ' &\n\n'
+        else:
+            line += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return index
+    
+    def _picard_mark_duplicates(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        remove_dups=False,
+    ):
+        """
+        Mark and optionally remove duplicates using Picard Tools.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
 
-def _picard_mark_duplicates(
-    in_bam, 
-    out_bam, 
-    duplicate_metrics, 
-    picard_path='$picard',
-    picard_memory=2, 
-    picard_tempdir='.',
-    remove_dups=False,
-):
-    """
-    Mark and optionally remove duplicates using Picard Tools.
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        duplicate_metrics : str
+            Path to index file for input bam file.
+    
+    
+        """
+        mdup_bam = os.path.join(
+            job.tempdir, '{}_sorted_mdup.bam'.format(job.sample_name))
+        duplicate_metrics = os.path.join(
+            job.outdir, '{}_duplicate_metrics.txt'.format(job.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} MarkDuplicates'.format(picard_path),
+            'METRICS_FILE={}'.format(duplicate_metrics),
+            'VALIDATION_STRINGENCY=SILENT',
+            'ASSUME_SORTED=TRUE',
+            'I={}'.format(in_bam), 
+            'O={}'.format(out_bam)]))
+        if remove_dups:
+            lines += ' \\\n\tREMOVE_DUPLICATES=TRUE\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return mdup_bam, duplicate_metrics
 
-    Parameters
-    ----------
-    in_bam : str
-        Path to input bam file.
+    def _picard_gc_bias_metrics(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Collect GC bias metrics using Picard. The input bam file is assumed to
+        be sorted.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
 
-    out_bam : str
-        Path to output bam file.
+        Returns
+        -------
+        metrics : str
+            Path to output metrics file.
+    
+        chart : str
+            Path to output PDF chart.
+    
+        out : str
+            Path to picard output file.
+    
+        """
+        metrics = os.path.join(job.tempdir,
+                               '{}_gc_bias_metrics.txt'.format(job.sample_name))
+        chart = os.path.join(job.tempdir,
+                             '{}_gc_bias.pdf'.format(job.sample_name))
+        out = os.path.join(job.tempdir,
+                           '{}_gc_bias_metrics_out.txt'.format(job.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} CollectGcBiasMetrics'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam), 
+            'O={}'.format(out),
+            'CHART_OUTPUT={}'.format(chart),
+            'SUMMARY_OUTPUT={}'.format(metrics),
+            'ASSUME_SORTED=TRUE']))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return metrics, chart, out
+    
+    def _picard_bam_index_stats(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False):
+        """
+        Collect bam index stats with Picard.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
 
-    duplicate_metrics : str
-        Path to index file for input bam file.
+        Returns
+        -------
+        out : str
+            Path to write stdout to. This contains the index stats.
+    
+        err : str
+            Path to write stderr to. This contains picard stuff.
+    
+        """
+        out = os.path.join(job.outdir,
+                           '{}_index_stats.txt'.format(job.sample_name))
+        err = os.path.join(job.outdir,
+                           '{}_index_stats.err'.format(job.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} BamIndexStats'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam),
+            '> {}'.format(out),
+            '2> {}'.format(err)]))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out, err
+    
+    def _picard_insert_size_metrics(
+        self,
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Collect insert size metrics using Picard. The input bam file is assumed
+        to be sorted.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
+   
+        Returns
+        -------
+        metrics : str
+            Path to output metrics file.
+    
+        hist : str
+            Path to output histogram PDF.
+    
+        """
+        metrics = os.path.join(
+            job.tempdir, '{}_insert_size_metrics.txt'.format(job.sample_name))
+        hist = os.path.join(job.tempdir,
+                            '{}_insert_size.pdf'.format(job.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} CollectInsertSizeMetrics'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam), 
+            'O={}'.format(metrics),
+            'HISTOGRAM_FILE={}'.format(hist),
+            'ASSUME_SORTED=TRUE']))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return metrics, hist
+    
+    def _picard_query_sort(
+        in_bam, 
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+        bg=False,
+    ):
+        """
+        Query sort using Picard Tools.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        """
+        out_bam = os.path.join(job.tempdir,
+                               '{}_qsorted.bam'.format(job.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} SortSam'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam), 
+            'O={}'.format(out_bam),
+            'SO=queryname']))
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out_bam
+    
+    def _picard_coord_sort(
+        self,
+        in_bam, 
+        index=False,
+        picard_path='$picard',
+        picard_memory=2, 
+        picard_tempdir='.',
+    ):
+        """
+        Coordinate sort using Picard Tools.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        out_index : str
+            Path to output index file. Only returned if index == True.
+    
+        """
+        out_bam = os.path.join(job.tempdir,
+                               '{}_sorted.bam'.format(job.sample_name))
+        if index:
+            out_index = os.path.join(job.tempdir, )
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(picard_memory),
+            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-jar {} SortSam'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam), 
+            'O={}'.format(out_bam),
+            'SO=coordinate']))
+        if index:
+            lines += ' \\\n\tCREATE_INDEX=TRUE' 
+        old_index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
+        lines += 'mv {} {}\n\n'.format(old_index, out_index)
 
-    picard_path : str
-        Path to picard jar file. Default assumes the environmental variable
-        $picard contains the path to the jar file.
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        if index:
+            return out_bam, out_index
+        else: 
+            return out_bam
+    
+    def _cutadapt_trim(
+        self,
+        fastq, 
+        length, 
+        out, 
+        bg=False,
+    ):
+        """
+        Cut a specified number of bases from a fastq file using cutadapt.
+        Cutadapt should be installed in your Python environment.
+    
+        Parameters
+        ----------
+        fastq : str
+            Fastq or gzipped/bzipped fastq.
+    
+        length : int
+            Positive or negative integer. Positive numbers remove bases at the
+            front of the read and negative numbers remove bases at the end of
+            the read.
+    
+        out : str
+            Path to output (optionally gzipped/bzipped) fastq files.
+    
+        bg : boolean
+            Whether to run the process in the background (i.e. include an
+            ampersand at the end of the command).
+    
+        Returns
+        -------
+        out : str
+            Path to output (optionally gzipped/bzipped) fastq files.
+    
+        """
+        line = 'cutadapt --cut {} -o {} {}'.format(length, out, fastq)
+        if bg:
+            line += ' &\n\n'
+        else:
+            line += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out
+    
+    def _bedgraph_to_bigwig(
+        self,
+        bedgraph, 
+        bedgraph_to_bigwig_path='bedGraphToBigWig',
+        bedtools_path='bedtools',
+    ):
+        """
+        Convert bedgraph file to bigwig file.
+    
+        Parameters
+        ----------
+        bedgraph : str
+            Input bedgraph file.
+    
+        bedgraph_to_bigwig_path : str
+            Path bedGraphToBigWig executable from UCSC.
 
-    picard_memory : int
-        Amount of memory in Gb to give picard.
+        bedtools_path : str
+            Path to bedtools. If bedtools_path == 'bedtools', it is assumed that
+            the hg19 human.hg19.genome file from bedtools is also in your path.
 
-    picard_tempdir : str
-        Path to directory to use for Picard temporary files. Default is current
-        directory.
-
-    """
-    lines = (' \\\n'.join(['java -Xmx{}g -jar '.format(picard_memory),
-                           '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
-                           '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
-                           '\t-jar {} MarkDuplicates'.format(picard_path),
-                           '\tMETRICS_FILE={}'.format(duplicate_metrics),
-                           '\tVALIDATION_STRINGENCY=SILENT',
-                           '\tASSUME_SORTED=TRUE',
-                           '\tI={}'.format(in_bam), 
-                           '\tO={}'.format(out_bam)]))
-    if remove_dups:
-        lines += ' \\\n\tREMOVE_DUPLICATES=TRUE\n\n'
-    else:
-        lines += '\n\n'
-    return lines
+        Returns
+        -------
+        bigwig : str
+            Path to output bigwig file.
+    
+        """
+        bigwig = os.path.join(
+            job.tempdir,
+            '{}.bw'.format(os.path.splitext(os.path.split(bedgraph)[1])))
+        # If bedtools is in the path, I'll assume the genome file is as well.
+        if bedtools_path == 'bedtools':
+            bedtools_genome_path = 'human.hg19.genome'
+        else:
+            bedtools_genome_path = os.path.join(
+                os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+                'human.hg19.genome')
+        lines =  ' \\\n\t'.join([
+            '{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
+            '{}'.format(bedtools_genome_path),
+            '{} &\n'.format(bigwig)])
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return bigwig
+    
+    def _flagstat(
+        self,
+        bam, 
+        samtools_path='samtools',
+        bg=False):
+        """
+        Run flagstat for a bam file.
+    
+        Parameters
+        ----------
+        bam : str
+            Bam file to calculate coverage for.
+    
+        samtools_path : str
+            Path to samtools executable.
+    
+        Returns
+        stats_file : str
+            File to write flagstats to.
+    
+        -------
+        """
+        stats_file = os.path.join(
+            job.tempdir, '{}_flagstat.txt'.format(
+                os.path.splitext(os.path.split(bam)[1])[0]))
+        lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return stats_file
+    
+    def _coverage_bedgraph(
+        self,
+        bam, 
+        strand='.',
+        bedtools_path='bedtools',
+    ):
+        """
+        Make lines that create a coverage bedgraph file.
+    
+        Parameters
+        ----------
+        bam : str
+            Bam file to calculate coverage for.
+    
+        bedtools_path : str
+            Path to bedtools.
+    
+        sample_name : str
+            Sample name for naming files etc.
+    
+        strand : str
+            If '+' or '-', calculate strand-specific coverage. Otherwise,
+            calculate coverage using all reads.
+    
+        Returns
+        -------
+        bedgraph : str
+            Path to output bedgraph file.
+    
+        """
+        bedgraph = os.path.join(
+            job.tempdir,
+            '{}.bg'.format(os.path.splitext(os.path.split(bam)[1])[0]))
+        if strand == '+' or strand == '-':
+            if strand == '+':
+                name = '{}_plus'.format(job.sample_name)
+                bedgraph = '{}_plus.bg'.format(os.path.splitext(bedgraph)[0])
+            else:
+                name = '{}_minus'.format(job.sample_name)
+                bedgraph = '{}_minus.bg'.format(os.path.splitext(bedgraph)[0])
+            lines = ' \\\n\t'.join([
+                '{} genomecov -ibam'.format(bedtools_path),
+                '{}'.format(bam),
+                '-g hg19.genome -split -bg ',
+                '-strand {} -trackline'.format(strand),
+                '-trackopts \'name="{}"\''.format(name),
+                '> {} &\n\n'.format(bedgraph)])
+        else:
+            name = job.sample_name
+            lines = ' \\\n\t'.join([
+                '{} genomecov -ibam'.format(bedtools_path),
+                '{}'.format(bam),
+                '-g hg19.genome -split -bg ',
+                '-trackline'.format(strand),
+                '-trackopts \'name="{}"\''.format(name),
+                '> {} &\n\n'.format(bedgraph)])
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return bedgraph
+    
+    def _bigwig_files(
+        self,
+        in_bam, 
+        out_bigwig, 
+        sample_name, 
+        out_bigwig_minus='',
+        bedgraph_to_bigwig_path='bedGraphToBigWig',
+        bedtools_path='bedtools',
+    ):
+        """
+        Make bigwig coverage files.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to bam file to create bigwigs for.
+    
+        out_bigwig : str
+            Path to output bigwig file. If out_bigwig_minus is provided, out_bigwig
+            has the plus strand coverage.
+    
+        out_bigwig_minus : str
+            Path to output bigwig file for minus strand. If out_bigwig_minus is not
+            provided, the coverage is calculated using reads from both strands and
+            written to out_bigwig.
+    
+        Returns
+        -------
+        lines : str
+            Lines to be printed to shell script.
+    
+        """
+        lines = ''
+        if out_bigwig_minus != '':
+            lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name, strand='+')
+            lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name, strand='-')
+            lines += ('wait\n\n')
+            lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
+            lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
+                                          
+            lines += ('\nwait\n\n')
+            lines += ('rm plus.bg minus.bg\n\n')
+        
+        else:
+            lines = _coverage_bedgraph(in_bam, 'both.bg', sample_name)
+            lines += ('wait\n\n')
+            lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
+            lines += ('wait\n\n')
+            lines += ('rm both.bg\n\n')
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return lines
+        
+    def _combine_fastqs(
+        self,
+        fastqs,
+        out_fastq,
+        bg=False,
+    ):
+        """
+        If fastqs is a string with a path to a single fastq file, make a
+        softlink to out_fastq. If fastqs is a list of fastqs, cat the fastqs
+        together into the file out_fastq.
+    
+        Parameters
+        ----------
+        fastqs : list or str
+            Either a list of paths to gzipped fastq files or path to a single
+            gzipped fastq file.
+    
+        out_fastq : str
+            Path to single output fastq file.
+    
+        Returns
+        -------
+        out_fastq : str
+            Path to single output fastq file.
+    
+        """
+        fastqs = sorted(fastqs)
+        if type(fastqs) == list:
+            lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
+                                                       out_fastq)
+        elif type(fastqs) == str:
+            lines = 'ln -s {} {}'.format(fastqs, out_fastq)
+        if bg:
+            lines += ' &\n\n'
+        else:
+            lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out_fastq
+    
+    def _fastqc(
+        self,
+        fastqs, 
+        outdir, 
+        threads=1,
+        fastqc_path='fastqc',
+    ):
+        """
+        Run FastQC
+    
+        Parameters
+        ----------
+        fastqs : str or list
+            Path to fastq file or list of paths to fastq files.
+    
+        outdir : str
+            Path to directory to store FastQC results to.
+    
+        threads : int
+            Number of threads to run FastQC with.
+    
+        fastqc_path : str
+            Path to FastQC.
+    
+        Returns
+        -------
+        lines : str
+            Lines to be printed to shell script.
+    
+        """
+        if type(fastqs) == list:
+            fastqs = ' \\\n\t'.join(fastqs)
+        lines = ('{} --outdir {} --nogroup --extract --threads {} \\\n'
+                 '\t{}\n'.format(fastqc_path, outdir, threads, fastqs))
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return TODO # I should probably figure out what fastQC outputs and
+                    # provide links here
+    
+    def _softlink(self, target, link):
+        """
+        Make softlink from target to link.
+    
+        Parameters
+        ----------
+        target : str
+            Full path to file to make link to.
+    
+        link : str
+            Full path to softlink.
+    
+        Returns
+        -------
+        link : str
+            Full path to softlink.
+    
+        """
+        lines = 'ln -s {} {}\n\n'.format(target, link)
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return link
+    
+    def _make_softlink(self, fn, sample_name, link_dir):
+        """
+        Make softlink for file fn in link_dir. sample_name followed by an
+        underscore will be appended to the front of fn if the sample_name isn't
+        in fn.
+    
+        Parameters
+        ----------
+        fn : str
+            Full path to file to make link to.
+    
+        link_dir : str
+            Path to directory where softlink should be made.
+    
+        Returns
+        -------
+        link : str
+            Path to softlink.
+    
+        """
+        if job.sample_name not in os.path.split(fn)[1]:
+            name = '{}_{}'.format(sample_name, os.path.split(fn)[1])
+            link = os.path.join(link_dir, name)
+        else:
+            name = os.path.split(fn)[1]
+            link = os.path.join(link_dir, name)
+        lines = 'ln -s {} {}\n'.format(fn, link)
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return link
 
 def _wasp_snp_directory(vcf, directory, sample_name, regions,
                         bcftools_path='bcftools'):

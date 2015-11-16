@@ -1,6 +1,5 @@
 import os
 
-from general import _bedgraph_to_bigwig
 from general import _bigwig_files
 from general import _combine_fastqs
 from general import _coverage_bedgraph
@@ -9,13 +8,8 @@ from general import JobScript
 from general import _make_dir
 from general import _make_softlink
 from general import _mbased
-from general import _picard_bam_index_stats
 from general import _picard_coord_sort
-from general import _picard_collect_multiple_metrics
-from general import _picard_collect_rna_seq_metrics
-from general import _picard_gc_bias_metrics
 from general import _picard_index
-from general import _picard_mark_duplicates
 
 def _star_align(
     r1_fastq, 
