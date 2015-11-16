@@ -24,7 +24,7 @@ def _make_dir(d):
 class JobScript:
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
                  shell_fn=None, tempdir=None, queue=None, conda_env=None,
-                 modules=None, copy_input=False):
+                 modules=None, wait_for=None, copy_input=False):
         """
         Create SGE/shell script object.
 
@@ -65,6 +65,10 @@ class JobScript:
             Modules (separated by commas e.g. bedtools,samtools) to load at
             beginning of script.
 
+        wait_for : list
+            A list of jobnames to wait for before starting this job. This is
+            accomplished using -hold_jid.
+
         copy_input : bool
             Whether to copy input files to temp directory. 
 
@@ -94,7 +98,7 @@ class JobScript:
                                 '{}.out'.format(self.jobname))
         self.err = os.path.join(os.path.split(self.outdir)[0], 'logs',
                                 '{}.err'.format(self.jobname))
-
+        self.wait_for = wait_for
         self.copy_input = copy_input
         self.input_files_to_copy = []
         self.output_files_to_copy = []
@@ -103,11 +107,22 @@ class JobScript:
         self._set_filename()
         self._write_header()
 
+    def sge_submit_command(self):
+        """Get command to submit script."""
+        if self.wait_for:
+            return 'qsub -hold_jid {} {}'.format(','.join(self.wait_for),
+                                                 self.filename)
+        else:
+            return 'qsub {}'.format(self.filename)
+
     def _set_filename(self):
         """Make SGE/shell script filename."""
-        _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
-        self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
-                                     '{}.sh'.format(self.jobname))
+        if shell_fn:
+            self.filename = shell_fn
+        else:
+            _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
+            self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
+                                         '{}.sh'.format(self.jobname))
     
     def _write_header(self):
         with open(self.filename, "a") as f:
@@ -1382,7 +1397,6 @@ def wasp_allele_swap(
 
 def wasp_alignment_compare(
     to_remap_bam, 
-    to_remap_num, 
     remapped_bam, 
     vcf,
     fasta, 

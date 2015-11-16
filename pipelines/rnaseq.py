@@ -284,6 +284,7 @@ class RNAJobScript(JobScript):
             f.write(line)
         return counts_file, stats_file
 
+#TODO: I'd like to make the ASE parts optional if a vcf is not provided.
 def pipeline(
     r1_fastqs, 
     r2_fastqs, 
@@ -479,82 +480,80 @@ def pipeline(
 
     mbased_jobname = '{}_{}'.format(sample_name, 'mbased')
     job_holds[mbased_jobname] = [wasp_alignment_compare_jobname]
+
+    submit_commands = []
     
     ##### Job 1: Combine fastqs and align with STAR. #####
     job_suffix = 'alignment'
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(alignment_jobname))):
-        job = RNAJobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'alignment'), threads=8, memory=32,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
+    alignment_jobname = '{}_{}'.format(sample_name, job_suffix)
+    alignment_shell = os.path.join(outdir, 'sh',
+                                   '{}.sh'.format(alignment_jobname))
+    if os.path.exists(alignment_shell):
+        alignment_shell = TODO # temp file to be deleted
+    job = RNAJobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'alignment'), 
+        shell_fn=alignment_shell,
+        threads=8, 
+        memory=32,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+    )
         
-        # Files that will be created.
-        combined_r1 = os.path.join(
-            job.tempdir, '{}_R1.fastq.gz'.format(sample_name))
-        combined_r2 = os.path.join(
-            job.tempdir, '{}_R2.fastq.gz'.format(sample_name))
-        temp_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-        coord_sorted_bam = os.path.join(
-            job.tempdir, '{}_coord_sorted.bam'.format(sample_name))
+    combined_r1 = job._combine_fastqs(r1_fastqs, combined_r1, bg=True)
+    combined_r2 = job._combine_fastqs(r2_fastqs, combined_r2, bg=True)
+    
+    bam, log_out, log_final_out, log_progress_out, sj_out, transcriptome_bam = \
+            job._star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
+                            job.threads, genome_load=star_genome_load)
 
-        # Other STAR Files to copy to output directory.
-        job.output_files_to_copy += [
-            'Log.out', 
-            'Log.final.out', 
-            'Log.progress.out', 
-            'SJ.out.tab', 
-            'Aligned.toTranscriptome.out.bam',
-        ]
-        transcriptome_bam = os.path.join(job.outdir,
-                                         'Aligned.toTranscriptome.out.bam')
-
-        with open(job.filename, "a") as f:
-            # If multiple fastq files, we want to cat them together.
-            lines = _combine_fastqs(r1_fastqs, combined_r1, bg=True)
-            f.write(lines)
-            lines = _combine_fastqs(r2_fastqs, combined_r2, bg=True)
-            f.write(lines)
-            f.write('wait\n\n')
-
-            # Align reads.
-            lines = _star_align(combined_r1, combined_r2, sample_name, rgpl,
-                                rgpu, star_index, 8,
-                                genome_load=star_genome_load)
-            f.write(lines)
-            f.write('wait\n\n')
-        job.write_end()
+    job.write_end()
+    submit_commands.append(job.sge_submit_comand())
 
     ##### Job 2: Run fastQC. ##### 
     job_suffix = 'fastqc'
-    if not os.path.exists(
-        os.path.join(outdir, 'sh', '{}.sh'.format(sort_mdup_index_jobname))):
-        job = JobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'qc'), threads=1, memory=4,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    if os.path.exists(fastqc_shell):
+        fastqc_shell = TODO # temp file to be deleted
+
+    job = JobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'qc'), 
+        shell_fn=fastqc_shell,
+        threads=1, 
+        memory=4,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules, 
+        wait_for=[alignment_jobname])
         
-        with open(job.filename, "a") as f:
-            # Run fastQC.
-            job.temp_files_to_delete.append(combined_r1)
-            job.temp_files_to_delete.append(combined_r2)
-            lines = _fastqc([combined_r1, combined_r2], job.outdir, job.threads,
+    # Run fastQC.
+    job.temp_files_to_delete.append(combined_r1)
+    job.temp_files_to_delete.append(combined_r2)
+    fastqc_dy = job._fastqc([combined_r1, combined_r2], job.outdir, job.threads,
                             fastqc_path)
-            f.write(lines)
-            f.write('wait\n\n')
-            r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-            job.add_softlink(os.path.join(job.outdir, r1), 
-                             os.path.join(link_dir, 'fastqc', r1))
-            r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-            job.add_softlink(os.path.join(job.outdir, r2), 
-                             os.path.join(link_dir, 'fastqc', r2))
-            with open(tracklines_file, "a") as tf:
-                tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                    web_path, r1))
-                tf.write(tf_lines)
-                tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                    web_path, r2))
-                tf.write(tf_lines)
+    # TODO: I need to return something reasonable from _fastqc and then use it
+    # below to make softlinks and trackline stuff. I still need to change the
+    # tracklines behavior to just make files in the sample's output directory.
+    r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
+    job.add_softlink(os.path.join(job.outdir, r1), 
+                     os.path.join(link_dir, 'fastqc', r1))
+    r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
+    job.add_softlink(os.path.join(job.outdir, r2), 
+                     os.path.join(link_dir, 'fastqc', r2))
+    with open(tracklines_file, "a") as tf:
+        tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+            web_path, r1))
+        tf.write(tf_lines)
+        tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+            web_path, r2))
+        tf.write(tf_lines)
         
 
     ##### Job 3: Coordinate sort, mark duplicates and index bam. #####
@@ -566,6 +565,8 @@ def pipeline(
                         tempdir=tempdir, queue=queue, conda_env=conda_env,
                         modules=modules)
         
+    # coord_sorted_bam = os.path.join(
+    #     job.tempdir, '{}_coord_sorted.bam'.format(sample_name))
         with open(job.filename, "a") as f:
             # Coordinate sort.
             job.temp_files_to_delete.append(temp_bam)
@@ -725,7 +726,7 @@ def pipeline(
     job_suffix = 'counts'
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(counts_jobname))):
-        job = JobScript(sample_name, job_suffix, 
+        job = RNAJobScript(sample_name, job_suffix, 
                         os.path.join(outdir, 'counts'), threads=1, memory=4,
                         tempdir=tempdir, queue=queue, conda_env=conda_env,
                         modules=modules)
@@ -753,7 +754,7 @@ def pipeline(
     job_suffix = 'rsem'
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(rsem_jobname))):
-        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
+        job = RNAJobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
                         threads=8, memory=4, tempdir=tempdir, queue=queue,
                         conda_env=conda_env, modules=modules)
         
