@@ -230,7 +230,7 @@ class JobScript:
         self._delete_tempdir()
         self._make_softlinks()
 
-    def _picard_collect_rna_seq_metrics(
+    def picard_collect_rna_seq_metrics(
         self,
         in_bam, 
         ref_flat, 
@@ -307,7 +307,7 @@ class JobScript:
             f.write(lines)
         return metrics, chart
 
-    def _picard_collect_multiple_metrics(
+    def picard_collect_multiple_metrics(
         self,
         in_bam, 
         picard_path='$picard',
@@ -377,7 +377,7 @@ class JobScript:
                                    'insert_size_metrics']]
         return tuple(output)
     
-    def _picard_index(
+    def picard_index(
         self,
         in_bam, 
         picard_path='$picard',
@@ -432,7 +432,7 @@ class JobScript:
             f.write(lines)
         return index
     
-    def _picard_merge(
+    def picard_merge(
         self,
         bams, 
         out_bam, 
@@ -489,7 +489,7 @@ class JobScript:
             f.write(lines)
         return out_bam
     
-    def _samtools_index(
+    def samtools_index(
         in_bam, 
         bg=False,
         samtools_path='samtools',
@@ -523,7 +523,7 @@ class JobScript:
             f.write(lines)
         return index
     
-    def _picard_mark_duplicates(
+    def picard_mark_duplicates(
         self,
         in_bam, 
         picard_path='$picard',
@@ -582,7 +582,7 @@ class JobScript:
             f.write(lines)
         return mdup_bam, duplicate_metrics
 
-    def _picard_gc_bias_metrics(
+    def picard_gc_bias_metrics(
         self,
         in_bam, 
         picard_path='$picard',
@@ -650,7 +650,7 @@ class JobScript:
             f.write(lines)
         return metrics, chart, out
     
-    def _picard_bam_index_stats(
+    def picard_bam_index_stats(
         self,
         in_bam, 
         picard_path='$picard',
@@ -709,7 +709,7 @@ class JobScript:
             f.write(lines)
         return out, err
     
-    def _picard_insert_size_metrics(
+    def picard_insert_size_metrics(
         self,
         in_bam, 
         picard_path='$picard',
@@ -771,7 +771,7 @@ class JobScript:
             f.write(lines)
         return metrics, hist
     
-    def _picard_query_sort(
+    def picard_query_sort(
         in_bam, 
         picard_path='$picard',
         picard_memory=2, 
@@ -825,7 +825,7 @@ class JobScript:
             f.write(lines)
         return out_bam
     
-    def _picard_coord_sort(
+    def picard_coord_sort(
         self,
         in_bam, 
         index=False,
@@ -889,7 +889,7 @@ class JobScript:
         else: 
             return out_bam
     
-    def _cutadapt_trim(
+    def cutadapt_trim(
         self,
         fastq, 
         length, 
@@ -932,7 +932,7 @@ class JobScript:
             f.write(lines)
         return out
     
-    def _bedgraph_to_bigwig(
+    def bedgraph_to_bigwig(
         self,
         bedgraph, 
         bedgraph_to_bigwig_path='bedGraphToBigWig',
@@ -977,7 +977,7 @@ class JobScript:
             f.write(lines)
         return bigwig
     
-    def _flagstat(
+    def flagstat(
         self,
         bam, 
         samtools_path='samtools',
@@ -1011,7 +1011,7 @@ class JobScript:
             f.write(lines)
         return stats_file
     
-    def _coverage_bedgraph(
+    def coverage_bedgraph(
         self,
         bam, 
         strand='.',
@@ -1042,14 +1042,14 @@ class JobScript:
     
         """
         bedgraph = os.path.join(
-            job.tempdir,
+            self.tempdir,
             '{}.bg'.format(os.path.splitext(os.path.split(bam)[1])[0]))
         if strand == '+' or strand == '-':
             if strand == '+':
-                name = '{}_plus'.format(job.sample_name)
+                name = '{}_plus'.format(self.sample_name)
                 bedgraph = '{}_plus.bg'.format(os.path.splitext(bedgraph)[0])
             else:
-                name = '{}_minus'.format(job.sample_name)
+                name = '{}_minus'.format(self.sample_name)
                 bedgraph = '{}_minus.bg'.format(os.path.splitext(bedgraph)[0])
             lines = ' \\\n\t'.join([
                 '{} genomecov -ibam'.format(bedtools_path),
@@ -1071,7 +1071,7 @@ class JobScript:
             f.write(lines)
         return bedgraph
     
-    def _bigwig_files(
+    def bigwig_files(
         self,
         in_bam, 
         out_bigwig, 
@@ -1089,13 +1089,13 @@ class JobScript:
             Path to bam file to create bigwigs for.
     
         out_bigwig : str
-            Path to output bigwig file. If out_bigwig_minus is provided, out_bigwig
-            has the plus strand coverage.
+            Path to output bigwig file. If out_bigwig_minus is provided,
+            out_bigwig has the plus strand coverage.
     
         out_bigwig_minus : str
-            Path to output bigwig file for minus strand. If out_bigwig_minus is not
-            provided, the coverage is calculated using reads from both strands and
-            written to out_bigwig.
+            Path to output bigwig file for minus strand. If out_bigwig_minus is
+            not provided, the coverage is calculated using reads from both
+            strands and written to out_bigwig.
     
         Returns
         -------
@@ -1105,8 +1105,10 @@ class JobScript:
         """
         lines = ''
         if out_bigwig_minus != '':
-            lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name, strand='+')
-            lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name, strand='-')
+            lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name,
+                                        strand='+')
+            lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name,
+                                        strand='-')
             lines += ('wait\n\n')
             lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
             lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
@@ -1122,9 +1124,10 @@ class JobScript:
             lines += ('rm both.bg\n\n')
         with open(job.filename, "a") as f:
             f.write(lines)
-        return lines
+            if out_bigwig_minus:
+                return  
         
-    def _combine_fastqs(
+    def combine_fastqs(
         self,
         fastqs,
         out_fastq,
@@ -1164,7 +1167,7 @@ class JobScript:
             f.write(lines)
         return out_fastq
     
-    def _fastqc(
+    def fastqc(
         self,
         fastqs, 
         outdir, 
@@ -1190,8 +1193,6 @@ class JobScript:
     
         Returns
         -------
-        lines : str
-            Lines to be printed to shell script.
     
         """
         if type(fastqs) == list:
@@ -1200,10 +1201,10 @@ class JobScript:
                  '\t{}\n'.format(fastqc_path, outdir, threads, fastqs))
         with open(job.filename, "a") as f:
             f.write(lines)
-        return TODO # I should probably figure out what fastQC outputs and
+        return None # I should probably figure out what fastQC outputs and
                     # provide links here
     
-    def _softlink(self, target, link):
+    def softlink(self, target, link):
         """
         Make softlink from target to link.
     
@@ -1226,7 +1227,7 @@ class JobScript:
             f.write(lines)
         return link
     
-    def _make_softlink(self, fn, sample_name, link_dir):
+    def make_softlink(self, fn, sample_name, link_dir):
         """
         Make softlink for file fn in link_dir. sample_name followed by an
         underscore will be appended to the front of fn if the sample_name isn't

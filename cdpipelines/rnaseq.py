@@ -3,7 +3,7 @@ import os
 from general import JobScript
 
 class RNAJobScript(JobScript):
-    def _star_align(
+    def star_align(
         self,
         r1_fastq, 
         r2_fastq, 
@@ -104,7 +104,7 @@ class RNAJobScript(JobScript):
         else:
             return bam, log_out, log_final_out, log_progress_out, sj_out
 
-    def _rsem_calculate_expression(
+    def rsem_calculate_expression(
         self,
         bam, 
         reference, 
@@ -432,64 +432,21 @@ def pipeline(
         Path to shell script.
 
     """
+    import tempfile
+
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
     tracklines_file = os.path.join(outdir, 'tracklines.txt')
-    
-    # I'm going to start by naming all of the jobs and their dependencies. Note
-    # that if the way that JobScript names jobs changes, this will have to
-    # change to reflect that. I'll make an ordered dict whose keys are job
-    # scripts and whose values are lists of job names that the script must wait
-    # on (i.e. using -hold_jid).
-    from collections import OrderedDict
-    job_holds = OrderedDict()
-
-    alignment_jobname = '{}_{}'.format(sample_name, 'alignment')
-    job_holds[alignment_jobname] = None
-
-    fastqc_jobname = '{}_{}'.format(sample_name, 'fastqc')
-    job_holds[fastqc_jobname] = [alignment_jobname]
-
-    sort_mdup_index_jobname = '{}_{}'.format(sample_name, 'sort_mdup_index')
-    job_holds[sort_mdup_index_jobname] = [alignment_jobname]
-
-    picard_metrics_jobname = '{}_{}'.format(sample_name, 'picard_metrics')
-    job_holds[picard_metrics_jobname] = [sort_mdup_index_jobname]
-
-    md5_jobname = '{}_{}'.format(sample_name, 'md5')
-    job_holds[md5_jobname] = [sort_mdup_index_jobname]
-
-    bigwig_jobname = '{}_{}'.format(sample_name, 'bigwig')
-    job_holds[bigwig_jobname] = [sort_mdup_index_jobname]
-
-    counts_jobname = '{}_{}'.format(sample_name, 'counts')
-    job_holds[counts_jobname] = [sort_mdup_index_jobname]
-
-    rsem_jobname = '{}_{}'.format(sample_name, 'rsem')
-    job_holds[rsem_jobname] = [sort_mdup_index_jobname]
-
-    wasp_allele_swap_jobname = '{}_{}'.format(sample_name, 'wasp_allele_swap')
-    job_holds[wasp_allele_swap_jobname] = [sort_mdup_index_jobname]
-
-    wasp_remap_jobname = '{}_{}'.format(sample_name, 'wasp_remap')
-    job_holds[wasp_remap_jobname] = [wasp_allele_swap_jobname]
-
-    wasp_alignment_compare_jobname = '{}_{}'.format(sample_name,
-                                                    'wasp_alignment_compare')
-    job_holds[wasp_alignment_compare_jobname] = [wasp_remap_jobname]
-
-    mbased_jobname = '{}_{}'.format(sample_name, 'mbased')
-    job_holds[mbased_jobname] = [wasp_alignment_compare_jobname]
-
-    submit_commands = []
     
     ##### Job 1: Combine fastqs and align with STAR. #####
     job_suffix = 'alignment'
     alignment_jobname = '{}_{}'.format(sample_name, job_suffix)
     alignment_shell = os.path.join(outdir, 'sh',
                                    '{}.sh'.format(alignment_jobname))
-    if os.path.exists(alignment_shell):
-        alignment_shell = TODO # temp file to be deleted
+    exists = os.path.exists(alignment_shell)
+    if exists:
+        alignment_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     job = RNAJobScript(
         sample_name, 
         job_suffix, 
@@ -503,22 +460,26 @@ def pipeline(
         modules=modules,
     )
         
-    combined_r1 = job._combine_fastqs(r1_fastqs, combined_r1, bg=True)
-    combined_r2 = job._combine_fastqs(r2_fastqs, combined_r2, bg=True)
+    combined_r1 = job.combine_fastqs(r1_fastqs, combined_r1, bg=True)
+    combined_r2 = job.combine_fastqs(r2_fastqs, combined_r2, bg=True)
     
     bam, log_out, log_final_out, log_progress_out, sj_out, transcriptome_bam = \
-            job._star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
+            job.star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
                             job.threads, genome_load=star_genome_load)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    if exists:
+        os.remove(alignment_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 2: Run fastQC. ##### 
     job_suffix = 'fastqc'
     fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
     fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    if os.path.exists(fastqc_shell):
-        fastqc_shell = TODO # temp file to be deleted
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
 
     job = JobScript(
         sample_name, 
@@ -536,194 +497,254 @@ def pipeline(
     # Run fastQC.
     job.temp_files_to_delete.append(combined_r1)
     job.temp_files_to_delete.append(combined_r2)
-    fastqc_dy = job._fastqc([combined_r1, combined_r2], job.outdir, job.threads,
+    fastqc_dy = job.fastqc([combined_r1, combined_r2], job.outdir, job.threads,
                             fastqc_path)
     # TODO: I need to return something reasonable from _fastqc and then use it
     # below to make softlinks and trackline stuff. I still need to change the
     # tracklines behavior to just make files in the sample's output directory.
-    r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-    job.add_softlink(os.path.join(job.outdir, r1), 
-                     os.path.join(link_dir, 'fastqc', r1))
-    r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-    job.add_softlink(os.path.join(job.outdir, r2), 
-                     os.path.join(link_dir, 'fastqc', r2))
-    with open(tracklines_file, "a") as tf:
-        tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-            web_path, r1))
-        tf.write(tf_lines)
-        tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-            web_path, r2))
-        tf.write(tf_lines)
+    ## r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
+    ## job.add_softlink(os.path.join(job.outdir, r1), 
+    ##                  os.path.join(link_dir, 'fastqc', r1))
+    ## r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
+    ## job.add_softlink(os.path.join(job.outdir, r2), 
+    ##                  os.path.join(link_dir, 'fastqc', r2))
+    ## with open(tracklines_file, "a") as tf:
+    ##     tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+    ##         web_path, r1))
+    ##     tf.write(tf_lines)
+    ##     tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
+    ##         web_path, r2))
+    ##     tf.write(tf_lines)
         
+    job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 3: Coordinate sort, mark duplicates and index bam. #####
     job_suffix = 'sort_mdup_index'
-    if not os.path.exists(
-        os.path.join(outdir, 'sh', '{}.sh'.format(sort_mdup_index_jobname))):
-        job = JobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
-        
-    # coord_sorted_bam = os.path.join(
-    #     job.tempdir, '{}_coord_sorted.bam'.format(sample_name))
-        with open(job.filename, "a") as f:
-            # Coordinate sort.
-            job.temp_files_to_delete.append(temp_bam)
-            lines = _picard_coord_sort(temp_bam, coord_sorted_bam,
-                                       picard_path=picard_path,
-                                       picard_memory=job.memory,
-                                       picard_tempdir=job.tempdir)
-            f.write(lines)
-            f.write('wait\n\n')
+    sort_mdup_index_jobname = '{}_{}'.format(sample_name, job_suffix)
+    sort_mdup_index_shell = os.path.join(outdir, 'sh', '{}.sh'.format(
+        sort_mdup_index_jobname))
+    exists = os.path.exists(sort_mdup_index_shell)
+    if exists:
+        sort_mdup_index_shell = tempfile.NamedTemporaryFile(delete=False).name
 
-            # Mark duplicates.
-            mdup_bam = os.path.join(
-                job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
-            job.output_files_to_copy.append(mdup_bam)
-            job.temp_files_to_delete.append(coord_sorted_bam)
-            duplicate_metrics = os.path.join(
-                job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
-            lines = _picard_mark_duplicates(coord_sorted_bam, mdup_bam,
-                                            duplicate_metrics,
-                                            picard_path=picard_path,
-                                            picard_memory=job.memory,
-                                            picard_tempdir=job.tempdir)
-            f.write(lines)
-            f.write('wait\n\n')
-            name = os.path.split(mdup_bam)[1]
-            job.add_softlink(os.path.join(job.outdir, name), 
-                             os.path.join(link_dir, 'bam', name))
-            with open(tracklines_file, "a") as tf:
-                tf_lines = ('track type=bam name="{}_rna_bam" '
-                            'description="RNAseq for {}" '
-                            'bigDataUrl={}/bam/{}\n'.format(
-                                sample_name, sample_name, web_path, name))
-                tf.write(tf_lines)
+    job = JobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'alignment'), 
+        threads=1, 
+        memory=4,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+        wait_for=[alignment_jobname])
 
-            # Index bam file.
-            bam_index = '{}.bai'.format(mdup_bam)
-            job.output_files_to_copy.append(bam_index)
-            lines = _picard_index(mdup_bam, bam_index, picard_path=picard_path,
-                                  picard_memory=job.memory,
-                                  picard_tempdir=job.tempdir, bg=False)
-            f.write(lines)
-            f.write('wait\n\n')
-            name = os.path.split(bam_index)[1]
-            job.add_softlink(os.path.join(job.outdir, name), 
-                             os.path.join(link_dir, 'bam', name))
-        job.write_end()
+    # Coordinate sort.
+    job.temp_files_to_delete.append(temp_bam)
+    coord_sorted_bam = job.picard_coord_sort(
+        temp_bam, 
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir)
+    job.temp_files_to_delete.append(coord_sorted_bam)
+
+    # Mark duplicates.
+    mdup_bam = os.path.join(
+        job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
+    duplicate_metrics = os.path.join(
+        job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
+    mdup_bam, duplicates_metrics = job.picard_mark_duplicates(
+        coord_sorted_bam, 
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir)
+    job.output_files_to_copy.append(mdup_bam)
+    job.output_files_to_copy.append(duplicate_metrics)
+    ## name = os.path.split(mdup_bam)[1]
+    ## job.add_softlink(os.path.join(job.outdir, name), 
+    ##                  os.path.join(link_dir, 'bam', name))
+    ## with open(tracklines_file, "a") as tf:
+    ##     tf_lines = ('track type=bam name="{}_rna_bam" '
+    ##                 'description="RNAseq for {}" '
+    ##                 'bigDataUrl={}/bam/{}\n'.format(
+    ##                     sample_name, sample_name, web_path, name))
+    ##     tf.write(tf_lines)
+
+    # Index bam file.
+    bam_index = '{}.bai'.format(mdup_bam)
+    job.output_files_to_copy.append(bam_index)
+    bam_index = job.picard_index(
+        mdup_bam, 
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir, 
+        bg=False)
+    job.output_files_to_copy.append(bam_index)
+    ## name = os.path.split(bam_index)[1]
+    ## job.add_softlink(os.path.join(job.outdir, name), 
+    ##                  os.path.join(link_dir, 'bam', name))
+
+    job.write_end()
+    if exists:
+        os.remove(sort_mdup_index_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 4: Collect Picard metrics. #####
     job_suffix = 'picard_metrics'
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(picard_metrics_jobname))):
-        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'qc'),
-                        threads=1, memory=4, tempdir=tempdir, queue=queue,
-                        conda_env=conda_env, modules=modules)
-        
-        with open(job.filename, "a") as f:
-            # Collect insert size metrics, bam index stats, RNA seq QC.
-            lines = _picard_collect_multiple_metrics(mdup_bam, sample_name,
-                                                     picard_path=picard_path, 
-                                                     picard_memory=job.memory,
-                                                     picard_tempdir=job.tempdir,
-                                                     bg=False)
-            f.write(lines)
-            for fn in ['{}.{}'.format(sample_name, x) for x in 
-                'alignment_summary_metrics', 
-                'quality_by_cycle.pdf', 
-                'base_distribution_by_cycle.pdf', 
-                'quality_by_cycle_metrics', 
-                'base_distribution_by_cycle_metrics', 
-                'quality_distribution.pdf', 
-                'insert_size_histogram.pdf', 
-                'quality_distribution_metrics', 
-                'insert_size_metrics'
-                      ]:
-                job.output_files_to_copy.append(fn)
+    picard_metrics_jobname = '{}_{}'.format(sample_name, job_suffix)
+    picard_metrics_shell = os.path.join(outdir, 'sh', '{}.sh'.format(
+        picard_metrics_jobname))
+    exists = os.path.exists(picard_metrics_shell)
+    if exists:
+        picard_metrics_shell = tempfile.NamedTemporaryFile(delete=False).name
 
-            metrics = os.path.join(job.outdir,
-                                   '{}_rna_seq_metrics.txt'.format(sample_name))
-            chart = os.path.join(job.outdir,
-                                 '{}_5_3_coverage.pdf'.format(sample_name))
-            lines = _picard_collect_rna_seq_metrics(
-                mdup_bam, 
-                metrics, 
-                chart, 
-                sample_name,
-                ref_flat, 
-                rrna_intervals,
-                picard_path=picard_path,
-                picard_memory=job.memory,
-                picard_tempdir=job.tempdir,
-                strand_specific=strand_specific, 
-                bg=False)
-            f.write(lines)
+    job = JobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'qc'),
+        threads=1, 
+        memory=4, 
+        tempdir=tempdir, 
+        queue=queue,
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname])
+    
+    # Collect insert size metrics, bam index stats, RNA seq QC.
+    metrics_files = job.picard_collect_multiple_metrics(
+        mdup_bam, 
+        picard_path=picard_path, 
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir,
+        bg=False)
+    for fn in metrics_files:
+        job.output_files_to_copy.append(fn)
 
-            index_out = os.path.join(job.outdir,
-                                     '{}_index_stats.txt'.format(sample_name))
-            index_err = os.path.join(job.outdir,
-                                     '{}_index_stats.err'.format(sample_name))
-            lines = _picard_bam_index_stats(mdup_bam, index_out, index_err,
-                                            picard_path=picard_path,
-                                            picard_memory=job.memory,
-                                            picard_tempdir=job.tempdir,
-                                            bg=False)
-            f.write(lines)
-            f.write('wait\n\n')
-        job.write_end()
+    metrics = os.path.join(job.outdir,
+                           '{}_rna_seq_metrics.txt'.format(sample_name))
+    chart = os.path.join(job.outdir,
+                         '{}_5_3_coverage.pdf'.format(sample_name))
+    metrics, chart = job.picard_collect_rna_seq_metrics(
+        mdup_bam, 
+        ref_flat, 
+        rrna_intervals,
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir,
+        strand_specific=strand_specific, 
+        bg=False)
+    job.output_files_to_copy += [metrics, chart]
+
+    index_out, index_err = job.picard_bam_index_stats(
+        mdup_bam, 
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir,
+        bg=False)
+    job.output_files_to_copy += [index_out, index_err]
+
+    job.write_end()
+    if exists:
+        os.remove(picard_metrics_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 5: Make md5 has for final bam file. #####
+    md5_jobname = '{}_{}'.format(sample_name, 'md5')
+    job_holds[md5_jobname] = [sort_mdup_index_jobname]
+
     job_suffix = 'md5'
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(md5_jobname))):
-        job = JobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
+    md5_jobname = '{}_{}'.format(sample_name, job_suffix)
+    md5_shell = os.path.join(outdir, 'sh', '{}.sh'.format(md5_jobname))
+    exists = os.path.exists(md5_shell)
+    if exists:
+        md5_shell = tempfile.NamedTemporaryFile(delete=False).name
+
+    job = JobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'alignment'), 
+        threads=1, 
+        memory=4,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname])
         
-        with open(job.filename, "a") as f:
-            # Make md5 hash for output bam file.
-            f.write('md5sum {} > {}\n'.format(
-                mdup_bam, os.path.join(job.outdir, '{}.md5'.format(
-                    os.path.split(mdup_bam)[1]))))
+    # Make md5 hash for output bam file.
+    with open(job.filename, "a") as f:
+        f.write('md5sum {} > {}\n'.format(
+            mdup_bam, os.path.join(job.outdir, '{}.md5'.format(
+                os.path.split(mdup_bam)[1]))))
         job.write_end()
+    if exists:
+        os.remove(md5_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
        
     ##### Job 6: Make bigwig for final bam file. #####
     job_suffix = 'bigwig'
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(bigwig_jobname))):
-        job = JobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'alignment'), threads=1, memory=4,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
-        
-        with open(job.filename, "a") as f:
-            # Make bigwig file for displaying coverage.
-            out_bigwig = os.path.join(job.tempdir, '{}_rnaseq.bw'.format(sample_name))
-            job.output_files_to_copy.append(out_bigwig)
-        
-            lines = _bigwig_files(
-                mdup_bam, out_bigwig, sample_name, 
-                bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
-                bedtools_path=bedtools_path)
-            f.write(lines)
-            f.write('wait\n\n')
-            name = os.path.split(out_bigwig)[1]
-            job.add_softlink(os.path.join(job.outdir, name), 
-                             os.path.join(link_dir, 'bw', name))
+    bigwig_jobname = '{}_{}'.format(sample_name, job_suffix)
+    bigwig_shell = os.path.join(outdir, 'sh', '{}.sh'.format(bigwig_jobname))
+    exists = os.path.exists(bigwig_shell)
+    if exists:
+        bigwig_shell = tempfile.NamedTemporaryFile(delete=False).name
 
-            with open(tracklines_file, "a") as tf:
-                tf_lines = ('track type=bigWig name="{}_rna_cov" '
-                            'description="RNAseq coverage for {}" '
-                            'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
-                                sample_name, sample_name, web_path, name))
-                tf.write(tf_lines)
-        job.write_end()
+    job = JobScript(
+        sample_name, 
+        job_suffix, 
+        os.path.join(outdir, 'alignment'), 
+        threads=1, 
+        memory=4,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname])
+        
+    # Make bigwig file for displaying coverage.
+    out_bigwig = os.path.join(job.tempdir, '{}_rnaseq.bw'.format(sample_name))
+    # TODO: working here 
+    out_bigwig = job.bigwig_files(
+        mdup_bam, out_bigwig, sample_name, 
+        bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
+        bedtools_path=bedtools_path)
+    job.output_files_to_copy.append(out_bigwig)
+    # name = os.path.split(out_bigwig)[1]
+    # job.add_softlink(os.path.join(job.outdir, name), 
+    #                  os.path.join(link_dir, 'bw', name))
+
+    # with open(tracklines_file, "a") as tf:
+    #     tf_lines = ('track type=bigWig name="{}_rna_cov" '
+    #                 'description="RNAseq coverage for {}" '
+    #                 'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
+    #                     sample_name, sample_name, web_path, name))
+    #     tf.write(tf_lines)
+
+    job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 7: Get HTSeq and DEXSeq counts. #####
+    counts_jobname = '{}_{}'.format(sample_name, 'counts')
+    job_holds[counts_jobname] = [sort_mdup_index_jobname]
+
     job_suffix = 'counts'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(counts_jobname))):
         job = RNAJobScript(sample_name, job_suffix, 
@@ -749,9 +770,23 @@ def pipeline(
                                   samtools_path=samtools_path)
             f.write(lines)
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 8: Run RSEM. #####
+    rsem_jobname = '{}_{}'.format(sample_name, 'rsem')
+    job_holds[rsem_jobname] = [sort_mdup_index_jobname]
+
     job_suffix = 'rsem'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(rsem_jobname))):
         job = RNAJobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
@@ -771,9 +806,23 @@ def pipeline(
             )
             f.write(lines)
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 9: WASP first step. #####
+    wasp_allele_swap_jobname = '{}_{}'.format(sample_name, 'wasp_allele_swap')
+    job_holds[wasp_allele_swap_jobname] = [sort_mdup_index_jobname]
+
     job_suffix = 'wasp_allele_swap'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     if not os.path.exists(
         os.path.join(outdir, 'sh', '{}.sh'.format(wasp_allele_swap_jobname))):
         job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
@@ -826,9 +875,23 @@ def pipeline(
                 f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
                     find_intersecting_snps_path, temp_uniq_bam, snp_directory))
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 10: WASP second step. #####
+    wasp_remap_jobname = '{}_{}'.format(sample_name, 'wasp_remap')
+    job_holds[wasp_remap_jobname] = [wasp_allele_swap_jobname]
+
     job_suffix = 'wasp_remap'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(wasp_remap_jobname))):
         job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
@@ -857,9 +920,24 @@ def pipeline(
             f.write(lines)
             f.write('wait\n\n')
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 11: WASP third step. #####
+    wasp_alignment_compare_jobname = '{}_{}'.format(sample_name,
+                                                    'wasp_alignment_compare')
+    job_holds[wasp_alignment_compare_jobname] = [wasp_remap_jobname]
+
     job_suffix = 'wasp_alignment_compare'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     fn = os.path.join(outdir, 'sh',
                       '{}.sh'.format(wasp_alignment_compare_jobname))
     if not os.path.exists(fn):
@@ -908,9 +986,23 @@ def pipeline(
                 f.write('\t-U ALLOW_N_CIGAR_READS \n')
                 f.write('\nwait\n\n')
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 12: Run MBASED for ASE. #####
+    mbased_jobname = '{}_{}'.format(sample_name, 'mbased')
+    job_holds[mbased_jobname] = [wasp_alignment_compare_jobname]
+
     job_suffix = 'mbased'
+    job_suffix = 'fastqc'
+    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
+    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
+    exists = os.path.exists(fastqc_shell)
+    if exists:
+        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
+
     fn = os.path.join(outdir, 'sh', '{}.sh'.format(mbased_jobname))
     if not os.path.exists(fn):
         job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'mbased'),
@@ -932,6 +1024,10 @@ def pipeline(
             f.write(lines)
             f.write('wait\n\n')
         job.write_end()
+    if exists:
+        os.remove(fastqc_shell)
+    else:
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the
