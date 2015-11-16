@@ -1,75 +1,288 @@
 import os
 
-from general import _bigwig_files
-from general import _combine_fastqs
-from general import _coverage_bedgraph
-from general import _fastqc
 from general import JobScript
-from general import _make_dir
-from general import _make_softlink
-from general import _mbased
-from general import _picard_coord_sort
-from general import _picard_index
 
-def _star_align(
-    r1_fastq, 
-    r2_fastq, 
-    sample, 
-    rgpl, 
-    rgpu, 
-    star_index, 
-    threads,
-    genome_load='LoadAndRemove',
-    transcriptome_align=True,
-    star_path='STAR',
-):
-    """
-    Align paired fastq files with STAR.
+class RNAJobScript(JobScript):
+    def _star_align(
+        self,
+        r1_fastq, 
+        r2_fastq, 
+        rgpl, 
+        rgpu, 
+        star_index, 
+        threads,
+        genome_load='LoadAndRemove',
+        transcriptome_align=True,
+        star_path='STAR',
+    ):
+        """
+        Align paired fastq files with STAR.
+    
+        Parameters
+        ----------
+        r1_fastq : str 
+            Path to R1 fastq file.
+    
+        r2_fastq : str 
+            Path to R2 fastq file.
+    
+        rgpl : str
+            Read Group platform (e.g. illumina, solid). 
+    
+        rgpu : str
+            Read Group platform unit (eg. run barcode). 
 
-    Parameters
-    ----------
-    r1_fastq : str 
-        Path to R1 fastq file.
+        Returns
+        -------
+        bam : str
+            Path to output alignment bam file.
+        
+        log_out : str
+            Path to log file.
 
-    r2_fastq : str 
-        Path to R2 fastq file.
+        log_final_out : str
+            Path to final log file.
+        
+        log_progress_out : str
+        Path to progress log file.
+        
+        sj_out : str
+            Path to output SJ.out.tab file.
 
-    sample : str
-        Sample name.
+        transcriptome_bam : str
+            Path to output transcriptome alignment bam file. This is returned
+            only if transcriptome_align == True.
+    
+        """
+        # I use threads - 2 for STAR so there are open processors for reading
+        # and writing. 
+        lines = (' \\\n\t'.join([
+            star_path, 
+            '--runThreadN {}'.format(threads - 2),
+            '--genomeDir {}'.format(star_index), 
+            '--genomeLoad {}'.format(genome_load),
+            '--readFilesCommand zcat',
+            '--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
+            '--outSAMattributes All', 
+            '--outSAMunmapped Within',
+            '--outSAMattrRGline ID:1 PL:{} PU:{} LB:{} SM:{}'.format(
+                rgpl, rgpu, self.sample_name, self.sample_name),
+            '--outFilterMultimapNmax 20', 
+            '--outFilterMismatchNmax 999',
+            '--alignIntronMin 20',
+            '--alignIntronMax 1000000',
+            '--alignMatesGapMax 1000000',
+            '--outSAMtype BAM Unsorted']))
+        if transcriptome_align:
+            lines +=  ' \\\n\t--quantMode TranscriptomeSAM'
+        lines += '\n\n'
+        lines += 'if [ -d _STARtmp ] ; then rm -r _STARtmp ; fi\n\n'
+        bam = os.path.join(
+            self.tempdir, '{}.bam'.format(sample_name))
+        log_out = os.path.join(
+            self.tempdir, '{}_Log.out'.format(self.sample_name))
+        log_final_out = os.path.join(
+            self.tempdir, '{}_Log.final.out'.format(self.sample_name))
+        log_progress_out = os.path.join(
+            self.tempdir, '{}_Log.progress.out'.format(self.sample_name))
+        sj_out = os.path.join(
+            self.tempdir, '{}_SJ.out.tab'.format(self.sample_name))
+        transcriptome_bam = os.path.join(
+            self.tempdir, '{}_transcriptome.bam'.format(self.sample_name))
+        lines += 'mv Aligned.out.bam {}\n'.format(bam)
+        lines += 'mv Log.out {}\n'.format(log_out)
+        lines += 'mv Log.final.out {}\n'.format(log_final_out)
+        lines += 'mv Log.progress.out {}\n'.format(log_progress_out)
+        lines += 'mv SJ.out.tab {}\n'.format(sj_out)
+        lines += 'mv Aligned.toTranscriptome.out.bam {\n\n}'.format(
+            transcriptome_bam)
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        if transcriptome_align:
+            return (bam, log_out, log_final_out, log_progress_out, sj_out,
+                    transcriptome_bam)
+        else:
+            return bam, log_out, log_final_out, log_progress_out, sj_out
 
-    rgpl : str
-        Read Group platform (e.g. illumina, solid). 
+    def _rsem_calculate_expression(
+        self,
+        bam, 
+        reference, 
+        threads=1, 
+        ci_mem=1024, 
+        strand_specific=True,
+        rsem_calculate_expression_path='rsem-calculate-expression',
+    ):
+        """
+        Estimate expression using RSEM.
+    
+        Parameters
+        ----------
+        bam : str
+            Transcriptome bam file.
+    
+        reference : str
+            RSEM reference.
+    
+        ci_mem : int
+            Amount of memory in mb to give RSEM for calculating confidence
+            intervals. Passed to --ci-memory for RSEM.
+    
+        strand_specific : boolean
+            True if the data is strand-specific. False otherwise. For now, this
+            means that the R1 read is on the reverse strand.
+    
+        Returns
+        -------
+        genes : str
+            Path to genes output file.
 
-    rgpu : str
-        Read Group platform unit (eg. run barcode). 
+        isoforms : str
+            Path to isoforms output file.
 
-    """
-    # I use threads - 2 for STAR so there are open processors for reading and
-    # writing. 
-    line = (' \\\n'.join([star_path, 
-                          '\t--runThreadN {}'.format(threads - 2),
-                          '\t--genomeDir {}'.format(star_index), 
-                          '\t--genomeLoad {}'.format(genome_load),
-                          '\t--readFilesCommand zcat',
-                          '\t--readFilesIn {} {}'.format(r1_fastq, r2_fastq),
-                          '\t--outSAMattributes All', 
-                          '\t--outSAMunmapped Within',
-                          ('\t--outSAMattrRGline ID:1 ' + 
-                           'PL:{} '.format(rgpl) + 
-                           'PU:{} '.format(rgpu) + 
-                           'LB:{0} SM:{0}'.format(sample)), 
-                          '\t--outFilterMultimapNmax 20', 
-                          '\t--outFilterMismatchNmax 999',
-                          '\t--alignIntronMin 20',
-                          '\t--alignIntronMax 1000000',
-                          '\t--alignMatesGapMax 1000000',
-                          '\t--outSAMtype BAM Unsorted'
-                         ]))
-    if transcriptome_align:
-        line +=  ' \\\n\t--quantMode TranscriptomeSAM'
-    line += '\n\n'
-    line += 'if [ -d _STARtmp ] ; then rm -r _STARtmp ; fi\n\n'
-    return line
+        stats : str
+            Path to output stats files.
+
+        """
+        genes = os.path.join(self.tempdir,
+                             '{}.genes.results'.format(self.sample_name))
+        isoforms = os.path.join(self.tempdir,
+                                '{}.isoforms.results'.format(self.sample_name))
+        stats = os.path.join(self.tempdir, '{}.stat'.format(self.sample_name))
+        line = ('{} --bam --paired-end --num-threads {} '
+                '--no-bam-output --seed 3272015 --calc-ci '
+                '--ci-memory {} --estimate-rspd \\\n\t{} \\\n\t{} {}'.format(
+                    rsem_calculate_expression_path, threads, ci_mem, bam,
+                    reference, self.sample_name))
+        if strand_specific:
+            line += '\\\n\t--forward-prob 0'
+        line += '\n'
+        with open(job.filename, "a") as f:
+            f.write(line)
+        return genes, isoforms, stats
+
+    def _dexseq_count(
+        self,
+        bam, 
+        dexseq_annotation, 
+        paired=True,
+        strand_specific=True, 
+        dexseq_count_path=None,
+        samtools_path='samtools'):
+        """
+        Count reads overlapping exonic bins for DEXSeq.
+    
+        Parameters
+        ----------
+        bam : str
+            Path to coordinate sorted bam file to count reads for.
+    
+        dexseq_annotation : str
+            Path to DEXSeq exonic bins GFF file.
+    
+        paired : boolean
+            True if the data is paired-end. False otherwise.
+    
+        strand_specific : boolean
+            True if the data is strand-specific. False otherwise.
+
+        dexseq_count_path : str
+            Path to dexseq_count.py script. If not provided, rpy2 will look for
+            the path in R.
+    
+        Returns
+        -------
+        counts_file : str
+            Path to file with bin counts.
+    
+        """
+        counts_file = os.path.join(
+            self.tempdir, '{}_dexseq_counts.tsv'.format(self.sample_name))
+        if dexseq_count_path is None:
+            import readline
+            import rpy2.robjects as robjects
+            robjects.r('suppressPackageStartupMessages(library(DEXSeq))')
+            scripts = robjects.r('system.file("python_scripts", package="DEXSeq")')
+            g = scripts.items()
+            scripts_path = g.next()[1]
+            dexseq_count_path = os.path.join(scripts_path, 'dexseq_count.py')
+        if paired:
+            p = 'yes'
+        else:
+            p = 'no'
+        if strand_specific:
+            s = 'reverse'
+        else:
+            s = 'no'
+        lines = (
+            '{} view -h -f 2 {} \\\n\t'.format(samtools_path, bam) +
+            '| cut -f1-16,20- \\\n\t| python {} \\\n\t'.format(dexseq_count_path) + 
+            '-p {} -s {} -a 0 -r pos -f sam \\\n\t'.format(p, s) + 
+            '{} \\\n\t- {}\n\n'.format(dexseq_annotation, counts_file)
+        )
+        with open(job.filename, "a") as f:
+            f.write(line)
+        return counts_file
+    
+    def _htseq_count(
+        bam, 
+        gtf, 
+        strand_specific=False,
+        samtools_path='samtools',
+    ):
+        """
+        Count reads overlapping genes for use with DESeq etc.
+    
+        Parameters
+        ----------
+        bam : str
+            Path to coordinate sorted bam file to count reads for.
+    
+        gtf : str
+            Path to GTF file to count against. Optimized for use with Gencode
+            GTF.
+    
+        strand_specific : boolean
+            True if the data is strand-specific. False otherwise.
+    
+        Returns
+        -------
+        lines : str
+            Lines to be printed to shell script.
+    
+        name : str
+            File name for the softlink.
+   
+        Returns
+        -------
+        counts_file : str
+            Path to file with gene counts.
+    
+        stats_file : str
+            Path to file with counting stats.
+    
+        """
+        counts_file = os.path.join(
+            self.tempdir, '{}_gene_counts.tsv'.format(self.sample_name))
+        stats_file = os.path.join(
+            self.tempdir, '{}_gene_count_stats.tsv'.format(self.sample_name))
+        import HTSeq
+        if strand_specific:
+            s = 'reverse'
+        else:
+            s = 'no'
+        script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
+        lines = ('python {} \\\n\t-f bam -r pos -s {} '.format(script, s) + 
+                 '-a 0 -t exon -i gene_id -m union \\\n\t' + 
+                 '{} \\\n\t{} \\\n\t> temp_out.tsv\n'.format(bam, gtf))
+        lines += 'tail -n 5 temp_out.tsv > {}\n'.format(stats_file)
+        lines += 'lines=$(wc -l <temp_out.tsv)\n'
+        lines += 'wanted=`expr $lines - 5`\n'
+        lines += 'head -n $wanted temp_out.tsv > {}\n'.format(counts_file)
+        lines += 'rm temp_out.tsv\n\n'
+        with open(job.filename, "a") as f:
+            f.write(line)
+        return counts_file, stats_file
 
 def pipeline(
     r1_fastqs, 
@@ -271,7 +484,7 @@ def pipeline(
     job_suffix = 'alignment'
     if not os.path.exists(os.path.join(outdir, 'sh',
                                        '{}.sh'.format(alignment_jobname))):
-        job = JobScript(sample_name, job_suffix, 
+        job = RNAJobScript(sample_name, job_suffix, 
                         os.path.join(outdir, 'alignment'), threads=8, memory=32,
                         tempdir=tempdir, queue=queue, conda_env=conda_env,
                         modules=modules)
@@ -738,388 +951,223 @@ def pipeline(
 
     return submit_fn
 
-def _dexseq_count(
-    bam, 
-    counts_file, 
-    dexseq_annotation, 
-    paired=True,
-    strand_specific=True, 
-    samtools_path='samtools'):
-    """
-    Count reads overlapping exonic bins for DEXSeq.
-
-    Parameters
-    ----------
-    bam : str
-        Path to coordinate sorted bam file to count reads for.
-
-    counts_file : str
-        File to write bin counts to.
-
-    dexseq_annotation : str
-        Path to DEXSeq exonic bins GFF file.
-
-    paired : boolean
-        True if the data is paired-end. False otherwise.
-
-    strand_specific : boolean
-        True if the data is strand-specific. False otherwise.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    name : str
-        File name for the softlink.
-
-    """
-    import readline
-    import rpy2.robjects as robjects
-    robjects.r('suppressPackageStartupMessages(library(DEXSeq))')
-    scripts = robjects.r('system.file("python_scripts", package="DEXSeq")')
-    g = scripts.items()
-    scripts_path = g.next()[1]
-    script = os.path.join(scripts_path, 'dexseq_count.py')
-    if paired:
-        p = 'yes'
-    else:
-        p = 'no'
-    if strand_specific:
-        s = 'reverse'
-    else:
-        s = 'no'
-    lines = (
-        '{} view -h -f 2 {} \\\n\t'.format(samtools_path, bam) +
-        '| cut -f1-16,20- \\\n\t| python {} \\\n\t'.format(script) + 
-        '-p {} -s {} -a 0 -r pos -f sam \\\n\t'.format(p, s) + 
-        '{} \\\n\t- {}\n\n'.format(dexseq_annotation, counts_file)
-    )
-    return lines
-
-def _htseq_count(
-    bam, 
-    counts_file, 
-    stats_file, 
-    gtf, 
-    strand_specific=False,
-    samtools_path='samtools',
-):
-    """
-    Count reads overlapping genes for use with DESeq etc.
-
-    Parameters
-    ----------
-    bam : str
-        Path to coordinate sorted bam file to count reads for.
-
-    counts_file : str
-        File to write counts to.
-
-    stats_file : str
-        File to write counting stats to.
-
-    gtf : str
-        Path to GTF file to count against. Optimized for use with Gencode GTF.
-
-    strand_specific : boolean
-        True if the data is strand-specific. False otherwise.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    name : str
-        File name for the softlink.
-
-    """
-    import HTSeq
-    if strand_specific:
-        s = 'reverse'
-    else:
-        s = 'no'
-    script = os.path.join(HTSeq.__path__[0], 'scripts', 'count.py')
-    lines = ('python {} \\\n\t-f bam -r pos -s {} '.format(script, s) + 
-             '-a 0 -t exon -i gene_id -m union \\\n\t' + 
-             '{} \\\n\t{} \\\n\t> temp_out.tsv\n'.format(bam, gtf))
-    lines += 'tail -n 5 temp_out.tsv > {}\n'.format(stats_file)
-    lines += 'lines=$(wc -l <temp_out.tsv)\n'
-    lines += 'wanted=`expr $lines - 5`\n'
-    lines += 'head -n $wanted temp_out.tsv > {}\n'.format(counts_file)
-    lines += 'rm temp_out.tsv\n\n'
-
-    return lines
-
-# TODO: I want to split out the DEXSeq counting. I don't need the HTSeq counting
-# anymore. This needs to be refactored for JobScript as well.
-def get_counts(
-    bam, 
-    outdir, 
-    sample_name, 
-    tempdir, 
-    dexseq_annotation, 
-    gtf,
-    threads=1,
-    conda_env=None,
-    r_env='', # TODO: get rid of this and replace with modules
-    paired=True,
-    strand_specific=False,
-    samtools_path='samtools',
-):
-    """
-    Make a shell script for counting reads that overlap genes for DESeq2 and
-    exonic bins for DEXSeq.
-
-    Parameters
-    ----------
-    bam : str
-        Coordinate sorted bam file (genomic coordinates).
-
-    outdir : str
-        Directory to store shell file and aligment results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    tempdir : str
-        Directory to store temporary files.
-
-    dexseq_annotation : str
-        Path to DEXSeq exonic bins GFF file.
-
-    gtf : str
-        Path to GTF file to count against. Optimized for use with Gencode GTF.
-
-    conda_env : str
-        If provided, load conda environment with this name.
-
-    r_env : str
-        If provided, this file will be sourced to set the environment for rpy2.
-
-    paired : boolean
-        True if the data is paired-end. False otherwise.
-
-    strand_specific : boolean
-        True if the data is strand-specific. False otherwise.
-
-    """
-    tempdir = os.path.join(tempdir, '{}_counts'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_counts'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
-    dexseq_counts = os.path.join(outdir, 'dexseq_counts.tsv')
-    gene_counts = os.path.join(outdir, 'gene_counts.tsv')
-    gene_count_stats = os.path.join(outdir, 'gene_count_stats.tsv')
-    
-    # Files to copy to output directory.
-    files_to_copy = []
-    
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = []
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_counts.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_counts.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_counts.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_counts.err'.format(sample_name))
-        job_name = '{}_counts'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz {} .\n\n'.format(bam))
-
-    if conda_env:
-        f.write('source activate {}\n\n'.format(conda_env))
-    if r_env != '':
-        f.write('source {}\n\n'.format(r_env))
-
-    lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
-                          paired=True, strand_specific=strand_specific,
-                          samtools_path=samtools_path)
-    f.write(lines)
-    lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
-                         strand_specific=strand_specific,
-                         samtools_path=samtools_path)
-    f.write(lines)
-    f.write('wait\n\n')
-    
-    if len(files_to_copy) > 0:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy),
-            outdir))
-    if len(files_to_remove) > 0:
-        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
-
-def _rsem_calculate_expression(
-    bam, 
-    reference, 
-    sample_name,
-    threads=1, 
-    ci_mem=1024, 
-    strand_specific=False,
-    rsem_calculate_expression_path='rsem-calculate-expression',
-):
-    """
-    Estimate expression using RSEM.
-
-    Parameters
-    ----------
-    bam : str
-        Transcriptome bam file.
-
-    reference : str
-        RSEM reference.
-
-    sample_name : str
-        Sample name for RSEM to name files.
-
-    ci_mem : int
-        Amount of memory in mb to give RSEM for calculating confidence
-        intervals. Passed to --ci-memory for RSEM.
-
-    strand_specific : boolean
-        True if the data is strand-specific. False otherwise. For now, this
-        means that the R1 read is on the reverse strand.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    name : str
-        File name for the softlink.
-
-    """
-    line = ('{} --bam --paired-end --num-threads {} '
-            '--no-bam-output --seed 3272015 --calc-ci '
-            '--ci-memory {} --estimate-rspd \\\n\t{} \\\n\t{} {}'.format(
-                rsem_calculate_expression_path, threads, ci_mem, bam, reference,
-                sample_name))
-    if strand_specific:
-        line += '\\\n\t--forward-prob 0'
-    line += '\n'
-    return line
-
-# Needs to be refactored for JobScript.
-def rsem_expression(
-    bam, 
-    outdir, 
-    sample_name, 
-    rsem_reference, 
-    ci_mem=1024, 
-    r_env='', # TODO: replace with modules
-    threads=32,
-    tempdir=None,
-    strand_specific=False,
-    rsem_calculate_expression_path='rsem-calculate-expression',
-):
-    """
-    Make a shell script for estimating expression using RSEM.
-
-    Parameters
-    ----------
-    bam : str
-        Coordinate sorted bam file (genomic coordinates).
-
-    outdir : str
-        Directory to store shell file and aligment results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    tempdir : str
-        Directory to store temporary files.
-
-    rsem_reference : str
-        RSEM reference.
-
-    ci_mem : int
-        Amount of memory in mb to give RSEM for calculating confidence
-        intervals. Passed to --ci-memory for RSEM.
-
-    r_env : str
-        If provided, this file will be sourced to set the environment for rpy2.
-
-    strand_specific : boolean
-        True if the data is strand-specific. False otherwise.
-
-    """
-    tempdir = os.path.join(tempdir, '{}_rsem'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_rsem'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
-    
-    # Files to copy to output directory.
-    files_to_copy = ['{}.genes.results'.format(sample_name),
-                     '{}.isoforms.results'.format(sample_name),
-                     '{}.stat'.format(sample_name)]
-    
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = [temp_bam]
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_rsem.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_rsem.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir, '{}_rsem.out'.format(sample_name))
-        err = os.path.join(outdir, '{}_rsem.err'.format(sample_name))
-        job_name = '{}_rsem'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz {} .\n\n'.format(bam))
-
-    lines = _rsem_calculate_expression(temp_bam, rsem_reference,
-                                       rsem_calculate_expression_path,
-                                       sample_name, threads=threads,
-                                       ci_mem=ci_mem,
-                                       strand_specific=strand_specific)
-    f.write(lines)
-    f.write('wait\n\n')
-    
-    if len(files_to_copy) > 0:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy),
-            outdir))
-    if len(files_to_remove) > 0:
-        f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if os.path.realpath(tempdir) != os.path.realpath(outdir):
-        f.write('rm -r {}\n'.format(tempdir))
-    f.close()
-
-    return fn
+# def get_counts(
+#     bam, 
+#     outdir, 
+#     sample_name, 
+#     tempdir, 
+#     dexseq_annotation, 
+#     gtf,
+#     threads=1,
+#     conda_env=None,
+#     r_env='', # TODO: get rid of this and replace with modules
+#     paired=True,
+#     strand_specific=False,
+#     samtools_path='samtools',
+# ):
+#     """
+#     Make a shell script for counting reads that overlap genes for DESeq2 and
+#     exonic bins for DEXSeq.
+# 
+#     Parameters
+#     ----------
+#     bam : str
+#         Coordinate sorted bam file (genomic coordinates).
+# 
+#     outdir : str
+#         Directory to store shell file and aligment results.
+# 
+#     sample_name : str
+#         Sample name used for naming files etc.
+# 
+#     tempdir : str
+#         Directory to store temporary files.
+# 
+#     dexseq_annotation : str
+#         Path to DEXSeq exonic bins GFF file.
+# 
+#     gtf : str
+#         Path to GTF file to count against. Optimized for use with Gencode GTF.
+# 
+#     conda_env : str
+#         If provided, load conda environment with this name.
+# 
+#     r_env : str
+#         If provided, this file will be sourced to set the environment for rpy2.
+# 
+#     paired : boolean
+#         True if the data is paired-end. False otherwise.
+# 
+#     strand_specific : boolean
+#         True if the data is strand-specific. False otherwise.
+# 
+#     """
+#     tempdir = os.path.join(tempdir, '{}_counts'.format(sample_name))
+#     outdir = os.path.join(outdir, '{}_counts'.format(sample_name))
+# 
+#     # I'm going to define some file names used later.
+#     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+#     dexseq_counts = os.path.join(outdir, 'dexseq_counts.tsv')
+#     gene_counts = os.path.join(outdir, 'gene_counts.tsv')
+#     gene_count_stats = os.path.join(outdir, 'gene_count_stats.tsv')
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = []
+#     
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = []
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     if shell:
+#         fn = os.path.join(outdir, '{}_counts.sh'.format(sample_name))
+#     else:
+#         fn = os.path.join(outdir, '{}_counts.pbs'.format(sample_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir, '{}_counts.out'.format(sample_name))
+#         err = os.path.join(outdir, '{}_counts.err'.format(sample_name))
+#         job_name = '{}_counts'.format(sample_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+# 
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+#     f.write('rsync -avz {} .\n\n'.format(bam))
+# 
+#     if conda_env:
+#         f.write('source activate {}\n\n'.format(conda_env))
+#     if r_env != '':
+#         f.write('source {}\n\n'.format(r_env))
+# 
+#     lines = _dexseq_count(temp_bam, dexseq_counts, dexseq_annotation,
+#                           paired=True, strand_specific=strand_specific,
+#                           samtools_path=samtools_path)
+#     f.write(lines)
+#     lines = _htseq_count(temp_bam, gene_counts, gene_count_stats, gtf,
+#                          strand_specific=strand_specific,
+#                          samtools_path=samtools_path)
+#     f.write(lines)
+#     f.write('wait\n\n')
+#     
+#     if len(files_to_copy) > 0:
+#         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#             ' \\\n\t'.join(files_to_copy),
+#             outdir))
+#     if len(files_to_remove) > 0:
+#         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if tempdir != outdir:
+#         f.write('rm -r {}\n'.format(tempdir))
+#     f.close()
+# 
+#     return fn
+# 
+# # Needs to be refactored for JobScript.
+# def rsem_expression(
+#     bam, 
+#     outdir, 
+#     sample_name, 
+#     rsem_reference, 
+#     ci_mem=1024, 
+#     r_env='', # TODO: replace with modules
+#     threads=32,
+#     tempdir=None,
+#     strand_specific=False,
+#     rsem_calculate_expression_path='rsem-calculate-expression',
+# ):
+#     """
+#     Make a shell script for estimating expression using RSEM.
+# 
+#     Parameters
+#     ----------
+#     bam : str
+#         Coordinate sorted bam file (genomic coordinates).
+# 
+#     outdir : str
+#         Directory to store shell file and aligment results.
+# 
+#     sample_name : str
+#         Sample name used for naming files etc.
+# 
+#     tempdir : str
+#         Directory to store temporary files.
+# 
+#     rsem_reference : str
+#         RSEM reference.
+# 
+#     ci_mem : int
+#         Amount of memory in mb to give RSEM for calculating confidence
+#         intervals. Passed to --ci-memory for RSEM.
+# 
+#     r_env : str
+#         If provided, this file will be sourced to set the environment for rpy2.
+# 
+#     strand_specific : boolean
+#         True if the data is strand-specific. False otherwise.
+# 
+#     """
+#     tempdir = os.path.join(tempdir, '{}_rsem'.format(sample_name))
+#     outdir = os.path.join(outdir, '{}_rsem'.format(sample_name))
+# 
+#     # I'm going to define some file names used later.
+#     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = ['{}.genes.results'.format(sample_name),
+#                      '{}.isoforms.results'.format(sample_name),
+#                      '{}.stat'.format(sample_name)]
+#     
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = [temp_bam]
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     if shell:
+#         fn = os.path.join(outdir, '{}_rsem.sh'.format(sample_name))
+#     else:
+#         fn = os.path.join(outdir, '{}_rsem.pbs'.format(sample_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir, '{}_rsem.out'.format(sample_name))
+#         err = os.path.join(outdir, '{}_rsem.err'.format(sample_name))
+#         job_name = '{}_rsem'.format(sample_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+# 
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+#     f.write('rsync -avz {} .\n\n'.format(bam))
+# 
+#     lines = _rsem_calculate_expression(temp_bam, rsem_reference,
+#                                        rsem_calculate_expression_path,
+#                                        sample_name, threads=threads,
+#                                        ci_mem=ci_mem,
+#                                        strand_specific=strand_specific)
+#     f.write(lines)
+#     f.write('wait\n\n')
+#     
+#     if len(files_to_copy) > 0:
+#         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#             ' \\\n\t'.join(files_to_copy),
+#             outdir))
+#     if len(files_to_remove) > 0:
+#         f.write('rm \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if os.path.realpath(tempdir) != os.path.realpath(outdir):
+#         f.write('rm -r {}\n'.format(tempdir))
+#     f.close()
+# 
+#     return fn

@@ -23,8 +23,8 @@ def _make_dir(d):
 
 class JobScript:
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
-                 tempdir=None, queue=None, conda_env=None, modules=None,
-                 copy_input=False):
+                 shell_fn=None, tempdir=None, queue=None, conda_env=None,
+                 modules=None, copy_input=False):
         """
         Create SGE/shell script object.
 
@@ -45,6 +45,10 @@ class JobScript:
 
         memory : int
             Amount of memory in Gb to request for SGE scripts.
+
+        shell_fn : str
+            Path to output shell script. If not provided, the script will be
+            written in the output directory.
 
         tempdir : str
             Path to directory where temporary directory should be made. If not
@@ -260,10 +264,10 @@ class JobScript:
             Path to output PDF file.
     
         """
-        metrics = os.path.join(job.tempdir,
-                               '{}_rna_seq_metrics.txt'.format(job.sample_name))
-        chart = os.path.join(job.tempdir,
-                             '{}_5_3_coverage.pdf'.format(job.sample_name))
+        metrics = os.path.join(self.tempdir,
+                               '{}_rna_seq_metrics.txt'.format(self.sample_name))
+        chart = os.path.join(self.tempdir,
+                             '{}_5_3_coverage.pdf'.format(self.sample_name))
         if strand_specific:
             ss = 'SECOND_READ_TRANSCRIPTION_STRAND'
         else:
@@ -284,7 +288,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return metrics, chart
 
@@ -338,14 +342,14 @@ class JobScript:
             'VALIDATION_STRINGENCY=SILENT',
             'ASSUME_SORTED=TRUE',
             'I={}'.format(in_bam), 
-            'O={}'.format(job.sample_name)]))
+            'O={}'.format(self.sample_name)]))
         if bg:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
-        output = [os.path.join(job.tempdir, '{}.{}'.format(job.sample_name, x))
+        output = [os.path.join(self.tempdir, '{}.{}'.format(self.sample_name, x))
                                for x in [
                                    'alignment_summary_metrics',
                                    'quality_by_cycle.pdf',
@@ -397,7 +401,7 @@ class JobScript:
             Path to output index file.
     
         """
-        index = os.path.join(job.tempdir, os.path.splitext(in_bam)[0] + '.bai')
+        index = os.path.join(self.tempdir, os.path.splitext(in_bam)[0] + '.bai')
         line = (' \\\n\t'.join([
             'java -Xmx{}g -jar'.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -409,7 +413,7 @@ class JobScript:
             line += ' &\n\n'
         else:
             line += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return index
     
@@ -466,7 +470,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out_bam
     
@@ -494,13 +498,13 @@ class JobScript:
             Path to index file for input bam file.
     
         """
-        index = os.path.join(job.tempdir, os.path.splitext(in_bam)[0] + '.bai')
+        index = os.path.join(self.tempdir, os.path.splitext(in_bam)[0] + '.bai')
         line = '{} index {}'.format(samtools_path, in_bam)
         if bg:
             line += ' &\n\n'
         else:
             line += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return index
     
@@ -542,9 +546,9 @@ class JobScript:
     
         """
         mdup_bam = os.path.join(
-            job.tempdir, '{}_sorted_mdup.bam'.format(job.sample_name))
+            self.tempdir, '{}_sorted_mdup.bam'.format(self.sample_name))
         duplicate_metrics = os.path.join(
-            job.outdir, '{}_duplicate_metrics.txt'.format(job.sample_name))
+            self.outdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -559,7 +563,7 @@ class JobScript:
             lines += ' \\\n\tREMOVE_DUPLICATES=TRUE\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return mdup_bam, duplicate_metrics
 
@@ -606,12 +610,12 @@ class JobScript:
             Path to picard output file.
     
         """
-        metrics = os.path.join(job.tempdir,
-                               '{}_gc_bias_metrics.txt'.format(job.sample_name))
-        chart = os.path.join(job.tempdir,
-                             '{}_gc_bias.pdf'.format(job.sample_name))
-        out = os.path.join(job.tempdir,
-                           '{}_gc_bias_metrics_out.txt'.format(job.sample_name))
+        metrics = os.path.join(self.tempdir,
+                               '{}_gc_bias_metrics.txt'.format(self.sample_name))
+        chart = os.path.join(self.tempdir,
+                             '{}_gc_bias.pdf'.format(self.sample_name))
+        out = os.path.join(self.tempdir,
+                           '{}_gc_bias_metrics_out.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -627,7 +631,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return metrics, chart, out
     
@@ -669,10 +673,10 @@ class JobScript:
             Path to write stderr to. This contains picard stuff.
     
         """
-        out = os.path.join(job.outdir,
-                           '{}_index_stats.txt'.format(job.sample_name))
-        err = os.path.join(job.outdir,
-                           '{}_index_stats.err'.format(job.sample_name))
+        out = os.path.join(self.outdir,
+                           '{}_index_stats.txt'.format(self.sample_name))
+        err = os.path.join(self.outdir,
+                           '{}_index_stats.err'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -686,7 +690,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out, err
     
@@ -731,9 +735,9 @@ class JobScript:
     
         """
         metrics = os.path.join(
-            job.tempdir, '{}_insert_size_metrics.txt'.format(job.sample_name))
-        hist = os.path.join(job.tempdir,
-                            '{}_insert_size.pdf'.format(job.sample_name))
+            self.tempdir, '{}_insert_size_metrics.txt'.format(self.sample_name))
+        hist = os.path.join(self.tempdir,
+                            '{}_insert_size.pdf'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -748,7 +752,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return metrics, hist
     
@@ -787,8 +791,8 @@ class JobScript:
             Path to output bam file.
     
         """
-        out_bam = os.path.join(job.tempdir,
-                               '{}_qsorted.bam'.format(job.sample_name))
+        out_bam = os.path.join(self.tempdir,
+                               '{}_qsorted.bam'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -802,7 +806,7 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out_bam
     
@@ -842,10 +846,13 @@ class JobScript:
             Path to output index file. Only returned if index == True.
     
         """
-        out_bam = os.path.join(job.tempdir,
-                               '{}_sorted.bam'.format(job.sample_name))
+        out_bam = os.path.join(self.tempdir,
+                               '{}_sorted.bam'.format(self.sample_name))
         if index:
-            out_index = os.path.join(job.tempdir, )
+            out_index = os.path.join(
+                self.tempdir, 
+                os.path.join(self.tempdir, os.path.splitext(in_bam)[0] +
+                             '.bai'))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
@@ -857,8 +864,8 @@ class JobScript:
             'SO=coordinate']))
         if index:
             lines += ' \\\n\tCREATE_INDEX=TRUE' 
-        old_index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
-        lines += 'mv {} {}\n\n'.format(old_index, out_index)
+            old_index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
+            lines += 'mv {} {}\n\n'.format(old_index, out_index)
 
         with open(job.filename, "a") as f:
             f.write(lines)
