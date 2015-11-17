@@ -466,6 +466,9 @@ def pipeline(
     bam, log_out, log_final_out, log_progress_out, sj_out, transcriptome_bam = \
             job.star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
                             job.threads, genome_load=star_genome_load)
+    for fn in [log_out, log_final_out, log_progress_out, sj_out,
+               transcriptome_bam]:
+
 
     job.write_end()
     if exists:
@@ -553,10 +556,6 @@ def pipeline(
     job.temp_files_to_delete.append(coord_sorted_bam)
 
     # Mark duplicates.
-    mdup_bam = os.path.join(
-        job.tempdir, '{}_sorted_mdup.bam'.format(sample_name))
-    duplicate_metrics = os.path.join(
-        job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
     mdup_bam, duplicates_metrics = job.picard_mark_duplicates(
         coord_sorted_bam, 
         picard_path=picard_path,
@@ -575,7 +574,6 @@ def pipeline(
     ##     tf.write(tf_lines)
 
     # Index bam file.
-    bam_index = '{}.bai'.format(mdup_bam)
     job.output_files_to_copy.append(bam_index)
     bam_index = job.picard_index(
         mdup_bam, 

@@ -490,6 +490,7 @@ class JobScript:
         return out_bam
     
     def samtools_index(
+        self,
         in_bam, 
         bg=False,
         samtools_path='samtools',
