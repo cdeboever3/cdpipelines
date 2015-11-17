@@ -1370,13 +1370,11 @@ class JobScript:
                 to_remap_bam, to_remap_num)
 
     def wasp_alignment_compare(
+        self,
         to_remap_bam, 
+        to_remap_num,
         remapped_bam, 
-        vcf,
-        fasta, 
         filter_remapped_reads_path, 
-        picard_path='$picard',
-        picard_memory=12,
     ):
         """
         Check original mapping position of reads against remapping after
@@ -1396,61 +1394,72 @@ class JobScript:
         remapped_bam : str
             Bam file with remapped reads.
     
-        vcf : str
-            Path to VCF file with heterozygous SNVs.
-    
-        fasta : str
-            Path to fasta file used to align data.
-    
         filter_remapped_reads_path : str
             Path to filter_remapped_reads.py script.
-    
-        threads : int
-            Number of threads to request for SGE script.
+
+        Returns
+        -------
+        wasp_filtered_bam : str
+            Path to bam file after filtering against re-mapped reads.
     
         """
         # Files that will be created.
-        temp_filtered_bam = os.path.join(
-            job.tempdir, '{}_filtered.bam'.format(sample_name))
         wasp_filtered_bam = os.path.join(
-            job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
+            job.tempdir, '{}_filtered.bam'.format(sample_name))
         
         # Run WASP alignment compare.
         lines = ('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} '
                  '\\\n\t{}\n\n'.format(
                      filter_remapped_reads_path, to_remap_bam,
-                     remapped_bam, temp_filtered_bam, to_remap_num))
+                     remapped_bam, wasp_filtered_bam, to_remap_num))
         with open(job.filename, "a") as f:
             f.write(lines)
+        return wasp_filtered_bam
         
-        # TODO: working here. I probably need to split this up a bit (and I
-        # think I should go back to the second wasp step and not have an
-        # explicit method for it). I need a little method for the thing above
-        # and the ASE counter below. Then in the pipeline I'll call these things
-        # in succession.
+    def count_allele_coverage(
+        self,
+        bam, 
+        vcf,
+        fasta, 
+        gatk_path='$GATK',
+    ):
+        """
+        Count alleles using GATK's ASEReadCounter.
 
-        # Coordinate sort and index.
-        temp_filtered_bam, bam_index = job.picard_coord_sort(
-            temp_filtered_bam, 
-            wasp_filtered_bam,
-            bam_index=True,
-            picard_path=picard_path,
-            picard_memory=job.memory,
-            picard_tempdir=job.tempdir)
+        Parameters
+        ----------
+        bam : str
+            Alignment file to count alleles from.
 
+        vcf : str
+            Path to VCF file with heterozygous SNVs.
+    
+        fasta : str
+            Path to fasta file used to align data.
+
+        Returns
+        -------
+        Path to output counts file.
+
+        """
+    
         # Count allele coverage.
         counts = os.path.join(
-            job.outdir, '{}_allele_counts.tsv'.format(sample_name))
-        f.write('java -jar {} \\\n'.format(gatk_path))
-        f.write('\t-R {} \\\n'.format(genome_fasta))
-        f.write('\t-T ASEReadCounter \\\n')
-        f.write('\t-o {} \\\n'.format(counts))
-        f.write('\t-I {} \\\n'.format(wasp_filtered_bam))
-        f.write('\t-sites {} \\\n'.format(vcf))
-        f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
-        f.write('\t-U ALLOW_N_CIGAR_READS \n')
-        f.write('\nwait\n\n')
+            job.tempdir, '{}_allele_counts.tsv'.format(sample_name))
+        lines = ' \\\n\t'.join([
+            'java -jar {}'.format(gatk_path),
+            '-R {}'.format(fasta),
+            '-T ASEReadCounter',
+            '-o {}'.format(counts),
+            '-I {}'.format(bam),
+            '-sites {}'.format(vcf),
+            '-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE',
+            '-U ALLOW_N_CIGAR_READS',
+        ])
+        lines += '\n\nwait\n\n'
         with open(job.filename, "a") as f:
+            f.write(lines)
+        return counts
 
 def _wasp_snp_directory(vcf, directory, sample_name, regions,
                         bcftools_path='bcftools'):

@@ -3,69 +3,6 @@ import os
 from general import JobScript
 
 class RNAJobScript(JobScript):
-    def wasp_remap(
-        r1_fastq, 
-        r2_fastq, 
-        star_index,
-        rgpl='ILLUMINA',
-        rgpu='',
-        picard_path='$picard',
-        picard_memory=15, 
-        star_path='STAR',
-        samtools_path='samtools',
-    ):
-        """
-        Realign reads with variants from WASP using STAR. 
-
-        Parameters
-        ----------
-        r1_fastq : str
-            R1 reads from find_intersecting_snps.py to be remapped.
-
-        r2_fastq : str
-            R2 reads from find_intersecting_snps.py to be remapped.
-
-        star_index : str
-            Path to STAR index.
-
-        rgpl : str
-            Read Group platform (e.g. illumina, solid). 
-
-        rgpu : str
-            Read Group platform unit (eg. run barcode). 
-
-        picard_path : str
-            Path to Picard tools.
-
-        picard_memory : int
-            Amount of memory (in gb) to give Picard Tools.
-
-        star_path : str
-            Path to STAR aligner.
-
-        samtools_path : str
-            Path to samtools executable.
-
-        Returns
-        -------
-        fn : str
-            Path to shell script.
-
-        """
-        (remapped_bam, log_out, log_final_out, log_progress_out, sj_out) = \
-                job.star_align(
-                    temp_r1, 
-                    temp_r2, 
-                    sample_name, 
-                    rgpl,
-                    rgpu, 
-                    star_index, 
-                    threads=job.threads,
-                    genome_load=star_genome_load,
-                    transcriptome_align=False,
-                )
-        return remapped_bam, log_out, log_final_out, log_progress_out, sj_out
-
     def star_align(
         self,
         r1_fastq, 
@@ -520,9 +457,8 @@ def pipeline(
     bam, log_out, log_final_out, log_progress_out, sj_out, transcriptome_bam = \
             job.star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
                             job.threads, genome_load=star_genome_load)
-    for fn in [log_out, log_final_out, log_progress_out, sj_out,
-               transcriptome_bam]:
-        job.output_files_to_copy.append(fn)
+    job.output_files_to_copy += [log_out, log_final_out, log_progress_out,
+                                 sj_out, transcriptome_bam]
     job.write_end()
 
     ##### Job 2: Run fastQC. ##### 
@@ -822,6 +758,7 @@ def pipeline(
         threads=1,
         samtools_path='samtools',
     )
+
     job.temp_files_to_delete.append(keep_bam)
     job.output_files_to_copy += [snp_directory, wasp_r1_fastq, wasp_r2_fastq,
                                  to_remap_bam, to_remap_num]
@@ -842,10 +779,14 @@ def pipeline(
     )
     wasp_remap_jobname = job.jobname
         
-    remapped_bam, log_out, log_final_out, log_progress_out, sj_out
-    job.temp_files_to_delete.append(sj_out)
+    (remapped_bam, log_out, log_final_out, log_progress_out, sj_out, 
+     transcriptome_bam) = \
+            job.star_align(wasp_r1_fastq, wasp_r2_fastq, rgpl, rgpu, star_index,
+                           job.threads, genome_load=star_genome_load,
+                           transcriptome_align=False)
     job.output_files_to_copy += [remapped_bam, log_out, log_final_out,
                                  log_progress_out]
+    job.temp_files_to_delete += [sj_out, wasp_r1_fastq, wasp_r2_fastq]
     
     ##### Job 11: WASP third step. #####
     job = JobScript(
@@ -860,13 +801,35 @@ def pipeline(
         modules=modules,
         wait_for=[wasp_remap_jobname],
     )
-    wasp_alignment_compare_jobname = '{}_{}'.format(sample_name,
+    wasp_alignment_compare_jobname = job.jobname
+
+    # Compare alignments.
+    temp_filtered_bam = job.wasp_alignment_compare(
+        to_remap_bam, 
+        to_remap_num,
+        remapped_bam, 
+        filter_remapped_reads_path,
+    )
+    job.temp_files_to_delete += [temp_filtered_bam, to_remap_bam, to_remap_num]
         
+    # Coordinate sort and index.
+    wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
+        temp_filtered_bam, 
+        bam_index=True,
+        picard_path=picard_path,
+        picard_memory=job.memory,
+        picard_tempdir=job.tempdir)
+    job.output_files_to_copy += [wasp_filtered_bam, wasp_bam_index]
+
+    # Counts alleles.
+    allele_counts = job.count_allele_coverage(
+        wasp_filtered_bam, 
+        vcf,
+        genome_fasta, 
+        gatk_path=gatk_path,
+    )
+    job.output_files_to_copy.append(allele_counts)
     job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 12: Run MBASED for ASE. #####
     mbased_jobname = '{}_{}'.format(sample_name, 'mbased')
