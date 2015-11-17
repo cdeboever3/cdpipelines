@@ -244,6 +244,15 @@ class JobScript:
         if self.delete_sh:
             os.remove(self.jobname)
 
+    def make_md5sum(
+        self,
+        fn):
+        """Make an md5sum for fn. Returns path to md5 file."""
+        lines = 'md5sum {0} > {0}.md5\n\n'.format(fn)
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return fn + '.md5'
+
     def picard_collect_rna_seq_metrics(
         self,
         in_bam, 
@@ -303,7 +312,7 @@ class JobScript:
             ss = 'NONE'
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} CollectRnaSeqMetrics'.format( picard_path),
             'I={}'.format(in_bam),
@@ -365,7 +374,7 @@ class JobScript:
         """
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} CollectMultipleMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -433,7 +442,7 @@ class JobScript:
         index = os.path.join(self.tempdir, os.path.splitext(in_bam)[0] + '.bai')
         line = (' \\\n\t'.join([
             'java -Xmx{}g -jar'.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} BuildBamIndex'.format(picard_path),
             'I={}'.format(in_bam),
@@ -486,7 +495,7 @@ class JobScript:
         """
         merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
         lines = ['java -Xmx{}g -jar'.format(picard_memory),
-                 '\t-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+                 '\t-XX:ParallelGCThreads=1',
                  '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
                  '\t-jar {} MergeSamFiles'.format(picard_path),
                  '\tASSUME_SORTED=TRUE',
@@ -581,7 +590,7 @@ class JobScript:
             self.outdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} MarkDuplicates'.format(picard_path),
             'METRICS_FILE={}'.format(duplicate_metrics),
@@ -648,7 +657,7 @@ class JobScript:
                            '{}_gc_bias_metrics_out.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} CollectGcBiasMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -709,7 +718,7 @@ class JobScript:
                            '{}_index_stats.err'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} BamIndexStats'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -770,7 +779,7 @@ class JobScript:
                             '{}_insert_size.pdf'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} CollectInsertSizeMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -825,7 +834,7 @@ class JobScript:
                                '{}_qsorted.bam'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} SortSam'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -885,7 +894,7 @@ class JobScript:
                              '.bai'))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
-            '-XX:-UseGCOverheadLimit -XX:-UseParallelGC',
+            '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} SortSam'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
@@ -1461,8 +1470,97 @@ class JobScript:
             f.write(lines)
         return counts
 
-def _wasp_snp_directory(vcf, directory, sample_name, regions,
-                        bcftools_path='bcftools'):
+    def mbased(
+        self,
+        infile, 
+        feature_bed, 
+        mbased_infile, 
+        locus_outfile, 
+        snv_outfile, 
+        is_phased=False, 
+        num_sim=1000000, 
+        threads=1, 
+        vcf=None,
+        vcf_sample_name=None, 
+        mappability=None,
+        bigWigAverageOverBed_path='bigWigAverageOverBed',
+    ):
+        """
+        Make a shell script for running MBASED to determine allelic bias from
+        sequencing reads.
+    
+        Parameters
+        ----------
+        infile : str
+            Output file from GATK's ASEReadCounter.
+    
+        feature_bed : str
+            Path to bed file for assigning heterozygous SNVs to features.
+        
+        is_phased : bool
+            Whether the input file is phased. If so, the reference alleles are
+            assumed to be in phase. Note that this only matters locus by locus.
+    
+        num_sim : int
+            Number of simulations for MBASED to perform.
+    
+        threads : int
+            Number of threads for MBASED to use.
+        
+        vcf : str
+            Path to gzipped, indexed VCF file with all variant calls (not just
+            heterozygous calls).
+    
+        vcf_sample_name : str
+            If vcf is provided, this must be provided to specify the sample name
+            of this sample in the VCF file. Required if vcf is provided.
+    
+        mappability : str
+            Path to bigwig file with mappability scores. A score of one should
+            mean uniquely mapping.
+    
+        bigWigAverageOverBed_path : str
+            Path to bigWigAverageOverBed. Required if mappability is provided.
+    
+        Returns
+        -------
+        mbased_infile : str
+            Path to save MBASED input file to.
+    
+        locus_outfile : str
+            Path to file to store locus-level results.
+    
+        snv_outfile : str
+            Path to file to store SNV-level results.
+    
+        """
+        from __init__ import scripts
+        mbased_infile = os.path.join(
+            job.tempdir, '{}_mbased_input.tsv'.format(job.sample_name))
+        locus_outfile = os.path.join(
+            job.tempdir, '{}_locus.tsv'.format(job.sample_name))
+        snv_outfile = os.path.join(
+            job.outdir, '{}_snv.tsv'.format(job.sample_name))
+        is_phased = str(is_phased).upper()
+        script = os.path.join(scripts, 'make_mbased_input.py')
+        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
+            script, infile, mbased_infile, feature_bed)
+        if vcf:
+            lines += ' \\\n\t-v {} -s {}'.format(vcf, vcf_sample_name)
+        if mappability:
+            lines += ' \\\n\t-m {} -p {}'.format(mappability,
+                                                 bigWigAverageOverBed_path)
+        lines += '\n\n'
+        script = os.path.join(scripts, 'mbased.R')
+        lines += 'Rscript '
+        lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile, snv_outfile,
+                                 job.sample_name, is_phased, str(num_sim),
+                                 str(threads)])
+        lines += '\n'
+        return lines
+
+def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
+                        fai=None, bcftools_path='bcftools'):
     """
     Convert VCF file into input files directory and files needed for WASP. Only
     bi-allelic heterozygous sites are used. Both SNPs and indels are included.
@@ -1476,12 +1574,22 @@ def _wasp_snp_directory(vcf, directory, sample_name, regions,
         Output directory. A directory snps will be output in this directory with
         the variants for WASP.
 
-    sample_name : str
+    vcf_sample_name : str
         Use this sample name to get heterozygous SNPs from VCF file.
 
     regions : str
         Path to bed file to define regions of interests (e.g. exons, peaks,
         etc.). These regions should be non-overlapping.
+
+    vcf_out : str
+        Path to output vcf file that contains heterozygous variants for this
+        sample. 
+
+    fai : str
+        Path genome fasta fai file. If provided, the VCF will be sorted to match
+        the contig order in the fai file. When fai is provided, some temporary
+        files are written in the current working directory while the script
+        runs.
 
     """
     import glob
@@ -1489,17 +1597,35 @@ def _wasp_snp_directory(vcf, directory, sample_name, regions,
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    c = ('{} view -O u -m2 -M2 -R {} -s {} {} | {} view -g het | grep -v ^\\# '
-         '| cut -f1,2,4,5 | '
+    c = ('{} view -O u -m2 -M2 \\\n\t-R {} \\\n\t-s {} \\\n\t{} \\\n\t'
+         '| {} view -g het \\\n\t| tee {} \\\n\t| grep -v ^\\# \\\n\t'
+         '| cut -f1,2,4,5 \\\n\t| '
          'awk \'{{print $2"\\t"$3"\\t"$4 >> ("{}/"$1".snps.txt")}}\''.format(
-             bcftools_path, regions, sample_name, vcf, bcftools_path,
-             directory))
+             bcftools_path, regions, vcf_sample_name, vcf, bcftools_path,
+             vcf_out, directory))
     subprocess.check_call(c, shell=True)
 
     # Now we gzip the files.
     fns = glob.glob(os.path.join(directory, '*.snps.txt'))
     for fn in fns:
         subprocess.check_call('gzip {}'.format(fn), shell=True)
+
+    # If a fai file is provided, we need to reorder the VCF to match fai's
+    # fasta.
+    if fai:
+        c = 'grep -v ^\\# {} > {}_hets_no_header.vcf'.format(vcf_out,
+                                                             vcf_sample_name)
+        subprocess.check_call(c, shell=True)
+        c = '{} {}_hets_no_header.vcf {} > {}_hets_sorted_no_header.vcf'.format(
+            vcf_sample_name, sortByRef_path, fai, vcf_sample_name)
+        subprocess.check_call(c, shell=True)
+        c = ('cat <(grep \\# {}) {}_hets_sorted_no_header.vcf > '
+             'hets_sorted.vcf'.format(vcf_out, vcf_sample_name))
+        subprocess.check_call(c, shell=True)
+        c = 'mv {}_hets_sorted.vcf {}'.format(vcf_sample_name, vcf_out)
+        subprocess.check_call(c, shell=True)
+        os.remove('{}_hets_no_header.vcf'.format(vcf_sample_name))
+        os.remove('{}_hets_sorted_no_header.vcf'.format(vcf_sample_name))
 
 def wasp_allele_swap(
     bam, 
@@ -1835,95 +1961,6 @@ def wasp_remap(
 
     job.write_end()
     return job.filename
-
-def _mbased(
-    infile, 
-    bed, 
-    mbased_infile, 
-    locus_outfile, 
-    snv_outfile, 
-    sample_name,
-    is_phased=False, 
-    num_sim=1000000, 
-    threads=1, 
-    vcf=None,
-    vcf_sample_name=None, 
-    mappability=None,
-    bigWigAverageOverBed_path='bigWigAverageOverBed',
-):
-    """
-    Make a shell script for running MBASED to determine allelic bias from
-    sequencing reads.
-
-    Parameters
-    ----------
-    infile : str
-        Output file from GATK's ASEReadCounter.
-
-    bed : str
-        Path to bed file for assigning heterozygous SNVs to features.
-    
-    mbased_infile : str
-        Path to save MBASED input file to.
-
-    locus_outfile : str
-        Path to file to store locus-level results.
-
-    snv_outfile : str
-        Path to file to store SNV-level results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    is_phased : bool
-        Whether the input file is phased. If so, the reference alleles are
-        assumed to be in phase. Note that this only matters locus by locus.
-
-    num_sim : int
-        Number of simulations for MBASED to perform.
-
-    threads : int
-        Number of threads for MBASED to use.
-    
-    vcf : str
-        Path to gzipped, indexed VCF file with all variant calls (not just
-        heterozygous calls).
-
-    vcf_sample_name : str
-        If vcf is provided, this must be provided to specify the sample name of
-        this sample in the VCF file. Required if vcf is provided.
-
-    mappability : str
-        Path to bigwig file with mappability scores. A score of one should mean
-        uniquely mapping.
-
-    bigWigAverageOverBed_path : str
-        Path to bigWigAverageOverBed. Required if mappability is provided.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell script.
-
-    """
-    from __init__ import scripts
-    is_phased = str(is_phased).upper()
-    script = os.path.join(scripts, 'make_mbased_input.py')
-    lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
-        script, infile, mbased_infile, bed)
-    if vcf:
-        lines += ' \\\n\t-v {} -s {}'.format(vcf, vcf_sample_name)
-    if mappability:
-        lines += ' \\\n\t-m {} -p {}'.format(mappability,
-                                             bigWigAverageOverBed_path)
-    lines += '\n\n'
-    script = os.path.join(scripts, 'mbased.R')
-    lines += 'Rscript '
-    lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile, snv_outfile,
-                             sample_name, is_phased, str(num_sim),
-                             str(threads)])
-    lines += '\n'
-    return lines
 
 def run_mbased(
     infile, 
