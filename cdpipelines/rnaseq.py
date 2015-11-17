@@ -3,6 +3,69 @@ import os
 from general import JobScript
 
 class RNAJobScript(JobScript):
+    def wasp_remap(
+        r1_fastq, 
+        r2_fastq, 
+        star_index,
+        rgpl='ILLUMINA',
+        rgpu='',
+        picard_path='$picard',
+        picard_memory=15, 
+        star_path='STAR',
+        samtools_path='samtools',
+    ):
+        """
+        Realign reads with variants from WASP using STAR. 
+
+        Parameters
+        ----------
+        r1_fastq : str
+            R1 reads from find_intersecting_snps.py to be remapped.
+
+        r2_fastq : str
+            R2 reads from find_intersecting_snps.py to be remapped.
+
+        star_index : str
+            Path to STAR index.
+
+        rgpl : str
+            Read Group platform (e.g. illumina, solid). 
+
+        rgpu : str
+            Read Group platform unit (eg. run barcode). 
+
+        picard_path : str
+            Path to Picard tools.
+
+        picard_memory : int
+            Amount of memory (in gb) to give Picard Tools.
+
+        star_path : str
+            Path to STAR aligner.
+
+        samtools_path : str
+            Path to samtools executable.
+
+        Returns
+        -------
+        fn : str
+            Path to shell script.
+
+        """
+        (remapped_bam, log_out, log_final_out, log_progress_out, sj_out) = \
+                job.star_align(
+                    temp_r1, 
+                    temp_r2, 
+                    sample_name, 
+                    rgpl,
+                    rgpu, 
+                    star_index, 
+                    threads=job.threads,
+                    genome_load=star_genome_load,
+                    transcriptome_align=False,
+                )
+        return remapped_bam, log_out, log_final_out, log_progress_out, sj_out
+
     def star_align(
         self,
         r1_fastq, 
@@ -161,7 +224,7 @@ class RNAJobScript(JobScript):
             f.write(line)
         return genes, isoforms, stats
 
-    def _dexseq_count(
+    def dexseq_count(
         self,
         bam, 
         dexseq_annotation, 
@@ -224,7 +287,8 @@ class RNAJobScript(JobScript):
             f.write(line)
         return counts_file
     
-    def _htseq_count(
+    def htseq_count(
+        self,
         bam, 
         gtf, 
         strand_specific=False,
@@ -291,8 +355,6 @@ def pipeline(
     outdir, 
     sample_name, 
     star_index,
-    link_dir,
-    web_path_file,
     ref_flat, 
     rrna_intervals,
     dexseq_annotation,
@@ -302,7 +364,9 @@ def pipeline(
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
     genome_fasta,
-    vcf, 
+    web_link_dir=None,
+    web_path_file=None,
+    vcf=None,
     vcf_sample_name=None,
     is_phased=False,
     conda_env=None,
@@ -348,21 +412,6 @@ def pipeline(
     star_index : str
         Path to STAR index.
 
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
     ref_flat : str
         Path to refFlat file with non-rRNA genes. Can ge gzipped.
 
@@ -388,6 +437,21 @@ def pipeline(
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py from WASP.
 
+    web_link_dir : str
+        Path to directory where softlinks for genome browser/web should be made.
+
+    web_path_file : str
+        File whose first line is the URL that points to link_dir. For example,
+        if we make a link to the file s1_coord_sorted.bam in link_dir and
+        web_path_file has http://site.com/files on its first line, then
+        http://site.com/files/s1_coord_sorted.bam should be available on the
+        web. If the web directory is password protected (it probably should be),
+        then the URL should look like http://username:password@site.com/files.
+        This is a file so you don't have to make the username/password combo
+        public (although I'd recommend not using a sensitive password). You can
+        just put the web_path_file in a directory that isn't tracked by git, 
+        figshare, etc.
+
     vcf : str
         VCF file containing exonic variants used for ASE.
     
@@ -411,6 +475,9 @@ def pipeline(
     strand_specific : boolean
         If false, data is not strand specific.
 
+    tempdir : str
+        Directory to store temporary files.
+
     star_path : str
         Path to STAR aligner.
 
@@ -423,35 +490,21 @@ def pipeline(
     bedgraph_to_bigwig_path : str
         Path bedGraphToBigWig executable.
 
-    tempdir : str
-        Directory to store temporary files.
-
     Returns
     -------
     fn : str
         Path to shell script.
 
     """
-    import tempfile
-
     with open(web_path_file) as wpf:
         web_path = wpf.readline().strip()
     tracklines_file = os.path.join(outdir, 'tracklines.txt')
     
     ##### Job 1: Combine fastqs and align with STAR. #####
-    job_suffix = 'alignment'
-    alignment_jobname = '{}_{}'.format(sample_name, job_suffix)
-    alignment_shell = os.path.join(outdir, 'sh',
-                                   '{}.sh'.format(alignment_jobname))
-    exists = os.path.exists(alignment_shell)
-    if exists:
-        alignment_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = RNAJobScript(
         sample_name, 
-        job_suffix, 
-        os.path.join(outdir, 'alignment'), 
-        shell_fn=alignment_shell,
+        job_suffix='alignment',
+        outdir=os.path.join(outdir, 'alignment'), 
         threads=8, 
         memory=32,
         tempdir=tempdir, 
@@ -459,6 +512,7 @@ def pipeline(
         conda_env=conda_env,
         modules=modules,
     )
+    alignment_jobname = job.jobname
         
     combined_r1 = job.combine_fastqs(r1_fastqs, combined_r1, bg=True)
     combined_r2 = job.combine_fastqs(r2_fastqs, combined_r2, bg=True)
@@ -468,26 +522,14 @@ def pipeline(
                             job.threads, genome_load=star_genome_load)
     for fn in [log_out, log_final_out, log_progress_out, sj_out,
                transcriptome_bam]:
-
-
+        job.output_files_to_copy.append(fn)
     job.write_end()
-    if exists:
-        os.remove(alignment_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 2: Run fastQC. ##### 
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = JobScript(
         sample_name, 
-        job_suffix, 
-        os.path.join(outdir, 'qc'), 
+        job_suffix='fastqc', 
+        outdir=os.path.join(outdir, 'qc'), 
         shell_fn=fastqc_shell,
         threads=1, 
         memory=4,
@@ -495,7 +537,9 @@ def pipeline(
         queue=queue, 
         conda_env=conda_env,
         modules=modules, 
-        wait_for=[alignment_jobname])
+        wait_for=[alignment_jobname]
+    )
+    fastqc_jobname = job.jobname
         
     # Run fastQC.
     job.temp_files_to_delete.append(combined_r1)
@@ -520,31 +564,21 @@ def pipeline(
     ##     tf.write(tf_lines)
         
     job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 3: Coordinate sort, mark duplicates and index bam. #####
-    job_suffix = 'sort_mdup_index'
-    sort_mdup_index_jobname = '{}_{}'.format(sample_name, job_suffix)
-    sort_mdup_index_shell = os.path.join(outdir, 'sh', '{}.sh'.format(
-        sort_mdup_index_jobname))
-    exists = os.path.exists(sort_mdup_index_shell)
-    if exists:
-        sort_mdup_index_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = JobScript(
         sample_name, 
-        job_suffix, 
-        os.path.join(outdir, 'alignment'), 
+        job_suffix = 'sort_mdup_index',
+        outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=4,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[alignment_jobname])
+        wait_for=[alignment_jobname]
+    )
+    sort_mdup_index_jobname = job.jobname
 
     # Coordinate sort.
     job.temp_files_to_delete.append(temp_bam)
@@ -587,23 +621,12 @@ def pipeline(
     ##                  os.path.join(link_dir, 'bam', name))
 
     job.write_end()
-    if exists:
-        os.remove(sort_mdup_index_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 4: Collect Picard metrics. #####
-    job_suffix = 'picard_metrics'
-    picard_metrics_jobname = '{}_{}'.format(sample_name, job_suffix)
-    picard_metrics_shell = os.path.join(outdir, 'sh', '{}.sh'.format(
-        picard_metrics_jobname))
-    exists = os.path.exists(picard_metrics_shell)
-    if exists:
-        picard_metrics_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = JobScript(
         sample_name, 
         job_suffix, 
+        job_suffix = 'picard_metrics',
         os.path.join(outdir, 'qc'),
         threads=1, 
         memory=4, 
@@ -611,7 +634,9 @@ def pipeline(
         queue=queue,
         conda_env=conda_env, 
         modules=modules,
-        wait_for=[sort_mdup_index_jobname])
+        wait_for=[sort_mdup_index_jobname],
+    )
+    picard_metrics_jobname = job.jobname
     
     # Collect insert size metrics, bam index stats, RNA seq QC.
     metrics_files = job.picard_collect_multiple_metrics(
@@ -645,35 +670,22 @@ def pipeline(
         picard_tempdir=job.tempdir,
         bg=False)
     job.output_files_to_copy += [index_out, index_err]
-
     job.write_end()
-    if exists:
-        os.remove(picard_metrics_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
 
     ##### Job 5: Make md5 has for final bam file. #####
-    md5_jobname = '{}_{}'.format(sample_name, 'md5')
-    job_holds[md5_jobname] = [sort_mdup_index_jobname]
-
-    job_suffix = 'md5'
-    md5_jobname = '{}_{}'.format(sample_name, job_suffix)
-    md5_shell = os.path.join(outdir, 'sh', '{}.sh'.format(md5_jobname))
-    exists = os.path.exists(md5_shell)
-    if exists:
-        md5_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = JobScript(
         sample_name, 
-        job_suffix, 
-        os.path.join(outdir, 'alignment'), 
+        job_suffix = 'md5',
+        outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=4,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[sort_mdup_index_jobname])
+        wait_for=[sort_mdup_index_jobname],
+    )
+    md5_jobname = job.jobname
         
     # Make md5 hash for output bam file.
     with open(job.filename, "a") as f:
@@ -726,264 +738,131 @@ def pipeline(
     #     tf.write(tf_lines)
 
     job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
     
     ##### Job 7: Get HTSeq and DEXSeq counts. #####
-    counts_jobname = '{}_{}'.format(sample_name, 'counts')
-    job_holds[counts_jobname] = [sort_mdup_index_jobname]
-
-    job_suffix = 'counts'
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(counts_jobname))):
-        job = RNAJobScript(sample_name, job_suffix, 
-                        os.path.join(outdir, 'counts'), threads=1, memory=4,
-                        tempdir=tempdir, queue=queue, conda_env=conda_env,
-                        modules=modules)
+    job = RNAJobScript(
+        sample_name, 
+        job_suffix = 'counts',
+        outdir=os.path.join(outdir, 'counts'), 
+        threads=1, 
+        memory=4,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname],
+    )
+    counts_jobname = job.jobname
         
-        with open(job.filename, "a") as f:
-            gene_counts = os.path.join(job.outdir, 'gene_counts.tsv')
-            gene_count_stats = os.path.join(job.outdir, 'gene_count_stats.tsv')
-            lines = _htseq_count(
-                mdup_bam, 
-                gene_counts, 
-                gene_count_stats, 
-                gene_gtf, 
-                strand_specific=strand_specific,
-                samtools_path=samtools_path)
-            f.write(lines)
-            dexseq_counts = os.path.join(
-                job.outdir, '{}_dexseq_counts.tsv'.format(job.sample_name))
-            lines = _dexseq_count(mdup_bam, dexseq_counts, dexseq_annotation,
-                                  paired=True, strand_specific=strand_specific,
-                                  samtools_path=samtools_path)
-            f.write(lines)
-        job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
+    gene_counts, gene_count_stats = job.htseq_count(
+        mdup_bam, 
+        gene_gtf, 
+        strand_specific=strand_specific,
+        samtools_path=samtools_path)
+    job.output_files_to_copy.append(gene_counts)
+    job.output_files_to_copy.append(gene_count_stats)
+    dexseq_counts = job.dexseq_count(
+        mdup_bam, 
+        dexseq_annotation,
+        paired=True, 
+        strand_specific=strand_specific,
+        samtools_path=samtools_path)
+    job.output_files_to_copy.append(dexseq_counts)
+    job.write_end()
     
     ##### Job 8: Run RSEM. #####
-    rsem_jobname = '{}_{}'.format(sample_name, 'rsem')
-    job_holds[rsem_jobname] = [sort_mdup_index_jobname]
-
-    job_suffix = 'rsem'
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(rsem_jobname))):
-        job = RNAJobScript(sample_name, job_suffix, os.path.join(outdir, 'rsem'),
-                        threads=8, memory=4, tempdir=tempdir, queue=queue,
-                        conda_env=conda_env, modules=modules)
-        
-        with open(job.filename, "a") as f:
-            job.output_files_to_copy += [
-                '{}.genes.results'.format(sample_name),
-                '{}.isoforms.results'.format(sample_name),
-                '{}.stat'.format(sample_name)]
-            lines = _rsem_calculate_expression(
-                transcriptome_bam, rsem_reference, sample_name,
-                threads=job.threads, ci_mem=1024,
-                strand_specific=strand_specific,
-                rsem_calculate_expression_path=rsem_calculate_expression_path,
-            )
-            f.write(lines)
-        job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
+    job = RNAJobScript(
+        sample_name, 
+        job_suffix = 'rsem',
+        outdir=os.path.join(outdir, 'rsem'),
+        threads=8, 
+        memory=4, 
+        tempdir=tempdir, queue=queue,
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname],
+    )
+    rsem_jobname = job.jobname
+    
+    genes, isoforms, stats = job.rsem_calculate_expression(
+        transcriptome_bam, 
+        rsem_reference, 
+        threads=job.threads, 
+        ci_mem=1024,
+        strand_specific=strand_specific,
+        rsem_calculate_expression_path=rsem_calculate_expression_path,
+    )
+    job.output_files_to_copy += [genes, isoforms, stats]
+    job.write_end()
     
     ##### Job 9: WASP first step. #####
-    wasp_allele_swap_jobname = '{}_{}'.format(sample_name, 'wasp_allele_swap')
-    job_holds[wasp_allele_swap_jobname] = [sort_mdup_index_jobname]
-
-    job_suffix = 'wasp_allele_swap'
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
-    if not os.path.exists(
-        os.path.join(outdir, 'sh', '{}.sh'.format(wasp_allele_swap_jobname))):
-        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
-                        threads=1, memory=4, tempdir=tempdir, queue=queue,
-                        conda_env=conda_env, modules=modules)
+    job = JobScript(
+        sample_name, 
+        job_suffix = 'wasp_allele_swap',
+        outdir=os.path.join(outdir, 'wasp'),
+        threads=1, 
+        memory=4, 
+        tempdir=tempdir, 
+        queue=queue,
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=[sort_mdup_index_jobname],
+    )
+    wasp_allele_swap_jobname = job.jobname
         
-        with open(job.filename, "a") as f:
-            if not vcf_sample_name:
-                vcf_sample_name = sample_name
-
-            # Files that will be created.
-            temp_uniq_bam = os.path.join(
-                job.tempdir, '{}_uniq.bam'.format(sample_name))
-            job.temp_files_to_delete.append(temp_uniq_bam)
-            
-            # Files to copy to output directory.
-            prefix = '{}_uniq'.format(sample_name)
-            fns = [
-                '{}.keep.bam'.format(prefix),
-                '{}.remap.fq1.gz'.format(prefix),
-                '{}.remap.fq2.gz'.format(prefix),
-                '{}.to.remap.bam'.format(prefix),
-                '{}.to.remap.num.gz'.format(prefix)
-            ]
-            job.output_files_to_copy += fns
-            wasp_r1_fastq = os.path.join(job.outdir,
-                                         '{}.remap.fq1.gz'.format(prefix))
-            wasp_r2_fastq = os.path.join(job.outdir,
-                                         '{}.remap.fq2.gz'.format(prefix))
-            to_remap_bam = os.path.join(job.outdir,
-                                        '{}.to.remap.bam'.format(prefix))
-            to_remap_num = os.path.join(job.outdir,
-                                        '{}.to.remap.num.gz'.format(prefix))
-
-            from __init__ import scripts
-            input_script = os.path.join(scripts, 'make_wasp_input.py')
-
-            # Run WASP to swap alleles.
-            with open(job.filename, "a") as f:
-                snp_directory = os.path.join(job.tempdir, 'snps')
-                # temp_bam = os.path.join(job.outdir, 'uniq.bam')
-                f.write('python {} \\\n\t{} \\\n\t{} \\\n\t{} '
-                        '\\\n\t{} \\\n\t-b {}\n\n'.format(
-                            input_script, vcf, vcf_sample_name, snp_directory,
-                            exon_bed, bcftools_path))
-                f.write('{} view -b -q 255 -F 1024 \\\n\t{} '
-                        '\\\n\t> {}\n\n'.format(
-                            samtools_path, mdup_bam, temp_uniq_bam))
-                f.write('wait\n\n')
-                f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
-                    find_intersecting_snps_path, temp_uniq_bam, snp_directory))
-        job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
+    if not vcf_sample_name:
+        vcf_sample_name = sample_name
+    (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq, to_remap_bam,
+     to_remap_num) = job.wasp_allele_swap(
+        mdup_bam, 
+        find_intersecting_snps_path, 
+        vcf, 
+        exon_bed,
+        vcf_sample_name=vcf_sample_name, 
+        threads=1,
+        samtools_path='samtools',
+    )
+    job.temp_files_to_delete.append(keep_bam)
+    job.output_files_to_copy += [snp_directory, wasp_r1_fastq, wasp_r2_fastq,
+                                 to_remap_bam, to_remap_num]
+    job.write_end()
     
     ##### Job 10: WASP second step. #####
-    wasp_remap_jobname = '{}_{}'.format(sample_name, 'wasp_remap')
-    job_holds[wasp_remap_jobname] = [wasp_allele_swap_jobname]
-
-    job_suffix = 'wasp_remap'
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
-    if not os.path.exists(os.path.join(outdir, 'sh',
-                                       '{}.sh'.format(wasp_remap_jobname))):
-        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
-                        threads=8, memory=10, tempdir=tempdir,
-                        queue=queue, conda_env=conda_env, modules=modules)
+    job = JobScript(
+        sample_name, 
+        job_suffix = 'wasp_remap',
+        os.path.join(outdir, 'wasp'),
+        threads=8, 
+        memory=10, 
+        tempdir=tempdir,
+        queue=queue, 
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=[wasp_allele_swap_jobname],
+    )
+    wasp_remap_jobname = job.jobname
         
-        with open(job.filename, "a") as f:
-            # Input files.
-            temp_r1 = job.add_input_file(wasp_r1_fastq)
-            temp_r2 = job.add_input_file(wasp_r2_fastq)
-            job.copy_input_files()
-
-            # Files that will be created.
-            remapped_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-            job.output_files_to_copy.append(remapped_bam)
-
-            # Files to copy to output directory.
-            job.output_files_to_copy += ['Log.out', 'Log.final.out',
-                                         'Log.progress.out', 'SJ.out.tab']
-
-            # Remap using STAR.
-            lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
-                                rgpu, star_index, threads=job.threads,
-                                genome_load=star_genome_load,
-                                transcriptome_align=False)
-            f.write(lines)
-            f.write('wait\n\n')
-        job.write_end()
-    if exists:
-        os.remove(fastqc_shell)
-    else:
-        submit_commands.append(job.sge_submit_comand())
+    remapped_bam, log_out, log_final_out, log_progress_out, sj_out
+    job.temp_files_to_delete.append(sj_out)
+    job.output_files_to_copy += [remapped_bam, log_out, log_final_out,
+                                 log_progress_out]
     
     ##### Job 11: WASP third step. #####
+    job = JobScript(
+        sample_name, 
+        job_suffix = 'wasp_alignment_compare',
+        outdir=os.path.join(outdir, 'wasp'),
+        threads=1, 
+        memory=4, 
+        tempdir=tempdir, 
+        queue=queue,
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=[wasp_remap_jobname],
+    )
     wasp_alignment_compare_jobname = '{}_{}'.format(sample_name,
-                                                    'wasp_alignment_compare')
-    job_holds[wasp_alignment_compare_jobname] = [wasp_remap_jobname]
-
-    job_suffix = 'wasp_alignment_compare'
-    job_suffix = 'fastqc'
-    fastqc_jobname = '{}_{}'.format(sample_name, job_suffix)
-    fastqc_shell = os.path.join(outdir, 'sh', '{}.sh'.format(fastqc_jobname))
-    exists = os.path.exists(fastqc_shell)
-    if exists:
-        fastqc_shell = tempfile.NamedTemporaryFile(delete=False).name
-
-    fn = os.path.join(outdir, 'sh',
-                      '{}.sh'.format(wasp_alignment_compare_jobname))
-    if not os.path.exists(fn):
-        job = JobScript(sample_name, job_suffix, os.path.join(outdir, 'wasp'),
-                        threads=1, memory=4, tempdir=tempdir, queue=queue,
-                        conda_env=conda_env, modules=modules)
         
-        with open(job.filename, "a") as f:
-            # Files that will be created.
-            temp_filtered_bam = os.path.join(
-                job.tempdir, '{}_filtered.bam'.format(sample_name))
-            job.temp_files_to_delete.append(temp_filtered_bam)
-            wasp_filtered_bam = os.path.join(
-                job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
-            job.output_files_to_copy.append(wasp_filtered_bam)
-            bam_index = wasp_filtered_bam + '.bai'
-            job.output_files_to_copy.append(bam_index)
-   
-            with open(job.filename, "a") as f:
-                # Run WASP alignment compare.
-                f.write('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} '
-                        '\\\n\t{}\n\n'.format(
-                            filter_remapped_reads_path, to_remap_bam,
-                            remapped_bam, temp_filtered_bam, to_remap_num))
-
-                # Coordinate sort and index.
-                lines = _picard_coord_sort(temp_filtered_bam, wasp_filtered_bam,
-                                           bam_index=bam_index,
-                                           picard_path=picard_path,
-                                           picard_memory=job.memory,
-                                           picard_tempdir=job.tempdir)
-
-                f.write(lines)
-                f.write('\nwait\n\n')
-                
-                # Count allele coverage.
-                counts = os.path.join(
-                    job.outdir, '{}_allele_counts.tsv'.format(sample_name))
-                f.write('java -jar {} \\\n'.format(gatk_path))
-                f.write('\t-R {} \\\n'.format(genome_fasta))
-                f.write('\t-T ASEReadCounter \\\n')
-                f.write('\t-o {} \\\n'.format(counts))
-                f.write('\t-I {} \\\n'.format(wasp_filtered_bam))
-                f.write('\t-sites {} \\\n'.format(vcf))
-                f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
-                f.write('\t-U ALLOW_N_CIGAR_READS \n')
-                f.write('\nwait\n\n')
-        job.write_end()
+    job.write_end()
     if exists:
         os.remove(fastqc_shell)
     else:

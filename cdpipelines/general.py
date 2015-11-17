@@ -104,7 +104,11 @@ class JobScript:
         self.output_files_to_copy = []
         self.temp_files_to_delete = []
         self.softlinks = []
+        # Whether to delete shell script after we create it.
+        self.delete_sh = False
+        # Set shell script file name.
         self._set_filename()
+        # Write shell/SGE header.
         self._write_header()
 
     def sge_submit_command(self):
@@ -116,13 +120,21 @@ class JobScript:
             return 'qsub {}'.format(self.filename)
 
     def _set_filename(self):
-        """Make SGE/shell script filename."""
+        """Make SGE/shell script filename. If a shell script already exists, the
+        current shell script will be stored as a temp file."""
         if shell_fn:
             self.filename = shell_fn
         else:
             _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
             self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
                                          '{}.sh'.format(self.jobname))
+        # If the shell script already exists we'll assume that the script is
+        # just being created to get the output filenames etc. so we'll write to
+        # a temp file.
+        if os.path.exists(self.filename):
+            import tempfile
+            self.filename = tempfile.NamedTemporaryFile(delete=False).name
+            self.delete_sh = True
     
     def _write_header(self):
         with open(self.filename, "a") as f:
@@ -229,6 +241,8 @@ class JobScript:
         self._delete_temp_files()
         self._delete_tempdir()
         self._make_softlinks()
+        if self.delete_sh:
+            os.remove(self.jobname)
 
     def picard_collect_rna_seq_metrics(
         self,
@@ -1258,6 +1272,185 @@ class JobScript:
         with open(job.filename, "a") as f:
             f.write(lines)
         return link
+
+    def wasp_allele_swap(
+        self,
+        bam, 
+        find_intersecting_snps_path, 
+        vcf, 
+        bed,
+        vcf_sample_name=None, 
+        threads=1,
+        samtools_path='samtools',
+    ):
+        """
+        Swap alleles for reads that overlap heterozygous variants.
+    
+        Parameters
+        ----------
+        bam : str
+            Path to input bam file.
+    
+        find_intersecting_snps_path : str
+            Path to find_intersecting_snps.py script.
+
+        vcf : str
+            VCF file containing exonic SNPs.
+
+        bed : str
+            Path to bed file defining regions to look for variants in.
+        
+        vcf_sample_name : str
+            Sample name of this sample in the VCF file (if different than
+            sample_name).
+
+        threads : int
+            Number of threads to request for PBS script.
+
+        Returns
+        -------
+        snp_directory : str
+            Path to WASP input SNP directory.
+
+        keep_bam : str
+            Path to WASP bam file of reads that do not overlap heterozygous
+            variants.
+
+        wasp_r1_fastq : str
+            Path to WASP fastq file of reads to remap.
+
+        wasp_r2_fastq : str
+            Path to WASP fastq file of reads to remap.
+
+        to_remap_bam : str
+            Path to WASP bam file of reads that need to be remapped.
+
+        to_remap_num
+            Path to WASP file that specifies how many realignments need to be
+            done per read pair.
+        """
+        if not vcf_sample_name:
+            vcf_sample_name = sample_name
+
+        # Files that will be created.
+        uniq_bam = os.path.join(
+            job.tempdir, '{}_uniq.bam'.format(sample_name))
+        
+        keep_bam = os.path.join(job.tempdir, '{}.keep.bam'.format(prefix))
+        wasp_r1_fastq = os.path.join(job.tempdir,
+                                     '{}.remap.fq1.gz'.format(prefix))
+        wasp_r2_fastq = os.path.join(job.tempdir,
+                                     '{}.remap.fq2.gz'.format(prefix))
+        to_remap_bam = os.path.join(job.tempdir,
+                                    '{}.to.remap.bam'.format(prefix))
+        to_remap_num = os.path.join(job.tempdir,
+                                    '{}.to.remap.num.gz'.format(prefix))
+
+        from __init__ import scripts
+        input_script = os.path.join(scripts, 'make_wasp_input.py')
+
+        # Run WASP to swap alleles.
+        snp_directory = os.path.join(job.tempdir, 'snps')
+        lines = ' \\\n\t'.join(
+            'python {}'.format(input_script),
+            vcf,
+            vcf_sample_name,
+            snp_directory,
+            bed,
+            '-b {}'.format(bcftools_path))
+        lines +- ('{} view -b -q 255 -F 1024 \\\n\t{} '
+                  '\\\n\t> {}\n\n'.format(
+                    samtools_path, bam, uniq_bam))
+        lines += 'wait\n\n'
+        lines += ('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
+            find_intersecting_snps_path, uniq_bam, snp_directory))
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
+                to_remap_bam, to_remap_num)
+
+    def wasp_alignment_compare(
+        to_remap_bam, 
+        remapped_bam, 
+        vcf,
+        fasta, 
+        filter_remapped_reads_path, 
+        picard_path='$picard',
+        picard_memory=12,
+    ):
+        """
+        Check original mapping position of reads against remapping after
+        swapping alleles using WASP, then count allele coverage for each
+        variant.
+    
+        Parameters
+        ----------
+        to_remap_bam : str
+            Bam file from find_intersecting_snps.py that has reads that will be
+            remapped (e.g. *.to.remap.bam).
+    
+        to_remap_num : str
+            Gzipped text file from find_intersecting_snps.py (e.g.
+            *.to.remap.num.gz).
+    
+        remapped_bam : str
+            Bam file with remapped reads.
+    
+        vcf : str
+            Path to VCF file with heterozygous SNVs.
+    
+        fasta : str
+            Path to fasta file used to align data.
+    
+        filter_remapped_reads_path : str
+            Path to filter_remapped_reads.py script.
+    
+        threads : int
+            Number of threads to request for SGE script.
+    
+        """
+        # Files that will be created.
+        temp_filtered_bam = os.path.join(
+            job.tempdir, '{}_filtered.bam'.format(sample_name))
+        wasp_filtered_bam = os.path.join(
+            job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
+        
+        # Run WASP alignment compare.
+        lines = ('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} '
+                 '\\\n\t{}\n\n'.format(
+                     filter_remapped_reads_path, to_remap_bam,
+                     remapped_bam, temp_filtered_bam, to_remap_num))
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        
+        # TODO: working here. I probably need to split this up a bit (and I
+        # think I should go back to the second wasp step and not have an
+        # explicit method for it). I need a little method for the thing above
+        # and the ASE counter below. Then in the pipeline I'll call these things
+        # in succession.
+
+        # Coordinate sort and index.
+        temp_filtered_bam, bam_index = job.picard_coord_sort(
+            temp_filtered_bam, 
+            wasp_filtered_bam,
+            bam_index=True,
+            picard_path=picard_path,
+            picard_memory=job.memory,
+            picard_tempdir=job.tempdir)
+
+        # Count allele coverage.
+        counts = os.path.join(
+            job.outdir, '{}_allele_counts.tsv'.format(sample_name))
+        f.write('java -jar {} \\\n'.format(gatk_path))
+        f.write('\t-R {} \\\n'.format(genome_fasta))
+        f.write('\t-T ASEReadCounter \\\n')
+        f.write('\t-o {} \\\n'.format(counts))
+        f.write('\t-I {} \\\n'.format(wasp_filtered_bam))
+        f.write('\t-sites {} \\\n'.format(vcf))
+        f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
+        f.write('\t-U ALLOW_N_CIGAR_READS \n')
+        f.write('\nwait\n\n')
+        with open(job.filename, "a") as f:
 
 def _wasp_snp_directory(vcf, directory, sample_name, regions,
                         bcftools_path='bcftools'):
