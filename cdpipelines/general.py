@@ -111,14 +111,6 @@ class JobScript:
         # Write shell/SGE header.
         self._write_header()
 
-    def sge_submit_command(self):
-        """Get command to submit script."""
-        if self.wait_for:
-            return 'qsub -hold_jid {} {}'.format(','.join(self.wait_for),
-                                                 self.filename)
-        else:
-            return 'qsub {}'.format(self.filename)
-
     def _set_filename(self):
         """Make SGE/shell script filename. If a shell script already exists, the
         current shell script will be stored as a temp file."""
@@ -158,6 +150,45 @@ class JobScript:
             if self.tempdir:
                 f.write('mkdir -p {}\n'.format(self.tempdir))
                 f.write('cd {}\n\n'.format(self.tempdir))
+
+    def _copy_output_files(self):
+        if (len(self.output_files_to_copy) > 0 and 
+            os.path.realpath(self.tempdir) != os.path.realpath(self.outdir)):
+            with open(self.filename, "a") as f:
+                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
+                    '\\\n\t'.join(self.output_files_to_copy),
+                    self.outdir))
+
+    def _delete_temp_files(self):
+        if len(self.temp_files_to_delete) > 0:
+            if (os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
+                or self.tempdir is None):
+                self.temp_files_to_delete = [
+                    x for x in self.temp_files_to_delete if x not in
+                    self.output_files_to_copy
+                ]
+            with open(self.filename, "a") as f:
+                f.write('rm -r \\\n\t{}\n\n'.format(
+                    ' \\\n\t'.join(self.temp_files_to_delete)))
+
+    def _delete_tempdir(self):
+        if self.tempdir and (os.path.realpath(self.tempdir) !=
+                             os.path.realpath(self.outdir)):
+            with open(self.filename, "a") as f:
+                f.write('rm -r {}\n'.format(self.tempdir))
+
+    def _make_softlinks(self):
+        with open(self.filename, "a") as f:
+            for p in self.softlinks:
+                f.write(_softlink(p[0], p[1]))
+
+    def sge_submit_command(self):
+        """Get command to submit script."""
+        if self.wait_for:
+            return 'qsub -hold_jid {} {}'.format(','.join(self.wait_for),
+                                                 self.filename)
+        else:
+            return 'qsub {}'.format(self.filename)
 
     def add_softlink(self, target, link):
         """Add a target, link pair to the JobScript instance so that a softlink
@@ -204,37 +235,6 @@ class JobScript:
             self.temp_files_to_delete += [
                 os.path.join(self.tempdir, os.path.split(x)[1]) for x in
                 self.input_files_to_copy]
-
-    def _copy_output_files(self):
-        if (len(self.output_files_to_copy) > 0 and 
-            os.path.realpath(self.tempdir) != os.path.realpath(self.outdir)):
-            with open(self.filename, "a") as f:
-                f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
-                    '\\\n\t'.join(self.output_files_to_copy),
-                    self.outdir))
-
-    def _delete_temp_files(self):
-        if len(self.temp_files_to_delete) > 0:
-            if (os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
-                or self.tempdir is None):
-                self.temp_files_to_delete = [
-                    x for x in self.temp_files_to_delete if x not in
-                    self.output_files_to_copy
-                ]
-            with open(self.filename, "a") as f:
-                f.write('rm -r \\\n\t{}\n\n'.format(
-                    ' \\\n\t'.join(self.temp_files_to_delete)))
-
-    def _delete_tempdir(self):
-        if self.tempdir and (os.path.realpath(self.tempdir) !=
-                             os.path.realpath(self.outdir)):
-            with open(self.filename, "a") as f:
-                f.write('rm -r {}\n'.format(self.tempdir))
-
-    def _make_softlinks(self):
-        with open(self.filename, "a") as f:
-            for p in self.softlinks:
-                f.write(_softlink(p[0], p[1]))
 
     def write_end(self):
         self._copy_output_files()
@@ -680,7 +680,8 @@ class JobScript:
         picard_path='$picard',
         picard_memory=2, 
         picard_tempdir='.',
-        bg=False):
+        bg=False,
+    ):
         """
         Collect bam index stats with Picard.
     
@@ -1282,6 +1283,9 @@ class JobScript:
             f.write(lines)
         return link
 
+    # TODO: Merge bed file here rather than rely on it being merged. Update
+    # RNA-seq pipeline to take regular exon bed file. This is needed for
+    # assigning variants to genes for ASE.
     def wasp_allele_swap(
         self,
         bam, 
@@ -1307,7 +1311,8 @@ class JobScript:
             VCF file containing exonic SNPs.
 
         bed : str
-            Path to bed file defining regions to look for variants in.
+            Path to bed file defining regions to look for variants in. This file
+            will be merged to make sure there are no overlapping regions.
         
         vcf_sample_name : str
             Sample name of this sample in the VCF file (if different than
@@ -1355,10 +1360,12 @@ class JobScript:
         to_remap_num = os.path.join(job.tempdir,
                                     '{}.to.remap.num.gz'.format(prefix))
 
-        from __init__ import scripts
-        input_script = os.path.join(scripts, 'make_wasp_input.py')
+        from __init__ import _scripts
+        input_script = os.path.join(_scripts, 'make_wasp_input.py')
 
-        # Run WASP to swap alleles.
+        # Merge bed file.
+
+        # Make SNP directory needed for WASP.
         snp_directory = os.path.join(job.tempdir, 'snps')
         lines = ' \\\n\t'.join(
             'python {}'.format(input_script),
@@ -1371,6 +1378,7 @@ class JobScript:
                   '\\\n\t> {}\n\n'.format(
                     samtools_path, bam, uniq_bam))
         lines += 'wait\n\n'
+        # Run WASP to swap alleles.
         lines += ('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
             find_intersecting_snps_path, uniq_bam, snp_directory))
         with open(job.filename, "a") as f:
@@ -1472,14 +1480,13 @@ class JobScript:
 
     def mbased(
         self,
-        infile, 
+        allele_counts, 
         feature_bed, 
         mbased_infile, 
         locus_outfile, 
         snv_outfile, 
         is_phased=False, 
         num_sim=1000000, 
-        threads=1, 
         vcf=None,
         vcf_sample_name=None, 
         mappability=None,
@@ -1491,7 +1498,7 @@ class JobScript:
     
         Parameters
         ----------
-        infile : str
+        allele_counts : str
             Output file from GATK's ASEReadCounter.
     
         feature_bed : str
@@ -1504,12 +1511,11 @@ class JobScript:
         num_sim : int
             Number of simulations for MBASED to perform.
     
-        threads : int
-            Number of threads for MBASED to use.
-        
         vcf : str
             Path to gzipped, indexed VCF file with all variant calls (not just
-            heterozygous calls).
+            heterozygous calls). This will be used to filter out heterozygous
+            variants that are near other heterzygous or homozygous alternate
+            variants that may cause mapping problems.
     
         vcf_sample_name : str
             If vcf is provided, this must be provided to specify the sample name
@@ -1534,7 +1540,7 @@ class JobScript:
             Path to file to store SNV-level results.
     
         """
-        from __init__ import scripts
+        from __init__ import _scripts
         mbased_infile = os.path.join(
             job.tempdir, '{}_mbased_input.tsv'.format(job.sample_name))
         locus_outfile = os.path.join(
@@ -1542,23 +1548,26 @@ class JobScript:
         snv_outfile = os.path.join(
             job.outdir, '{}_snv.tsv'.format(job.sample_name))
         is_phased = str(is_phased).upper()
-        script = os.path.join(scripts, 'make_mbased_input.py')
+        script = os.path.join(_scripts, 'make_mbased_input.py')
         lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
-            script, infile, mbased_infile, feature_bed)
+            script, allele_counts, mbased_infile, feature_bed)
         if vcf:
             lines += ' \\\n\t-v {} -s {}'.format(vcf, vcf_sample_name)
         if mappability:
             lines += ' \\\n\t-m {} -p {}'.format(mappability,
                                                  bigWigAverageOverBed_path)
         lines += '\n\n'
-        script = os.path.join(scripts, 'mbased.R')
+        script = os.path.join(_scripts, 'mbased.R')
         lines += 'Rscript '
-        lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile, snv_outfile,
-                                 job.sample_name, is_phased, str(num_sim),
-                                 str(threads)])
-        lines += '\n'
-        return lines
+        lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile,
+                                 snv_outfile, job.sample_name, is_phased,
+                                 str(num_sim), str(job.threads)])
+        lines += '\n\n'
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return mbased_infile, locus_outfile, snv_outfile
 
+# TODO: merge bed file here using pybedtools
 def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
                         fai=None, bcftools_path='bcftools'):
     """
@@ -1593,7 +1602,14 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
 
     """
     import glob
-    # First we extract all heterozygous variants for this sample.
+    import pybedtools as pbt
+    from __init__ import _scripts
+    
+    # Collapse bed file.
+    bt = pbt.BedTool(regions)
+    bt = bt.merge()
+
+    # Extract all heterozygous variants for this sample.
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -1601,7 +1617,7 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
          '| {} view -g het \\\n\t| tee {} \\\n\t| grep -v ^\\# \\\n\t'
          '| cut -f1,2,4,5 \\\n\t| '
          'awk \'{{print $2"\\t"$3"\\t"$4 >> ("{}/"$1".snps.txt")}}\''.format(
-             bcftools_path, regions, vcf_sample_name, vcf, bcftools_path,
+             bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path,
              vcf_out, directory))
     subprocess.check_call(c, shell=True)
 
@@ -1616,8 +1632,10 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
         c = 'grep -v ^\\# {} > {}_hets_no_header.vcf'.format(vcf_out,
                                                              vcf_sample_name)
         subprocess.check_call(c, shell=True)
-        c = '{} {}_hets_no_header.vcf {} > {}_hets_sorted_no_header.vcf'.format(
-            vcf_sample_name, sortByRef_path, fai, vcf_sample_name)
+        sortByRef_path = os.path.join(_scripts, 'SortByRef.pl')
+        c = ('perl {} {}_hets_no_header.vcf {} > '
+             '{}_hets_sorted_no_header.vcf'.format(
+            vcf_sample_name, sortByRef_path, fai, vcf_sample_name))
         subprocess.check_call(c, shell=True)
         c = ('cat <(grep \\# {}) {}_hets_sorted_no_header.vcf > '
              'hets_sorted.vcf'.format(vcf_out, vcf_sample_name))
@@ -1707,8 +1725,8 @@ def wasp_allele_swap(
     ]
     job.output_files_to_copy += fns
 
-    from __init__ import scripts
-    input_script = os.path.join(scripts, 'make_wasp_input.py')
+    from __init__ import _scripts
+    input_script = os.path.join(_scripts, 'make_wasp_input.py')
 
     # Run WASP to swap alleles.
     with open(job.filename, "a") as f:

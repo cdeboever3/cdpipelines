@@ -748,7 +748,8 @@ def pipeline(
     job.output_files_to_copy += [genes, isoforms, stats]
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
-    
+   
+    if vcf:
     ##### Job 9: WASP first step. #####
     job = JobScript(
         sample_name, 
@@ -870,6 +871,24 @@ def pipeline(
         conda_env=conda_env, 
         modules=modules)
     mbased_jobname = job.jobname
+
+    mbased_infile, locus_outfile, snv_outfile = mbased(
+        self,
+        allele_counts, 
+        feature_bed, 
+        mbased_infile, 
+        locus_outfile, 
+        snv_outfile, 
+        is_phased=False, 
+        num_sim=1000000, 
+        threads=1, 
+        vcf=None,
+        vcf_sample_name=None, 
+        mappability=None,
+        bigWigAverageOverBed_path='bigWigAverageOverBed',
+    ):
+
+
         with open(job.filename, "a") as f:
             lines = _mbased(wasp_filtered_bam, gene_gtf, mbased_infile,
                             locus_outfile, snv_outfile, sample_name,
