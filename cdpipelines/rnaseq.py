@@ -54,11 +54,9 @@ class RNAJobScript(JobScript):
             only if transcriptome_align == True.
     
         """
-        # I use threads - 2 for STAR so there are open processors for reading
-        # and writing. 
         lines = (' \\\n\t'.join([
             star_path, 
-            '--runThreadN {}'.format(threads - 2),
+            '--runThreadN {}'.format(threads),
             '--genomeDir {}'.format(star_index), 
             '--genomeLoad {}'.format(genome_load),
             '--readFilesCommand zcat',
@@ -291,6 +289,7 @@ class RNAJobScript(JobScript):
         strand=None,
         scale=None,
         bedtools_path='bedtools',
+        sambamba_path='sambamba',
     ):
         """
         Make lines that create a coverage bedgraph file.
@@ -310,6 +309,9 @@ class RNAJobScript(JobScript):
             If '+' or '-', calculate strand-specific coverage. Otherwise,
             calculate coverage using all reads.
     
+        scale : float
+            Scale the bigwig by this amount.
+
         bedtools_path : str
             Path to bedtools. If bedtools_path == 'bedtools', it is assumed that
             the hg19 human.hg19.genome file from bedtools is also in your path.
@@ -320,18 +322,11 @@ class RNAJobScript(JobScript):
             Path to output bedgraph file.
     
         """
-        # TODO: I need to implement filtering with sambamba to get the reads
-        # from + or - genes: 
-        # f1r2 = minus strand = mate reverse strand, first in pair
-        # f2r1 = plus strand
-        # Then I need to update the bigwig fnc and the calls to these fnc. Then
-        # I need to take care of tracklines.
-
         fn_root = self.sample_name
         if strand:
             fn_root += '_{}'.format(strand)
         if scale:
-            fn_root += '_{}'.format(scale)
+            fn_root += '_scaled'.format(scale)
         bedgraph = os.path.join(self.tempdir, '{}.bg'.format(fn_root))
 
         if bedtools_path == 'bedtools':
@@ -342,44 +337,34 @@ class RNAJobScript(JobScript):
                 'human.hg19.genome')
 
         if strand == '+':
-            # TODO: figure out how genomecov accepts piped input
-            lines = ('{} filter -u(?) TODO | {} genomecov -g {} -split -bg '
-                     '-trackline -trackopts \'name="{}"\' > {}\n\n'.format(
-                         sambamba_path, bedtools_path, genome_file, fn_root))
+            lines = (
+                '{} view -f bam -F (first_of_pair and mate_is_reverse_strand) '
+                'or (second_of_pair and reverse_strand) {} | {} genomecov '
+                '-ibam stdin -g {} -split -bg -trackline -trackopts '
+                '\'name="{}"\' '.format(
+                    sambamba_path, bam, bedtools_path, genome_file, fn_root))
+        if strand == '-':
+            lines = (
+                '{} view -f bam -F (second_of_pair and mate_is_reverse_strand) '
+                'or (first_of_pair and reverse_strand) {} \\\n | {} genomecov '
+                '-ibam stdin -g {} -split -bg -trackline -trackopts '
+                '\'name="{}"\' '.format(
+                    sambamba_path, bam, bedtools_path, genome_file, fn_root))
+        if scale:
+            lines += ' -scale {}'.format(scale)
+        
+        lines += ' > {}\n\n'.format( bedgraph)
 
-        if strand == '+' or strand == '-':
-            if strand == '+':
-                name = '{}_plus'.format(self.sample_name)
-                bedgraph = '{}_plus.bg'.format(os.path.splitext(bedgraph)[0])
-            else:
-                name = '{}_minus'.format(self.sample_name)
-                bedgraph = '{}_minus.bg'.format(os.path.splitext(bedgraph)[0])
-            lines = ' \\\n\t'.join([
-                '{} genomecov -ibam'.format(bedtools_path),
-                '{}'.format(bam),
-                '-g hg19.genome -split -bg ',
-                '-strand {} -trackline'.format(strand),
-                '-trackopts \'name="{}"\''.format(name),
-                '> {} &\n\n'.format(bedgraph)])
-        else:
-            name = job.sample_name
-            lines = ' \\\n\t'.join([
-                '{} genomecov -ibam'.format(bedtools_path),
-                '{}'.format(bam),
-                '-g hg19.genome -split -bg ',
-                '-trackline'.format(strand),
-                '-trackopts \'name="{}"\''.format(name),
-                '> {} &\n\n'.format(bedgraph)])
         with open(job.filename, "a") as f:
             f.write(lines)
         return bedgraph
     
-    def bigwig_from_bam(
+    def bigwig_from_bedgraph(
         self,
-        bam,
+        bedgraph,
         strand=None,
         scale=None,
-        bedgraph_to_bigwig_path='bedGraphToBigWig',
+        bedGraphToBigWig_path='bedGraphToBigWig',
         bedtools_path='bedtools',
     ):
         """
@@ -387,40 +372,49 @@ class RNAJobScript(JobScript):
     
         Parameters
         ----------
-        bam : str
-            Path to bam file to create bigwigs for.
+        bedgraph : str
+            Path to bedgraph file to create bigwig for.
+        
+        strand : str
+            If '+' or '-', add this information to trackline.
     
+        scale : float
+            Add note to trackline that data is scaled.
+
+        bedGraphToBigWig_path : str
+            Path to bedGraphToBigWig executable.
+
+        bedtools_path : str
+            Path to bedtools. If bedtools_path == 'bedtools', it is assumed that
+            the hg19 human.hg19.genome file from bedtools is also in your path.
+
         Returns
         -------
         bigwig : str
             Path to output bigwig file.
     
         """
-        bg = job.bedgraph_from_bam(bam, strand=strand, scale=scale,
-                                   bedtools_path=bedtools_path)
-
-        if out_bigwig_minus != '':
-            lines += _coverage_bedgraph(bam, 'plus.bg', sample_name,
-                                        strand='+')
-            lines += _coverage_bedgraph(bam, 'minus.bg', sample_name,
-                                        strand='-')
-            lines += ('wait\n\n')
-            lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
-            lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
-                                          
-            lines += ('\nwait\n\n')
-            lines += ('rm plus.bg minus.bg\n\n')
-        
+        if bedtools_path == 'bedtools':
+            genome_file = 'human.hg19.genome'
         else:
-            lines = _coverage_bedgraph(bam, 'both.bg', sample_name)
-            lines += ('wait\n\n')
-            lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
-            lines += ('wait\n\n')
-            lines += ('rm both.bg\n\n')
+            genome_file = os.path.join(
+                os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+                'human.hg19.genome')
+        root = os.path.splitext(os.path.split(bedgraph)[1])[0]
+        bigwig = os.path.join(self.tempdir, '{}.bw'.format(root))
+        lines = '{} {} {} {}\n\n'.format(bedGraphToBigWig_path, bedgraph,
+                                     genome_file, bigwig)
+        # TODO: add web_available and write_to_outdir options. Write trackline
+        # to links_tracklines file.
+    # with open(tracklines_file, "a") as tf:
+    #     tf_lines = ('track type=bigWig name="{}_rna_cov" '
+    #                 'description="RNAseq coverage for {}" '
+    #                 'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
+    #                     sample_name, sample_name, webpath, name))
+    #     tf.write(tf_lines)
         with open(job.filename, "a") as f:
             f.write(lines)
-            if out_bigwig_minus:
-                return  
+        return bigwig
         
 def pipeline(
     r1_fastqs, 
@@ -454,9 +448,10 @@ def pipeline(
     star_path='STAR',
     picard_path='$picard',
     bedtools_path='bedtools',
-    bedgraph_to_bigwig_path='bedGraphToBigWig',
+    bedGraphToBigWig_path='bedGraphToBigWig',
     fastqc_path='fastqc',
     samtools_path='samtools',
+    sambamba_path='sambamba',
     rsem_calculate_expression_path='rsem-calculate-expression',
     gatk_path='$GATK',
     bigWigAverageOverBed_path='bigWigAverageOverBed',
@@ -561,7 +556,7 @@ def pipeline(
     bedtools_path : str
         Path to bedtools.
 
-    bedgraph_to_bigwig_path : str
+    bedGraphToBigWig_path : str
         Path bedGraphToBigWig executable.
 
     Returns
@@ -774,7 +769,7 @@ def pipeline(
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
        
-    ##### Job 6: Make bigwig for final bam file. #####
+    ##### Job 6: Make bigwig files for final bam file. #####
     job_suffix = 'bigwig'
     bigwig_jobname = '{}_{}'.format(sample_name, job_suffix)
     bigwig_shell = os.path.join(outdir, 'sh', '{}.sh'.format(bigwig_jobname))
@@ -796,24 +791,103 @@ def pipeline(
         modules=modules,
         wait_for=[sort_mdup_index_jobname])
         
-    # Make bigwig file for displaying coverage.
-    out_bigwig = os.path.join(job.tempdir, '{}_rnaseq.bw'.format(sample_name))
-    # TODO: working here 
-    out_bigwig = job.bigwig_files(
-        mdup_bam, out_bigwig, sample_name, 
-        bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
-        bedtools_path=bedtools_path)
-    job.output_files_to_copy.append(out_bigwig)
-    # name = os.path.split(out_bigwig)[1]
-    # job.add_softlink(os.path.join(job.outdir, name), 
-    #                  os.path.join(link_dir, 'bw', name))
+    # First make bigwig from both strands.
+    bg = bedgraph_from_bam(
+        mdup_bam, 
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.temp_files_to_delete.append(bg)
+    bw = job.bigwig_from_bedgraph(
+        bg,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.output_files_to_copy.append(bw)
 
-    # with open(tracklines_file, "a") as tf:
-    #     tf_lines = ('track type=bigWig name="{}_rna_cov" '
-    #                 'description="RNAseq coverage for {}" '
-    #                 'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
-    #                     sample_name, sample_name, webpath, name))
-    #     tf.write(tf_lines)
+    # Now for genes on the plus strand.
+    plus_bg = bedgraph_from_bam(
+        mdup_bam, 
+        strand='+',
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.temp_files_to_delete.append(plus_bg)
+    plus_bw = job.bigwig_from_bedgraph(
+        bg,
+        strand='+',
+        scale=None,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.output_files_to_copy.append(plus_bw)
+
+    # Now for genes on the minus strand.
+    minus_bg = bedgraph_from_bam(
+        mdup_bam, 
+        strand='-',
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.temp_files_to_delete.append(minus_bg)
+    minus_bw = job.bigwig_from_bedgraph(
+        bg,
+        strand='-',
+        scale=None,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.output_files_to_copy.append(minus_bw)
+
+    # Now we'll make scaled versions.
+    # # TODO: working here
+    # # Both strands.
+    # bg = bedgraph_from_bam(
+    #     mdup_bam, 
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.temp_files_to_delete.append(bg)
+    # bw = job.bigwig_from_bedgraph(
+    #     bg,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # job.output_files_to_copy.append(bw)
+
+    # # Now for genes on the plus strand.
+    # plus_bg = bedgraph_from_bam(
+    #     mdup_bam, 
+    #     strand='+',
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.temp_files_to_delete.append(plus_bg)
+    # plus_bw = job.bigwig_from_bedgraph(
+    #     bg,
+    #     strand='+',
+    #     scale=None,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # job.output_files_to_copy.append(plus_bw)
+
+    # # Now for genes on the minus strand.
+    # minus_bg = bedgraph_from_bam(
+    #     mdup_bam, 
+    #     strand='-',
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.temp_files_to_delete.append(minus_bg)
+    # minus_bw = job.bigwig_from_bedgraph(
+    #     bg,
+    #     strand='-',
+    #     scale=None,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # job.output_files_to_copy.append(minus_bw)
 
     job.write_end()
     submit_commands.append(job.sge_submit_comand())

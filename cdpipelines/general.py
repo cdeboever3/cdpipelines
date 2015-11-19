@@ -102,6 +102,9 @@ class JobScript:
         # Directory to make softlinks in.
         _make_dir(linkdir)
         self.linkdir = linkdir
+        # Path on the web where output files linked to self.linkdir will be
+        # available.
+        self.webpath = webpath
         # Queue to request for job from SGE.
         self.queue = queue
         # Anaconda Python environment to load at the beginning of the shell
@@ -1159,6 +1162,8 @@ class JobScript:
         fastqs, 
         outdir, 
         threads=1,
+        web_available=True,
+        write_to_outdir=False,
         fastqc_path='fastqc',
     ):
         """
@@ -1175,6 +1180,13 @@ class JobScript:
     
         threads : int
             Number of threads to run FastQC with.
+
+        web_available : bool
+            If True, write URL to self.links_tracklines, make softlink to
+            self.linkdir, and set write_to_outdir = True.
+
+        write_to_outdir : bool
+            If True, write output files directly to self.outdir.
     
         fastqc_path : str
             Path to FastQC.
@@ -1188,26 +1200,32 @@ class JobScript:
             List of paths to the zip files for all input fastq files.
     
         """
+        if write_to_outdir or web_available:
+            dy = self.outdir
+        else:
+            dy = self.tempdir
         fastqc_html = []
         fastqc_zip = []
         for fq in fastqs:
             fastqc_html.append(
-                os.path.join(self.tempdir, '{}_fastqc.html'.format(
+                os.path.join(dy, '{}_fastqc.html'.format(
                     '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
             fastqc_zip.append(
-                os.path.join(self.tempdir, '{}_fastqc.zip'.format(
+                os.path.join(dy, '{}_fastqc.zip'.format(
                     '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
         fastqs = ' \\\n\t'.join(fastqs)
 
         lines = ('{} --outdir {} --nogroup --threads {} \\\n'
-                 '\t{}\n'.format(fastqc_path, self.tempdir, threads, fastqs))
+                 '\t{}\n'.format(fastqc_path, dy, threads, fastqs))
         
         with open(job.filename, "a") as f:
             f.write(lines)
 
-        if self.linkdir:
-            for html in fastqc_html:
-                link = self.add_softlink(html)
+        if web_available:
+            if self.linkdir:
+                for html in fastqc_html:
+                    link = self.add_softlink(html)
+        #TODO: Write URL to links_tracklines file.
 
         return fastqc_html, fastqc_zip
     
