@@ -310,16 +310,16 @@ class RNAJobScript(JobScript):
             If '+' or '-', calculate strand-specific coverage. Otherwise,
             calculate coverage using all reads.
     
+        bedtools_path : str
+            Path to bedtools. If bedtools_path == 'bedtools', it is assumed that
+            the hg19 human.hg19.genome file from bedtools is also in your path.
+
         Returns
         -------
         bedgraph : str
             Path to output bedgraph file.
     
         """
-        bedgraph = os.path.join(
-            self.tempdir,
-            '{}.bg'.format(os.path.splitext(os.path.split(bam)[1])[0]))
-
         # TODO: I need to implement filtering with sambamba to get the reads
         # from + or - genes: 
         # f1r2 = minus strand = mate reverse strand, first in pair
@@ -327,7 +327,26 @@ class RNAJobScript(JobScript):
         # Then I need to update the bigwig fnc and the calls to these fnc. Then
         # I need to take care of tracklines.
 
-        f2r1 = plus strand
+        fn_root = self.sample_name
+        if strand:
+            fn_root += '_{}'.format(strand)
+        if scale:
+            fn_root += '_{}'.format(scale)
+        bedgraph = os.path.join(self.tempdir, '{}.bg'.format(fn_root))
+
+        if bedtools_path == 'bedtools':
+            genome_file = 'human.hg19.genome'
+        else:
+            genome_file = os.path.join(
+                os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+                'human.hg19.genome')
+
+        if strand == '+':
+            # TODO: figure out how genomecov accepts piped input
+            lines = ('{} filter -u(?) TODO | {} genomecov -g {} -split -bg '
+                     '-trackline -trackopts \'name="{}"\' > {}\n\n'.format(
+                         sambamba_path, bedtools_path, genome_file, fn_root))
+
         if strand == '+' or strand == '-':
             if strand == '+':
                 name = '{}_plus'.format(self.sample_name)
