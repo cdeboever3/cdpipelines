@@ -285,7 +285,124 @@ class RNAJobScript(JobScript):
             f.write(line)
         return counts_file, stats_file
 
-#TODO: I'd like to make the ASE parts optional if a vcf is not provided.
+    def bedgraph_from_bam(
+        self,
+        bam, 
+        strand=None,
+        scale=None,
+        bedtools_path='bedtools',
+    ):
+        """
+        Make lines that create a coverage bedgraph file.
+    
+        Parameters
+        ----------
+        bam : str
+            Bam file to calculate coverage for.
+    
+        bedtools_path : str
+            Path to bedtools.
+    
+        sample_name : str
+            Sample name for naming files etc.
+    
+        strand : str
+            If '+' or '-', calculate strand-specific coverage. Otherwise,
+            calculate coverage using all reads.
+    
+        Returns
+        -------
+        bedgraph : str
+            Path to output bedgraph file.
+    
+        """
+        bedgraph = os.path.join(
+            self.tempdir,
+            '{}.bg'.format(os.path.splitext(os.path.split(bam)[1])[0]))
+
+        # TODO: I need to implement filtering with sambamba to get the reads
+        # from + or - genes: 
+        # f1r2 = minus strand = mate reverse strand, first in pair
+        # f2r1 = plus strand
+        # Then I need to update the bigwig fnc and the calls to these fnc. Then
+        # I need to take care of tracklines.
+
+        f2r1 = plus strand
+        if strand == '+' or strand == '-':
+            if strand == '+':
+                name = '{}_plus'.format(self.sample_name)
+                bedgraph = '{}_plus.bg'.format(os.path.splitext(bedgraph)[0])
+            else:
+                name = '{}_minus'.format(self.sample_name)
+                bedgraph = '{}_minus.bg'.format(os.path.splitext(bedgraph)[0])
+            lines = ' \\\n\t'.join([
+                '{} genomecov -ibam'.format(bedtools_path),
+                '{}'.format(bam),
+                '-g hg19.genome -split -bg ',
+                '-strand {} -trackline'.format(strand),
+                '-trackopts \'name="{}"\''.format(name),
+                '> {} &\n\n'.format(bedgraph)])
+        else:
+            name = job.sample_name
+            lines = ' \\\n\t'.join([
+                '{} genomecov -ibam'.format(bedtools_path),
+                '{}'.format(bam),
+                '-g hg19.genome -split -bg ',
+                '-trackline'.format(strand),
+                '-trackopts \'name="{}"\''.format(name),
+                '> {} &\n\n'.format(bedgraph)])
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return bedgraph
+    
+    def bigwig_from_bam(
+        self,
+        bam,
+        strand=None,
+        scale=None,
+        bedgraph_to_bigwig_path='bedGraphToBigWig',
+        bedtools_path='bedtools',
+    ):
+        """
+        Make bigwig coverage file from bam file.
+    
+        Parameters
+        ----------
+        bam : str
+            Path to bam file to create bigwigs for.
+    
+        Returns
+        -------
+        bigwig : str
+            Path to output bigwig file.
+    
+        """
+        bg = job.bedgraph_from_bam(bam, strand=strand, scale=scale,
+                                   bedtools_path=bedtools_path)
+
+        if out_bigwig_minus != '':
+            lines += _coverage_bedgraph(bam, 'plus.bg', sample_name,
+                                        strand='+')
+            lines += _coverage_bedgraph(bam, 'minus.bg', sample_name,
+                                        strand='-')
+            lines += ('wait\n\n')
+            lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
+            lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
+                                          
+            lines += ('\nwait\n\n')
+            lines += ('rm plus.bg minus.bg\n\n')
+        
+        else:
+            lines = _coverage_bedgraph(bam, 'both.bg', sample_name)
+            lines += ('wait\n\n')
+            lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
+            lines += ('wait\n\n')
+            lines += ('rm both.bg\n\n')
+        with open(job.filename, "a") as f:
+            f.write(lines)
+            if out_bigwig_minus:
+                return  
+        
 def pipeline(
     r1_fastqs, 
     r2_fastqs, 
@@ -301,8 +418,8 @@ def pipeline(
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
     genome_fasta,
-    web_link_dir=None,
-    web_path_file=None,
+    linkdir=None,
+    webpath_file=None,
     vcf=None,
     vcf_sample_name=None,
     is_phased=False,
@@ -374,19 +491,20 @@ def pipeline(
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py from WASP.
 
-    web_link_dir : str
-        Path to directory where softlinks for genome browser/web should be made.
+    linkdir : str
+        Path to directory where softlinks should be made. Some pipeline parts
+        may make softlinks output files here for display on the web.
 
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
+    webpath_file : str
+        File whose first line is the URL that points to linkdir. For example,
+        if we make a link to the file s1_coord_sorted.bam in linkdir and
+        webpath_file has http://site.com/files on its first line, then
         http://site.com/files/s1_coord_sorted.bam should be available on the
         web. If the web directory is password protected (it probably should be),
         then the URL should look like http://username:password@site.com/files.
         This is a file so you don't have to make the username/password combo
         public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
+        just put the webpath_file in a directory that isn't tracked by git, 
         figshare, etc.
 
     vcf : str
@@ -433,9 +551,8 @@ def pipeline(
         Path to shell script.
 
     """
-    with open(web_path_file) as wpf:
-        web_path = wpf.readline().strip()
-    tracklines_file = os.path.join(outdir, 'tracklines.txt')
+    with open(webpath_file) as wpf:
+        webpath = wpf.readline().strip()
 
     # Bash commands to submit jobs. I'll collect these as I make the jobs and
     # then write them to a file at the end.
@@ -448,6 +565,8 @@ def pipeline(
         outdir=os.path.join(outdir, 'alignment'), 
         threads=8, 
         memory=32,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -479,6 +598,8 @@ def pipeline(
         shell_fn=fastqc_shell,
         threads=1, 
         memory=4,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -488,27 +609,12 @@ def pipeline(
     fastqc_jobname = job.jobname
         
     # Run fastQC.
-    fastqc_dy = job.fastqc([combined_r1, combined_r2], job.outdir, job.threads,
-                            fastqc_path)
+    fastqc_html, fastqc_zip = job.fastqc([combined_r1, combined_r2], job.outdir,
+                                         job.threads, fastqc_path)
+    job.output_files_to_copy += [fastqc_html, fastqc_zip]
     # We can delete the combined fastq files now.
     job.temp_files_to_delete.append(combined_r1)
     job.temp_files_to_delete.append(combined_r2)
-    # TODO: I need to return something reasonable from _fastqc and then use it
-    # below to make softlinks and trackline stuff. I still need to change the
-    # tracklines behavior to just make files in the sample's output directory.
-    ## r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-    ## job.add_softlink(os.path.join(job.outdir, r1), 
-    ##                  os.path.join(link_dir, 'fastqc', r1))
-    ## r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-    ## job.add_softlink(os.path.join(job.outdir, r2), 
-    ##                  os.path.join(link_dir, 'fastqc', r2))
-    ## with open(tracklines_file, "a") as tf:
-    ##     tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-    ##         web_path, r1))
-    ##     tf.write(tf_lines)
-    ##     tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-    ##         web_path, r2))
-    ##     tf.write(tf_lines)
         
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
@@ -520,6 +626,8 @@ def pipeline(
         outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=4,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -545,6 +653,8 @@ def pipeline(
         picard_tempdir=job.tempdir)
     job.output_files_to_copy.append(mdup_bam)
     job.output_files_to_copy.append(duplicate_metrics)
+    link = job.add_softlink(mdup_bam)
+    # TODO: Add trackline.
     ## name = os.path.split(mdup_bam)[1]
     ## job.add_softlink(os.path.join(job.outdir, name), 
     ##                  os.path.join(link_dir, 'bam', name))
@@ -552,7 +662,7 @@ def pipeline(
     ##     tf_lines = ('track type=bam name="{}_rna_bam" '
     ##                 'description="RNAseq for {}" '
     ##                 'bigDataUrl={}/bam/{}\n'.format(
-    ##                     sample_name, sample_name, web_path, name))
+    ##                     sample_name, sample_name, webpath, name))
     ##     tf.write(tf_lines)
 
     # Index bam file.
@@ -564,9 +674,7 @@ def pipeline(
         picard_tempdir=job.tempdir, 
         bg=False)
     job.output_files_to_copy.append(bam_index)
-    ## name = os.path.split(bam_index)[1]
-    ## job.add_softlink(os.path.join(job.outdir, name), 
-    ##                  os.path.join(link_dir, 'bam', name))
+    link = job.add_softlink(bam_index)
 
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
@@ -579,6 +687,8 @@ def pipeline(
         os.path.join(outdir, 'qc'),
         threads=1, 
         memory=4, 
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue,
         conda_env=conda_env, 
@@ -628,6 +738,8 @@ def pipeline(
         outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=1,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -657,6 +769,8 @@ def pipeline(
         os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=4,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -679,7 +793,7 @@ def pipeline(
     #     tf_lines = ('track type=bigWig name="{}_rna_cov" '
     #                 'description="RNAseq coverage for {}" '
     #                 'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
-    #                     sample_name, sample_name, web_path, name))
+    #                     sample_name, sample_name, webpath, name))
     #     tf.write(tf_lines)
 
     job.write_end()
@@ -692,6 +806,8 @@ def pipeline(
         outdir=os.path.join(outdir, 'counts'), 
         threads=1, 
         memory=4,
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, 
         queue=queue, 
         conda_env=conda_env,
@@ -728,6 +844,8 @@ def pipeline(
         outdir=os.path.join(outdir, 'rsem'),
         threads=8, 
         memory=4, 
+        linkdir=linkdir,
+        webpath=webpath,
         tempdir=tempdir, queue=queue,
         conda_env=conda_env, 
         modules=modules,
@@ -749,158 +867,154 @@ def pipeline(
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
    
+    # We'll only go through the ASE steps if a VCF was provided.
     if vcf:
-    ##### Job 9: WASP first step. #####
-    job = JobScript(
-        sample_name, 
-        job_suffix = 'wasp_allele_swap',
-        outdir=os.path.join(outdir, 'wasp'),
-        threads=1, 
-        memory=4, 
-        tempdir=tempdir, 
-        queue=queue,
-        conda_env=conda_env, 
-        modules=modules,
-        wait_for=[sort_mdup_index_jobname],
-    )
-    wasp_allele_swap_jobname = job.jobname
-       
-    # Run WASP allele swap.
-    if not vcf_sample_name:
-        vcf_sample_name = sample_name
-    (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq, to_remap_bam,
-     to_remap_num) = job.wasp_allele_swap(
-        mdup_bam, 
-        find_intersecting_snps_path, 
-        vcf, 
-        exon_bed,
-        vcf_sample_name=vcf_sample_name, 
-        threads=1,
-        samtools_path='samtools',
-    )
-    # WASP outputs a file (keep_bam) that has reads that don't overlap variants.
-    # I'm going to discard that file.
-    job.temp_files_to_delete.append(keep_bam)
-    job.output_files_to_copy += [snp_directory, wasp_r1_fastq, wasp_r2_fastq,
-                                 to_remap_bam, to_remap_num]
+        ##### Job 9: WASP first step. #####
+        job = JobScript(
+            sample_name, 
+            job_suffix = 'wasp_allele_swap',
+            outdir=os.path.join(outdir, 'wasp'),
+            threads=1, 
+            memory=4, 
+            linkdir=linkdir,
+            webpath=webpath,
+            tempdir=tempdir, 
+            queue=queue,
+            conda_env=conda_env, 
+            modules=modules,
+            wait_for=[sort_mdup_index_jobname],
+        )
+        wasp_allele_swap_jobname = job.jobname
+           
+        # Run WASP allele swap.
+        if not vcf_sample_name:
+            vcf_sample_name = sample_name
+        (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq, to_remap_bam,
+         to_remap_num) = job.wasp_allele_swap(
+            mdup_bam, 
+            find_intersecting_snps_path, 
+            vcf, 
+            exon_bed,
+            vcf_sample_name=vcf_sample_name, 
+            threads=1,
+            samtools_path='samtools',
+        )
+        # WASP outputs a file (keep_bam) that has reads that don't overlap
+        # variants.  I'm going to discard that file.
+        job.temp_files_to_delete.append(keep_bam)
+        job.output_files_to_copy += [snp_directory, wasp_r1_fastq,
+                                     wasp_r2_fastq, to_remap_bam, to_remap_num]
 
-    job.write_end()
-    submit_commands.append(job.sge_submit_comand())
-    
-    ##### Job 10: WASP second step. #####
-    job = JobScript(
-        sample_name, 
-        job_suffix = 'wasp_remap',
-        os.path.join(outdir, 'wasp'),
-        threads=8, 
-        memory=10, 
-        tempdir=tempdir,
-        queue=queue, 
-        conda_env=conda_env, 
-        modules=modules,
-        wait_for=[wasp_allele_swap_jobname],
-    )
-    wasp_remap_jobname = job.jobname
-    
-    # Realign allele-swapped fastqs.
-    (remapped_bam, log_out, log_final_out, log_progress_out, sj_out, 
-     transcriptome_bam) = \
-            job.star_align(wasp_r1_fastq, wasp_r2_fastq, rgpl, rgpu, star_index,
-                           job.threads, genome_load=star_genome_load,
-                           transcriptome_align=False)
-    job.output_files_to_copy += [remapped_bam, log_out, log_final_out,
-                                 log_progress_out]
-    job.temp_files_to_delete += [sj_out, wasp_r1_fastq, wasp_r2_fastq]
-
-    job.write_end()
-    submit_commands.append(job.sge_submit_comand())
-    
-    ##### Job 11: WASP third step. #####
-    job = JobScript(
-        sample_name, 
-        job_suffix = 'wasp_alignment_compare',
-        outdir=os.path.join(outdir, 'wasp'),
-        threads=1, 
-        memory=4, 
-        tempdir=tempdir, 
-        queue=queue,
-        conda_env=conda_env, 
-        modules=modules,
-        wait_for=[wasp_remap_jobname],
-    )
-    wasp_alignment_compare_jobname = job.jobname
-
-    # Compare alignments.
-    temp_filtered_bam = job.wasp_alignment_compare(
-        to_remap_bam, 
-        to_remap_num,
-        remapped_bam, 
-        filter_remapped_reads_path,
-    )
-    job.temp_files_to_delete += [temp_filtered_bam, to_remap_bam, to_remap_num]
+        job.write_end()
+        submit_commands.append(job.sge_submit_comand())
         
-    # Coordinate sort and index filtered bam file.
-    wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
-        temp_filtered_bam, 
-        bam_index=True,
-        picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir)
-    job.output_files_to_copy += [wasp_filtered_bam, wasp_bam_index]
+        ##### Job 10: WASP second step. #####
+        job = JobScript(
+            sample_name, 
+            job_suffix = 'wasp_remap',
+            os.path.join(outdir, 'wasp'),
+            threads=8, 
+            memory=10, 
+            linkdir=linkdir,
+            webpath=webpath,
+            tempdir=tempdir,
+            queue=queue, 
+            conda_env=conda_env, 
+            modules=modules,
+            wait_for=[wasp_allele_swap_jobname],
+        )
+        wasp_remap_jobname = job.jobname
+        
+        # Realign allele-swapped fastqs.
+        (remapped_bam, log_out, log_final_out, log_progress_out, sj_out, 
+         transcriptome_bam) = \
+                job.star_align(wasp_r1_fastq, wasp_r2_fastq, rgpl, rgpu,
+                               star_index, job.threads,
+                               genome_load=star_genome_load,
+                               transcriptome_align=False)
+        job.output_files_to_copy += [remapped_bam, log_out, log_final_out,
+                                     log_progress_out]
+        job.temp_files_to_delete += [sj_out, wasp_r1_fastq, wasp_r2_fastq]
 
-    # Get allele counts.
-    allele_counts = job.count_allele_coverage(
-        wasp_filtered_bam, 
-        vcf,
-        genome_fasta, 
-        gatk_path=gatk_path,
-    )
-    job.output_files_to_copy.append(allele_counts)
+        job.write_end()
+        submit_commands.append(job.sge_submit_comand())
+        
+        ##### Job 11: WASP third step. #####
+        job = JobScript(
+            sample_name, 
+            job_suffix = 'wasp_alignment_compare',
+            outdir=os.path.join(outdir, 'wasp'),
+            threads=1, 
+            memory=4, 
+            linkdir=linkdir,
+            webpath=webpath,
+            tempdir=tempdir, 
+            queue=queue,
+            conda_env=conda_env, 
+            modules=modules,
+            wait_for=[wasp_remap_jobname],
+        )
+        wasp_alignment_compare_jobname = job.jobname
 
-    job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+        # Compare alignments.
+        temp_filtered_bam = job.wasp_alignment_compare(
+            to_remap_bam, 
+            to_remap_num,
+            remapped_bam, 
+            filter_remapped_reads_path,
+        )
+        job.temp_files_to_delete += [temp_filtered_bam, to_remap_bam,
+                                     to_remap_num]
+            
+        # Coordinate sort and index filtered bam file.
+        wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
+            temp_filtered_bam, 
+            bam_index=True,
+            picard_path=picard_path,
+            picard_memory=job.memory,
+            picard_tempdir=job.tempdir)
+        job.output_files_to_copy += [wasp_filtered_bam, wasp_bam_index]
+
+        # Get allele counts.
+        allele_counts = job.count_allele_coverage(
+            wasp_filtered_bam, 
+            vcf,
+            genome_fasta, 
+            gatk_path=gatk_path,
+        )
+        job.output_files_to_copy.append(allele_counts)
+
+        job.write_end()
+        submit_commands.append(job.sge_submit_comand())
+        
+        ##### Job 12: Run MBASED for ASE. #####
+        job = JobScript(
+            job_suffix = 'mbased',
+            outdir=os.path.join(outdir, 'mbased'),
+            threads=8, 
+            memory=16, 
+            linkdir=linkdir,
+            webpath=webpath,
+            tempdir=tempdir, 
+            queue=queue,
+            conda_env=conda_env, 
+            modules=modules)
+        mbased_jobname = job.jobname
     
-    ##### Job 12: Run MBASED for ASE. #####
-    job = JobScript(
-        job_suffix = 'mbased',
-        outdir=os.path.join(outdir, 'mbased'),
-        threads=8, 
-        memory=16, 
-        tempdir=tempdir, 
-        queue=queue,
-        conda_env=conda_env, 
-        modules=modules)
-    mbased_jobname = job.jobname
+        mbased_infile, locus_outfile, snv_outfile = job.mbased(
+            allele_counts, 
+            feature_bed, 
+            is_phased=is_phased, 
+            num_sim=1000000, 
+            threads=8, 
+            vcf=vcf,
+            vcf_sample_name=vcf_sample_name, 
+            mappability=mappability,
+            bigWigAverageOverBed_path=bigWigAverageOverBed_path,
+        )
 
-    mbased_infile, locus_outfile, snv_outfile = mbased(
-        self,
-        allele_counts, 
-        feature_bed, 
-        mbased_infile, 
-        locus_outfile, 
-        snv_outfile, 
-        is_phased=False, 
-        num_sim=1000000, 
-        threads=1, 
-        vcf=None,
-        vcf_sample_name=None, 
-        mappability=None,
-        bigWigAverageOverBed_path='bigWigAverageOverBed',
-    ):
-
-
-        with open(job.filename, "a") as f:
-            lines = _mbased(wasp_filtered_bam, gene_gtf, mbased_infile,
-                            locus_outfile, snv_outfile, sample_name,
-                            is_phased=is_phased, threads=job.threads, vcf=vcf,
-                            vcf_sample_name=vcf_sample_name,
-                            mappability=mappability,
-                            bigWigAverageOverBed_path=bigWigAverageOverBed_path)
-            f.write(lines)
-            f.write('wait\n\n')
-
-    job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+        job.write_end()
+        submit_commands.append(job.sge_submit_comand())
 
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the

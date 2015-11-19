@@ -23,8 +23,8 @@ def _make_dir(d):
 
 class JobScript:
     def __init__(self, sample_name, job_suffix, outdir, threads, memory,
-                 shell_fn=None, tempdir=None, queue=None, conda_env=None,
-                 modules=None, wait_for=None, copy_input=False):
+                 linkdir=None, webpath=None, tempdir=None, queue=None,
+                 conda_env=None, modules=None, wait_for=None, copy_input=False):
         """
         Create SGE/shell script object.
 
@@ -46,9 +46,14 @@ class JobScript:
         memory : int
             Amount of memory in Gb to request for SGE scripts.
 
-        shell_fn : str
-            Path to output shell script. If not provided, the script will be
-            written in the output directory.
+        linkdir : str
+            Path to directory to make softlinks for files. This is useful if you
+            want to softlink a subset of output files into a specific directory
+            for viewing on the web for instance.
+        
+        webpath : str
+            URL that points to linkdir. A file test.bam that is linked into
+            linkdir is assumed to be available at webpath/test.bam. 
 
         tempdir : str
             Path to directory where temporary directory should be made. If not
@@ -73,39 +78,65 @@ class JobScript:
             Whether to copy input files to temp directory. 
 
         """
+        # Sample name used for naming files.
         self.sample_name = sample_name
+        # Brief description of job.
         self.job_suffix = job_suffix
+        # Job name for SGE.
         self.jobname = '{}_{}'.format(sample_name, job_suffix)
+        # Directory for storing output files.
         self.outdir = outdir
+        # Directory for storing temp files. The job is executed in this
+        # directory.
         if tempdir:
             self.tempdir = os.path.realpath(os.path.join(tempdir, self.jobname))
         else:
             self.tempdir = self.outdir
         _make_dir(self.outdir)
+        # Number of threads to request for job from SGE.
         assert type(threads) is int
         self.threads = threads
+        # Amount of memory to request for job from SGE.
         assert type(memory) is int
         self.memory = memory
+        # Directory to make softlinks in.
+        _make_dir(linkdir)
+        self.linkdir = linkdir
+        # Queue to request for job from SGE.
         self.queue = queue
+        # Anaconda Python environment to load at the beginning of the shell
+        # script.
         self.conda_env = conda_env
+        # Software modules to load at the beginning of the shell script.
         if modules:
             self.modules = modules.split(',')
         else:
             self.modules = None
-       
+        # Make directory to store stdout and stderr files. 
         _make_dir(os.path.join(os.path.split(outdir)[0], 'logs'))
         self.out = os.path.join(os.path.split(self.outdir)[0], 'logs',
                                 '{}.out'.format(self.jobname))
         self.err = os.path.join(os.path.split(self.outdir)[0], 'logs',
                                 '{}.err'.format(self.jobname))
+        # List of job names to wait for when submitting to SGE.
         self.wait_for = wait_for
+        # Whether to copy input files to tempdir.
         self.copy_input = copy_input
+        # List of input files to copy to tempdir.
         self.input_files_to_copy = []
+        # List of output files to copy from tempdir to outdir at end of job.
         self.output_files_to_copy = []
+        # List of temp files to delete at the end of the job. It's good practice
+        # to delete anything you don't want to copy to the outdir.
         self.temp_files_to_delete = []
+        # List of [target, link_name] pairs to create softlinks for at the end
+        # of the shell script.
         self.softlinks = []
         # Whether to delete shell script after we create it.
         self.delete_sh = False
+        # File to write web URLs and tracklines to.
+        self.links_tracklines = os.path.join(self.outdir,
+                                             'links_tracklines.txt')
         # Set shell script file name.
         self._set_filename()
         # Write shell/SGE header.
@@ -114,12 +145,9 @@ class JobScript:
     def _set_filename(self):
         """Make SGE/shell script filename. If a shell script already exists, the
         current shell script will be stored as a temp file."""
-        if shell_fn:
-            self.filename = shell_fn
-        else:
-            _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
-            self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
-                                         '{}.sh'.format(self.jobname))
+        _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
+        self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
+                                     '{}.sh'.format(self.jobname))
         # If the shell script already exists we'll assume that the script is
         # just being created to get the output filenames etc. so we'll write to
         # a temp file.
@@ -178,9 +206,66 @@ class JobScript:
                 f.write('rm -r {}\n'.format(self.tempdir))
 
     def _make_softlinks(self):
+        """Softlinks are made at the end of shell script when all of the files
+        are in their final locations."""
         with open(self.filename, "a") as f:
             for p in self.softlinks:
-                f.write(_softlink(p[0], p[1]))
+                f.write(self.softlink(p[0], p[1]))
+
+    def softlink(self, target, link):
+        """
+        Make softlink from target to link.
+    
+        Parameters
+        ----------
+        target : str
+            Full path to file to make link to.
+    
+        link : str
+            Full path to softlink.
+    
+        Returns
+        -------
+        link : str
+            Full path to softlink.
+    
+        """
+        lines = 'ln -s {} {}\n\n'.format(target, link)
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return link
+    
+    def add_softlink(self, target, link_name=None):
+        """
+        Add a softlink for file target. All softlinks are made at the end of the
+        job. If link_name is provided, the softlink will be made between target
+        and link_name. If only target is provided, the link will be made from
+        target to a file with the same name in self.linkdir. If the file name
+        does not include self.sample_name, the sample name and an underscore
+        will be appended to the front of the file name for linkdir.
+    
+        Parameters
+        ----------
+        fn : str
+            Full path to file to make link to.
+    
+        link_name : str
+            Full path for link.
+    
+        Returns
+        -------
+        link : str
+            Path to softlink.
+    
+        """
+        if self.sample_name not in os.path.split(target)[1]:
+            name = '{}_{}'.format(sample_name, os.path.split(target)[1])
+            link = os.path.join(self.linkdir, name)
+        else:
+            name = os.path.split(fn)[1]
+            link = os.path.join(self.linkdir, name)
+        self.softlinks.append([target, link])
+        return link
 
     def sge_submit_command(self):
         """Get command to submit script."""
@@ -189,13 +274,6 @@ class JobScript:
                                                  self.filename)
         else:
             return 'qsub {}'.format(self.filename)
-
-    def add_softlink(self, target, link):
-        """Add a target, link pair to the JobScript instance so that a softlink
-        from target to link is made at the end of the jobscript. This happens at
-        the end of the script so that the files actually exist and the softlink
-        works. Useful for linking files into web directories for instance."""
-        self.softlinks.append([target, link])
 
     def add_temp_file(self, fn, copy=False):
         """Add temporary file to self.temp_files_to_delete. If copy == True,
@@ -1036,122 +1114,6 @@ class JobScript:
             f.write(lines)
         return stats_file
     
-    def coverage_bedgraph(
-        self,
-        bam, 
-        strand='.',
-        bedtools_path='bedtools',
-    ):
-        """
-        Make lines that create a coverage bedgraph file.
-    
-        Parameters
-        ----------
-        bam : str
-            Bam file to calculate coverage for.
-    
-        bedtools_path : str
-            Path to bedtools.
-    
-        sample_name : str
-            Sample name for naming files etc.
-    
-        strand : str
-            If '+' or '-', calculate strand-specific coverage. Otherwise,
-            calculate coverage using all reads.
-    
-        Returns
-        -------
-        bedgraph : str
-            Path to output bedgraph file.
-    
-        """
-        bedgraph = os.path.join(
-            self.tempdir,
-            '{}.bg'.format(os.path.splitext(os.path.split(bam)[1])[0]))
-        if strand == '+' or strand == '-':
-            if strand == '+':
-                name = '{}_plus'.format(self.sample_name)
-                bedgraph = '{}_plus.bg'.format(os.path.splitext(bedgraph)[0])
-            else:
-                name = '{}_minus'.format(self.sample_name)
-                bedgraph = '{}_minus.bg'.format(os.path.splitext(bedgraph)[0])
-            lines = ' \\\n\t'.join([
-                '{} genomecov -ibam'.format(bedtools_path),
-                '{}'.format(bam),
-                '-g hg19.genome -split -bg ',
-                '-strand {} -trackline'.format(strand),
-                '-trackopts \'name="{}"\''.format(name),
-                '> {} &\n\n'.format(bedgraph)])
-        else:
-            name = job.sample_name
-            lines = ' \\\n\t'.join([
-                '{} genomecov -ibam'.format(bedtools_path),
-                '{}'.format(bam),
-                '-g hg19.genome -split -bg ',
-                '-trackline'.format(strand),
-                '-trackopts \'name="{}"\''.format(name),
-                '> {} &\n\n'.format(bedgraph)])
-        with open(job.filename, "a") as f:
-            f.write(lines)
-        return bedgraph
-    
-    def bigwig_files(
-        self,
-        in_bam, 
-        out_bigwig, 
-        sample_name, 
-        out_bigwig_minus='',
-        bedgraph_to_bigwig_path='bedGraphToBigWig',
-        bedtools_path='bedtools',
-    ):
-        """
-        Make bigwig coverage files.
-    
-        Parameters
-        ----------
-        in_bam : str
-            Path to bam file to create bigwigs for.
-    
-        out_bigwig : str
-            Path to output bigwig file. If out_bigwig_minus is provided,
-            out_bigwig has the plus strand coverage.
-    
-        out_bigwig_minus : str
-            Path to output bigwig file for minus strand. If out_bigwig_minus is
-            not provided, the coverage is calculated using reads from both
-            strands and written to out_bigwig.
-    
-        Returns
-        -------
-        lines : str
-            Lines to be printed to shell script.
-    
-        """
-        lines = ''
-        if out_bigwig_minus != '':
-            lines += _coverage_bedgraph(in_bam, 'plus.bg', sample_name,
-                                        strand='+')
-            lines += _coverage_bedgraph(in_bam, 'minus.bg', sample_name,
-                                        strand='-')
-            lines += ('wait\n\n')
-            lines += (_bedgraph_to_bigwig('plus.bg', out_bigwig))
-            lines += (_bedgraph_to_bigwig('minus.bg', out_bigwig_minus))
-                                          
-            lines += ('\nwait\n\n')
-            lines += ('rm plus.bg minus.bg\n\n')
-        
-        else:
-            lines = _coverage_bedgraph(in_bam, 'both.bg', sample_name)
-            lines += ('wait\n\n')
-            lines += (_bedgraph_to_bigwig('both.bg', out_bigwig))
-            lines += ('wait\n\n')
-            lines += ('rm both.bg\n\n')
-        with open(job.filename, "a") as f:
-            f.write(lines)
-            if out_bigwig_minus:
-                return  
-        
     def combine_fastqs(
         self,
         fastqs,
@@ -1200,12 +1162,13 @@ class JobScript:
         fastqc_path='fastqc',
     ):
         """
-        Run FastQC
+        Run FastQC for fastq files in fastqs. Links to linkdir are automatically
+        created for the output html files if linkdir != None.
     
         Parameters
         ----------
-        fastqs : str or list
-            Path to fastq file or list of paths to fastq files.
+        fastqs : list
+            List of paths to fastq files.
     
         outdir : str
             Path to directory to store FastQC results to.
@@ -1218,74 +1181,36 @@ class JobScript:
     
         Returns
         -------
-    
-        """
-        if type(fastqs) == list:
-            fastqs = ' \\\n\t'.join(fastqs)
-        lines = ('{} --outdir {} --nogroup --extract --threads {} \\\n'
-                 '\t{}\n'.format(fastqc_path, outdir, threads, fastqs))
-        with open(job.filename, "a") as f:
-            f.write(lines)
-        return None # I should probably figure out what fastQC outputs and
-                    # provide links here
-    
-    def softlink(self, target, link):
-        """
-        Make softlink from target to link.
-    
-        Parameters
-        ----------
-        target : str
-            Full path to file to make link to.
-    
-        link : str
-            Full path to softlink.
-    
-        Returns
-        -------
-        link : str
-            Full path to softlink.
-    
-        """
-        lines = 'ln -s {} {}\n\n'.format(target, link)
-        with open(job.filename, "a") as f:
-            f.write(lines)
-        return link
-    
-    def make_softlink(self, fn, sample_name, link_dir):
-        """
-        Make softlink for file fn in link_dir. sample_name followed by an
-        underscore will be appended to the front of fn if the sample_name isn't
-        in fn.
-    
-        Parameters
-        ----------
-        fn : str
-            Full path to file to make link to.
-    
-        link_dir : str
-            Path to directory where softlink should be made.
-    
-        Returns
-        -------
-        link : str
-            Path to softlink.
-    
-        """
-        if job.sample_name not in os.path.split(fn)[1]:
-            name = '{}_{}'.format(sample_name, os.path.split(fn)[1])
-            link = os.path.join(link_dir, name)
-        else:
-            name = os.path.split(fn)[1]
-            link = os.path.join(link_dir, name)
-        lines = 'ln -s {} {}\n'.format(fn, link)
-        with open(job.filename, "a") as f:
-            f.write(lines)
-        return link
+        fastqc_html : list
+            List of paths to the html files for all input fastq files.
 
-    # TODO: Merge bed file here rather than rely on it being merged. Update
-    # RNA-seq pipeline to take regular exon bed file. This is needed for
-    # assigning variants to genes for ASE.
+        fastqc_zip : str or list
+            List of paths to the zip files for all input fastq files.
+    
+        """
+        fastqc_html = []
+        fastqc_zip = []
+        for fq in fastqs:
+            fastqc_html.append(
+                os.path.join(self.tempdir, '{}_fastqc.html'.format(
+                    '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
+            fastqc_zip.append(
+                os.path.join(self.tempdir, '{}_fastqc.zip'.format(
+                    '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
+        fastqs = ' \\\n\t'.join(fastqs)
+
+        lines = ('{} --outdir {} --nogroup --threads {} \\\n'
+                 '\t{}\n'.format(fastqc_path, self.tempdir, threads, fastqs))
+        
+        with open(job.filename, "a") as f:
+            f.write(lines)
+
+        if self.linkdir:
+            for html in fastqc_html:
+                link = self.add_softlink(html)
+
+        return fastqc_html, fastqc_zip
+    
     def wasp_allele_swap(
         self,
         bam, 
@@ -1482,9 +1407,6 @@ class JobScript:
         self,
         allele_counts, 
         feature_bed, 
-        mbased_infile, 
-        locus_outfile, 
-        snv_outfile, 
         is_phased=False, 
         num_sim=1000000, 
         vcf=None,
@@ -1567,7 +1489,6 @@ class JobScript:
             f.write(lines)
         return mbased_infile, locus_outfile, snv_outfile
 
-# TODO: merge bed file here using pybedtools
 def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
                         fai=None, bcftools_path='bcftools'):
     """
