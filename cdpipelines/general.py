@@ -22,9 +22,22 @@ def _make_dir(d):
         pass
 
 class JobScript:
-    def __init__(self, sample_name, job_suffix, outdir, threads, memory,
-                 linkdir=None, webpath=None, tempdir=None, queue=None,
-                 conda_env=None, modules=None, wait_for=None, copy_input=False):
+    def __init__(
+        self, 
+        sample_name, 
+        job_suffix, 
+        outdir, 
+        threads, 
+        memory,
+        linkdir=None, 
+        webpath=None, 
+        tempdir=None, 
+        queue=None,
+        conda_env=None, 
+        modules=None, 
+        wait_for=None, 
+        copy_input=False,
+    ):
         """
         Create SGE/shell script object.
 
@@ -126,12 +139,12 @@ class JobScript:
         # Whether to copy input files to tempdir.
         self.copy_input = copy_input
         # List of input files to copy to tempdir.
-        self.input_files_to_copy = []
+        self._input_files_to_copy = []
         # List of output files to copy from tempdir to outdir at end of job.
-        self.output_files_to_copy = []
+        self._output_files_to_copy = []
         # List of temp files to delete at the end of the job. It's good practice
         # to delete anything you don't want to copy to the outdir.
-        self.temp_files_to_delete = []
+        self._temp_files_to_delete = []
         # List of [target, link_name] pairs to create softlinks for at the end
         # of the shell script.
         self.softlinks = []
@@ -183,24 +196,24 @@ class JobScript:
                 f.write('cd {}\n\n'.format(self.tempdir))
 
     def _copy_output_files(self):
-        if (len(self.output_files_to_copy) > 0 and 
+        if (len(self._output_files_to_copy) > 0 and 
             os.path.realpath(self.tempdir) != os.path.realpath(self.outdir)):
             with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
-                    '\\\n\t'.join(self.output_files_to_copy),
+                    '\\\n\t'.join(self._output_files_to_copy),
                     self.outdir))
 
     def _delete_temp_files(self):
-        if len(self.temp_files_to_delete) > 0:
+        if len(self._temp_files_to_delete) > 0:
             if (os.path.realpath(self.tempdir) == os.path.realpath(self.outdir) 
                 or self.tempdir is None):
-                self.temp_files_to_delete = [
-                    x for x in self.temp_files_to_delete if x not in
-                    self.output_files_to_copy
+                self._temp_files_to_delete = [
+                    x for x in self._temp_files_to_delete if x not in
+                    self._output_files_to_copy
                 ]
             with open(self.filename, "a") as f:
                 f.write('rm -r \\\n\t{}\n\n'.format(
-                    ' \\\n\t'.join(self.temp_files_to_delete)))
+                    ' \\\n\t'.join(self._temp_files_to_delete)))
 
     def _delete_tempdir(self):
         if self.tempdir and (os.path.realpath(self.tempdir) !=
@@ -278,44 +291,67 @@ class JobScript:
         else:
             return 'qsub {}'.format(self.filename)
 
-    def add_temp_file(self, fn, copy=False):
-        """Add temporary file to self.temp_files_to_delete. If copy == True,
-        add to self.output_files_to_copy. Returns temp path."""
-        if copy:
-            self.output_files_to_copy.append(fn)
-        return self.temp_file_path(fn)
+    def add_input_file(self, fn, copy=None, delete_original=False):
+        """
+        If self.copy_input == True or copy == True, copy input file to temp
+        directory. If copy == False, do not copy input file to temp directory.
+    
+        Parameters
+        ----------
+        fn : str
+            Path to input file.
+    
+        copy : boolean
+            Whether to copy the input file to the temp directory.
 
-    def add_input_file(self, fn, copy=None):
-        """Add input file to self.input_files_to_copy if self.copy_input or
-        copy == True. Return temp path. If both self.copy_input and copy are
-        False, the realpath of the input file is returned."""
-        if copy:
-            self.input_files_to_copy.append(fn)
-        elif copy == False:
-            pass 
-        else:
-            if self.copy_input:
-                self.input_files_to_copy.append(fn)
-                copy = True
-        if copy:
-            return self.temp_file_path(fn)
-        else:
-            return os.path.realpath(fn)
+        delete_original : boolean
+            Whether to delete THE ORIGINAL file (i.e. the file at the original
+            real path) at the end of the script. There will be no copy of this
+            input file when the script complete if this is True.
+
+        Returns
+        -------
+        out : str
+            If the file is copied, the temp path is returned. If the file is not
+            copied, the real path is returned.
+    
+        """
+        out = os.path.realpath(fn)
+        if copy or (copy is None and self.copy_input):
+            self._input_files_to_copy.append(fn)
+            out = self.temp_file_path(fn)
+        if delete_original:
+            self.add_temp_file(fn)
+        return out
+
+    def add_temp_file(self, fn):
+        """Add temporary file to self.temp_files_to_delete."""
+        self._temp_files_to_delete(fn)
+
+    def add_output_file(self, fn):
+        """Add output file to be copied to self.outdir. Returns final path (in
+        self.outdir)."""
+        self._output_files_to_copy.append(fn)
+        return self.output_file_path(fn)
+
+    def output_file_path(self, fn):
+        """Return the path to the output version of a file."""
+        return os.path.join(self.outdir, os.path.split(fn)[1])
 
     def temp_file_path(self, fn):
-        """Return the path to the temporary version of an input file"""
+        """Return the path to the temporary version of a file."""
         return os.path.join(self.tempdir, os.path.split(fn)[1])
 
     def copy_input_files(self):
-        if len(self.input_files_to_copy) > 0:
+        if len(self._input_files_to_copy) > 0:
             with open(self.filename, "a") as f:
                 f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format( 
-                    '\\\n\t'.join(self.input_files_to_copy),
+                    '\\\n\t'.join(self._input_files_to_copy),
                     self.tempdir))
-            # We will delete any input files we copy over.
+            # We will delete any input files from the temp directory that we
+            # copy over.
             self.temp_files_to_delete += [
-                os.path.join(self.tempdir, os.path.split(x)[1]) for x in
-                self.input_files_to_copy]
+                self.temp_file_path(x) for x in self._input_files_to_copy]
 
     def write_end(self):
         self._copy_output_files()
@@ -1163,7 +1199,7 @@ class JobScript:
         outdir, 
         threads=1,
         web_available=True,
-        write_to_outdir=False,
+        write_to_outdir=True,
         fastqc_path='fastqc',
     ):
         """
@@ -1225,7 +1261,9 @@ class JobScript:
             if self.linkdir:
                 for html in fastqc_html:
                     link = self.add_softlink(html)
-        #TODO: Write URL to links_tracklines file.
+            url = self.webpath + '/' + os.path.split(html)[1]
+            with open(self.links_tracklines, "a") as f:
+                f.write(url + '\n')
 
         return fastqc_html, fastqc_zip
     
@@ -1584,436 +1622,6 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
         os.remove('{}_hets_no_header.vcf'.format(vcf_sample_name))
         os.remove('{}_hets_sorted_no_header.vcf'.format(vcf_sample_name))
 
-def wasp_allele_swap(
-    bam, 
-    find_intersecting_snps_path, 
-    vcf, 
-    sample_name,
-    outdir, 
-    tempdir, 
-    copy_vcf=True,
-    vcf_sample_name=None, 
-    conda_env=None, 
-    threads=6,
-    samtools_path='samtools',
-):
-    """
-    Write shell script for identifying reads in a bam file that overlap
-    specified variants and switching the variant allele. This is done using
-    find_intersecting_snps.py from WASP.
-
-    Parameters
-    ----------
-    bam : str
-        Path to input bam file.
-
-    find_intersecting_snps_path : str
-        Path to find_intersecting_snps.py script.
-
-    vcf : str
-        VCF file containing exonic SNPs.
-    
-    sample_name : str
-        Sample name used for naming files etc.
-
-    outdir : str
-        Directory to store shell file and results.
-
-    tempdir : str
-        Directory to store temporary files.
-
-    copy_vcf : str
-        Whether to copy vcf to temp directory.
-
-    vcf_sample_name : str
-        Sample name of this sample in the VCF file (if different than
-        sample_name).
-
-    conda_env : str
-        If provided, load conda environment with this name.
-
-    threads : int
-        Number of threads to request for PBS script.
-
-    """
-    job_suffix = 'wasp_allele_swap'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    conda_env=conda_env)
-    
-    if not vcf_sample_name:
-        vcf_sample_name = sample_name
-
-    # Input files.
-    temp_bam = job.add_input_file(bam)
-    temp_vcf = job.add_input_file(vcf, copy=copy_vcf)
-    job.copy_input_files()
-    
-    # Files that will be created.
-    temp_uniq_bam = os.path.join(
-        job.tempdir, '{}_uniq.bam'.format(sample_name))
-    job.temp_files_to_delete.append(temp_uniq_bam)
-    
-    # Files to copy to output directory.
-    prefix = '{}_uniq'.format(sample_name)
-    fns = [
-        '{}.keep.bam'.format(prefix),
-        '{}.remap.fq1.gz'.format(prefix),
-        '{}.remap.fq2.gz'.format(prefix),
-        '{}.to.remap.bam'.format(prefix),
-        '{}.to.remap.num.gz'.format(prefix)
-    ]
-    job.output_files_to_copy += fns
-
-    from __init__ import _scripts
-    input_script = os.path.join(_scripts, 'make_wasp_input.py')
-
-    # Run WASP to swap alleles.
-    with open(job.filename, "a") as f:
-        snp_directory = os.path.join(job.tempdir, 'snps')
-        all_snps = os.path.join(job.outdir, 'snps.tsv')
-        f.write('python {} -s \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{} & \n\n'.format(
-            input_script, vcf_sample_name, temp_vcf, snp_directory, all_snps))
-        f.write('{} view -b -q 255 -F 1024 \\\n\t{} \\\n\t> {}\n\n'.format(
-            samtools_path, temp_bam, temp_uniq_bam))
-        f.write('wait\n\n')
-        f.write('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
-            find_intersecting_snps_path, temp_uniq_bam, snp_directory))
-    
-    job.write_end()
-    return job.filename
-
-def wasp_alignment_compare(
-    to_remap_bam, 
-    remapped_bam, 
-    vcf,
-    fasta, 
-    filter_remapped_reads_path, 
-    sample_name,
-    outdir, 
-    tempdir, 
-    picard_path='$picard',
-    picard_memory=12,
-    conda_env='', 
-    threads=6):
-    """
-    Write shell script for checking original mapping position of reads against
-    remapping after swapping alleles using WASP, then count allele coverage for
-    each SNP.
-
-    Parameters
-    ----------
-    to_remap_bam : str
-        Bam file from find_intersecting_snps.py that has reads that will be
-        remapped (e.g. *.to.remap.bam).
-
-    to_remap_num : str
-        Gzipped text file from find_intersecting_snps.py (e.g.
-        *.to.remap.num.gz).
-
-    remapped_bam : str
-        Bam file with remapped reads.
-
-    vcf : str
-        Path to VCF file with heterozygous SNVs.
-
-    fasta : str
-        Path to fasta file used to align data.
-
-    filter_remapped_reads_path : str
-        Path to filter_remapped_reads.py script.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    outdir : str
-        Directory to store shell file and results.
-
-    tempdir : str
-        Directory to store temporary files.
-
-    conda_env : str
-        If provided, load conda environment with this name.
-
-    threads : int
-        Number of threads to request for SGE script.
-
-    """
-    job_suffix = 'wasp_alignment_compare'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    conda_env=conda_env)
-
-    # Input files.
-    temp_to_remap_bam = job.add_input_file(to_remap_bam)
-    temp_to_remap_num = job.add_input_file(to_remap_num)
-    temp_remapped_bam = job.add_input_file(remapped_bam)
-    job.copy_input_files()
-
-    # Files that will be created.
-    temp_filtered_bam = os.path.join(
-        job.tempdir, '{}_filtered.bam'.format(sample_name))
-    job.temp_files_to_delete.append(temp_filtered_bam)
-    coord_sorted_bam = os.path.join(
-        job.tempdir, '{}_filtered_coord_sorted.bam'.format(sample_name))
-    job.output_files_to_copy.append(coord_sorted_bam)
-    bam_index = coord_sorted_bam + '.bai'
-    job.output_files_to_copy.append(bam_index)
-   
-    with open(job.filename, "a") as f:
-        # Run WASP alignment compare.
-        f.write('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
-            filter_remapped_reads_path, temp_to_remap_bam, temp_remapped_bam,
-            temp_filtered_bam, temp_to_remap_num))
-
-        # Coordinate sort and index.
-        lines = _picard_coord_sort(temp_filtered_bam, coord_sorted_bam,
-                                   bam_index=bam_index, picard_path=picard_path,
-                                   picard_memory=picard_memory,
-                                   picard_tempdir=job.tempdir)
-        f.write(lines)
-        f.write('\nwait\n\n')
-        
-        # Count allele coverage.
-        counts = os.path.join(job.outdir,
-                              '{}_allele_counts.tsv'.format(sample_name))
-        f.write('java -jar /raid3/software/GenomeAnalysisTK.jar \\\n')
-        f.write('\t-R {} \\\n'.format(fasta))
-        f.write('\t-T ASEReadCounter \\\n')
-        f.write('\t-o {} \\\n'.format(counts))
-        f.write('\t-I {} \\\n'.format(coord_sorted_bam))
-        f.write('\t-sites {} \\\n'.format(vcf))
-        f.write('\t-overlap COUNT_FRAGMENTS_REQUIRE_SAME_BASE \\\n')
-        f.write('\t-U ALLOW_N_CIGAR_READS \n')
-
-        f.write('\nwait\n\n')
-    
-    job.write_end()
-    return job.filename
-
-def wasp_remap(
-    r1_fastq, 
-    r2_fastq, 
-    outdir, 
-    sample_name, 
-    star_index,
-    seq_type,
-    conda_env='',
-    modules='',
-    rgpl='ILLUMINA',
-    rgpu='',
-    tempdir='/scratch', 
-    threads=10, 
-    picard_path='$picard',
-    picard_memory=15, 
-    star_path='STAR',
-    samtools_path='samtools',
-):
-    """
-    Make a shell script for re-aligning reads from with variants using STAR. The
-    defaults are set for use on the Frazer lab's SGE scheduler on flh1/flh2.
-
-    Parameters
-    ----------
-    r1_fastq : str
-        R1 reads from find_intersecting_snps.py to be remapped.
-
-    r2_fastq : str
-        R2 reads from find_intersecting_snps.py to be remapped.
-
-    outdir : str
-        Directory to store shell file and results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    star_index : str
-        Path to STAR index.
-
-    star_path : str
-        Path to STAR aligner.
-
-    samtools_path : str
-        Path to samtools executable.
-
-    seq_type : str
-        Type of data. Currently supports ATAC and RNA.
-
-    conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of MACS2 is used.
-
-    rgpl : str
-        Read Group platform (e.g. illumina, solid). 
-
-    rgpu : str
-        Read Group platform unit (eg. run barcode). 
-
-    tempdir : str
-        Directory to store files as STAR runs.
-
-    threads : int
-        Number of threads to reserve using SGE scheduler. This number of threads
-        minus 2 will be used by STAR, so this must be at least 3.
-
-    picard_path : str
-        Path to Picard tools.
-
-    picard_memory : int
-        Amount of memory (in gb) to give Picard Tools.
-
-    Returns
-    -------
-    fn : str
-        Path to shell script.
-
-    """
-    assert threads >= 3
-    seq_types = ['ATAC', 'RNA']
-    assert seq_type in seq_types, ('Only {} currently support for '
-                                   'seq_type'.format(', '.join(seq_types)))
-    job_suffix = 'wasp_remap'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    queue=queue, conda_env=conda_env, modules=modules,
-                    copy_input=True)
-    
-    # Input files.
-    temp_r1 = job.add_input_file(r1_fastq)
-    temp_r2 = job.add_input_file(r2_fastq)
-    job.copy_input_files()
-
-    # Files that will be created.
-    aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    job.output_files_to_copy.append(aligned_bam)
-    # job.temp_files_to_delete.append(aligned_bam)
-    # coord_sorted_bam = os.path.join(
-    #     job.tempdir, '{}_sorted.bam'.format(sample_name))
-    # job.output_files_to_copy.append(coord_sorted_bam)
-    job.temp_files_to_delete.append('_STARtmp')
-
-    # Files to copy to output directory.
-    job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
-                                 'SJ.out.tab']
-
-    # Run WASP remapping.
-    with open(job.filename, "a") as f:
-        # Align with STAR and coordinate sort.
-        if seq_type == 'RNA':
-            from rnaseq import _star_align
-            lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
-                                rgpu, star_index, star_path, threads)
-            f.write(lines)
-            f.write('wait\n\n')
-        
-        elif seq_type == 'ATAC':
-            from atacseq import _star_align
-            lines = _star_align(temp_r1, temp_r2, sample_name, rgpl,
-                                rgpu, star_index, star_path, threads)
-            f.write(lines)
-            f.write('wait\n\n')
-
-        # # Coordinate sort bam file.
-        # lines = _picard_coord_sort(aligned_bam, coord_sorted_bam,
-        #                            picard_path, picard_memory, job.tempdir)
-        # f.write(lines)
-        # f.write('wait\n\n')
-
-    job.write_end()
-    return job.filename
-
-def run_mbased(
-    infile, 
-    bed,
-    outdir, 
-    sample_name, 
-    modules=None,
-    conda_env=None,
-    queue=None,
-    is_phased=False,
-    num_sim=1000000,
-    threads=6, 
-    vcf=None,
-    vcf_sample_name=None,
-    mappability=None,
-    bigWigAverageOverBed_path='bigWigAverageOverBed',
-):
-    """
-    Make a shell script for running MBASED to determine allelic bias from
-    sequencing reads.
-
-    Parameters
-    ----------
-    infile : str
-        Tab-separated file with following columns: chrom, pos, ref_allele,
-        alt_allele, locus, name, ref_count, alt_count.
-
-    bed : str
-        Path to bed file for assigning heterozygous SNVs to features.
-    
-    outdir : str
-        Directory to store shell file and MBASED results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    modules : str
-        Modules (separated by commas e.g. bedtools,samtools) to load at
-        beginning of script.
-
-    is_phased : bool
-        Whether the input file is phased. If so, the reference alleles are
-        assumed to be in phase. Note that this only matter locus by locus.
-
-    num_sim : int
-        Number of simulations for MBASED to perform.
-
-    threads : int
-        Number of threads to reserve using SGE scheduler and for MBASED to use.
-
-    vcf : str
-        Path to gzipped, indexed VCF file with all variant calls (not just
-        heterozygous calls).
-
-    vcf_sample_name : str
-        If vcf is provided, this must be provided to specify the sample name of
-        this sample in the VCF file. Required if vcf is provided.
-
-    mappability : str
-        Path to bigwig file with mappability scores. A score of one should mean
-        uniquely mapping.
-
-    bigWigAverageOverBed_path : str
-        Path to bigWigAverageOverBed. Required if mappability is provided.
-
-    Returns
-    -------
-    fn : str
-        Path to shell script.
-
-    """
-    assert threads >= 1
-    job_suffix = 'mbased'
-    job = JobScript(sample_name, job_suffix, outdir, threads, queue=queue,
-                    modules=modules, conda_env=conda_env,
-                    copy_input=True)
-    
-    # I'm going to define some file names used later.
-    mbased_infile = os.path.join(job.outdir,
-                                 '{}_mbased_input.tsv'.format(sample_name))
-    locus_outfile = os.path.join(job.outdir, '{}_locus.tsv'.format(sample_name))
-    snv_outfile = os.path.join(job.outdir, '{}_snv.tsv'.format(sample_name))
-    
-    with open(job.filename, "a") as f:
-        lines = _mbased(infile, bed, mbased_infile, locus_outfile, snv_outfile,
-                        sample_name, is_phased=is_phased, num_sim=num_sim,
-                        threads=threads, vcf=vcf,
-                        vcf_sample_name=vcf_sample_name,
-                        mappability=mappability,
-                        bigWigAverageOverBed_path=bigWigAverageOverBed_path)
-        f.write(lines)
-        f.write('wait\n\n')
-    
-    job.write_end()
-    return job.filename
-
 # The method below needs to be updated for SGE and JobScript. I've done a little
 # already.
 # def convert_sra_to_fastq(
@@ -2143,106 +1751,106 @@ def run_mbased(
 #     f.close()
 # 
 #     return fn
-
-def merge_bams(
-    bams, 
-    outdir, 
-    tempdir,
-    merged_name, 
-    index=True,
-    bigwig=False,
-    copy_bams=True,
-    threads=8,
-    bedgraph_to_bigwig_path='bedGraphToBigWig',
-    bedtools_path='bedtools',
-    picard_path='$picard',
-    picard_memory=2,
-):
-    """
-    Make a shell script for combining multiple bam files using Picard.
-
-    Parameters
-    ----------
-    bams : list
-        List of SRA files to convert.
-
-    outdir : str
-        Directory to store shell file and merged bam file.
-
-    merged_name : str
-        Name used for output directory, files etc.
-
-    index : bool
-        Whether to index the merged bam file.
-
-    bigwig : bool
-        Whether to make bigwig file from merged bam file.
-
-    copy_bams : bool
-        Whether to copy the input bam files to the temp directory. Not
-        necessary if temp directory is on the same file system as bam files.
-
-    threads : int
-        Number of threads to request from SGE scheduler.
-
-    Returns
-    -------
-    fn : str
-        Path to shell script.
-
-    """
-    if bigwig:
-        index = True
-        assert bedgraph_to_bigwig_path
-        assert bedtools_path
-
-    job_suffix = 'merged_bam'
-    job = JobScript(merged_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    copy_input=False)
-    
-    # I'm going to define some file names used later.
-    merged_bam = job.add_temp_file('{}_merged.bam'.format(merged_name),
-                                   copy=True)
-    # merged_bam = os.path.join(tempdir,
-    #                             '{}_merged.bam'.format(merged_name))
-    # job.output_files_to_copy.append(merged_bam)
-    if index:
-        merged_bam_index = job.add_temp_file(
-            '{}_merged.bam.bai'.format(merged_name), copy=True)
-        # merged_bam_index = os.path.join(tempdir,
-        #                             '{}_merged.bam.bai'.format(merged_name))
-        # job.output_files_to_copy.append(merged_bam_index)
-    
-    if bigwig:
-        merged_bigwig = job.add_temp_file(
-            '{}_merged.bw'.format(merged_name), copy=True)
-    
-    temp_bams = []
-    for bam in bams:
-        temp_bams.append(job.add_input_file(bam))
-    # self.input_files_to_copy += bams
-
-    if copy_bams:
-        job.copy_input_files()
-
-    with open(job.filename, "a") as f:
-        lines = _picard_merge(temp_bams, merged_bam, picard_memory,
-                              picard_path=picard_path, picard_tempdir=tempdir)
-        f.write(lines)
-        
-        if index:
-            lines = _picard_index(merged_bam, merged_bam_index,
-                                  picard_path=picard_path,
-                                  picard_memory=picard_memory,
-                                  picard_tempdir=tempdir, bg=bigwig)
-            f.write(lines)
-
-        if bigwig:
-            lines = _bigwig_files(
-                merged_bam, merged_bigwig, merged_name,
-                bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
-                bedtools_path=bedtools_path)
-            f.write(lines)
-
-    job.write_end()
-    return job.filename
+# 
+# def merge_bams(
+#     bams, 
+#     outdir, 
+#     tempdir,
+#     merged_name, 
+#     index=True,
+#     bigwig=False,
+#     copy_bams=True,
+#     threads=8,
+#     bedgraph_to_bigwig_path='bedGraphToBigWig',
+#     bedtools_path='bedtools',
+#     picard_path='$picard',
+#     picard_memory=2,
+# ):
+#     """
+#     Make a shell script for combining multiple bam files using Picard.
+# 
+#     Parameters
+#     ----------
+#     bams : list
+#         List of SRA files to convert.
+# 
+#     outdir : str
+#         Directory to store shell file and merged bam file.
+# 
+#     merged_name : str
+#         Name used for output directory, files etc.
+# 
+#     index : bool
+#         Whether to index the merged bam file.
+# 
+#     bigwig : bool
+#         Whether to make bigwig file from merged bam file.
+# 
+#     copy_bams : bool
+#         Whether to copy the input bam files to the temp directory. Not
+#         necessary if temp directory is on the same file system as bam files.
+# 
+#     threads : int
+#         Number of threads to request from SGE scheduler.
+# 
+#     Returns
+#     -------
+#     fn : str
+#         Path to shell script.
+# 
+#     """
+#     if bigwig:
+#         index = True
+#         assert bedgraph_to_bigwig_path
+#         assert bedtools_path
+# 
+#     job_suffix = 'merged_bam'
+#     job = JobScript(merged_name, job_suffix, outdir, threads, tempdir=tempdir,
+#                     copy_input=False)
+#     
+#     # I'm going to define some file names used later.
+#     merged_bam = job.add_temp_file('{}_merged.bam'.format(merged_name),
+#                                    copy=True)
+#     # merged_bam = os.path.join(tempdir,
+#     #                             '{}_merged.bam'.format(merged_name))
+#     # job.output_files_to_copy.append(merged_bam)
+#     if index:
+#         merged_bam_index = job.add_temp_file(
+#             '{}_merged.bam.bai'.format(merged_name), copy=True)
+#         # merged_bam_index = os.path.join(tempdir,
+#         #                             '{}_merged.bam.bai'.format(merged_name))
+#         # job.output_files_to_copy.append(merged_bam_index)
+#     
+#     if bigwig:
+#         merged_bigwig = job.add_temp_file(
+#             '{}_merged.bw'.format(merged_name), copy=True)
+#     
+#     temp_bams = []
+#     for bam in bams:
+#         temp_bams.append(job.add_input_file(bam))
+#     # self.input_files_to_copy += bams
+# 
+#     if copy_bams:
+#         job.copy_input_files()
+# 
+#     with open(job.filename, "a") as f:
+#         lines = _picard_merge(temp_bams, merged_bam, picard_memory,
+#                               picard_path=picard_path, picard_tempdir=tempdir)
+#         f.write(lines)
+#         
+#         if index:
+#             lines = _picard_index(merged_bam, merged_bam_index,
+#                                   picard_path=picard_path,
+#                                   picard_memory=picard_memory,
+#                                   picard_tempdir=tempdir, bg=bigwig)
+#             f.write(lines)
+# 
+#         if bigwig:
+#             lines = _bigwig_files(
+#                 merged_bam, merged_bigwig, merged_name,
+#                 bedgraph_to_bigwig_path=bedgraph_to_bigwig_path,
+#                 bedtools_path=bedtools_path)
+#             f.write(lines)
+# 
+#     job.write_end()
+#     return job.filename
