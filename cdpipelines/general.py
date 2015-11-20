@@ -967,6 +967,62 @@ class JobScript:
             f.write(lines)
         return out_bam
     
+    def sambamba_sort(
+        self,
+        in_bam, 
+        queryname=False,
+        threads=4,
+        memory=4, 
+        tempdir='.',
+        sambamba_path='sambamba',
+    ):
+        """
+        Coordinate sort using sambamba.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+        
+        queryname : bool
+            If True, sort by query name.
+
+        threads : int
+            Number of threads to give sambamba.
+
+        memory : int
+            Amount of memory in Gb to give picard.
+    
+        tempdir : str
+            Path to directory to use for temporary files. Default is current
+            directory.
+    
+        sambamba_path : str
+            Path to sambaba executable.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        """
+        if queryname:
+            out_bam = os.path.join(
+                self.tempdir, '{}_query_sorted.bam'.format(self.sample_name))
+        else:
+            out_bam = os.path.join(
+                self.tempdir, '{}_sorted.bam'.format(self.sample_name))
+        lines = '{} sort -m {}GB -t {}'.format(sambamba_path, memory, threads)
+        if queryname:
+            lines += ' -n'
+        lines += ' \\\n\t'
+        lines += '-T {} \\\n\t'.format(tempdir)
+        lines += '> {}\n\n'.format(out_bam)
+
+        with open(job.filename, "a") as f:
+            f.write(lines)
+        return out_bam
+    
     def picard_coord_sort(
         self,
         in_bam, 

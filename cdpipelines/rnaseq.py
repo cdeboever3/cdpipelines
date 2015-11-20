@@ -694,12 +694,13 @@ def pipeline(
     star_bam = job.add_input_file(star_bam, delete_original=True)
 
     # Coordinate sort.
-    job.temp_files_to_delete.append(star_bam)
-    coord_sorted_bam = job.picard_coord_sort(
+    coord_sorted_bam = job.sambamba_sort(
         star_bam, 
-        picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir)
+        threads=4,
+        memory=4, 
+        tempdir=job.tempdir,
+        sambamba_path=sambamba_path,
+    )
     job.add_temp_file(coord_sorted_bam)
 
     # Mark duplicates.
@@ -850,7 +851,7 @@ def pipeline(
         bedtools_path=bedtools_path,
         sambamba_path=sambamba_path,
     )
-    job.temp_files_to_delete.append(bg)
+    job.add_temp_file(bg)
     bw = job.bigwig_from_bedgraph(
         bg,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
@@ -865,7 +866,7 @@ def pipeline(
         bedtools_path=bedtools_path,
         sambamba_path=sambamba_path,
     )
-    job.temp_files_to_delete.append(plus_bg)
+    job.add_temp_file(plus_bg)
     plus_bw = job.bigwig_from_bedgraph(
         bg,
         strand='+',
@@ -882,7 +883,7 @@ def pipeline(
         bedtools_path=bedtools_path,
         sambamba_path=sambamba_path,
     )
-    job.temp_files_to_delete.append(minus_bg)
+    job.add_temp_file(minus_bg)
     minus_bw = job.bigwig_from_bedgraph(
         bg,
         strand='-',
