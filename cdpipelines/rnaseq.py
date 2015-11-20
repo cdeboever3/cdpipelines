@@ -363,7 +363,7 @@ class RNAJobScript(JobScript):
         self,
         bedgraph,
         strand=None,
-        scale=None,
+        scale=False,
         web_available=True,
         write_to_outdir=False,
         bedGraphToBigWig_path='bedGraphToBigWig',
@@ -380,8 +380,8 @@ class RNAJobScript(JobScript):
         strand : str
             If '+' or '-', add this information to trackline.
     
-        scale : float
-            Add note to trackline that data is scaled.
+        scale : bool
+            If True, add note to trackline that data is scaled.
 
         web_available : bool
             If True, write trackline to self.links_tracklines, make softlink to
@@ -475,6 +475,7 @@ def pipeline(
     strand_specific=True, 
     tempdir=None,
     mappability=None,
+    expected_input_pairs=20000000,
     star_path='STAR',
     picard_path='$picard',
     bedtools_path='bedtools',
@@ -577,6 +578,25 @@ def pipeline(
     tempdir : str
         Directory to store temporary files.
 
+    expected_input_pairs : int
+        The number of expected inputs pairs for this group of experiments. This
+        only needs to be a rough estimate. You should keep this number constant
+        for all samples across an experiment/project (i.e. any samples you want
+        to compare against each other). For example, say you are doing RNA-seq
+        for 10 samples on a lane and the lane yields 100,000,000 PAIRS of reads.
+        Then you would want expected_input_pairs = 10,000,000. This number is
+        used to make scaled bigwig files that are rougly corrected for library
+        size. The bigwig coverage is divided by actual number of input read
+        pairs and then multipied by expected_input_pairs. The reason you want
+        this number close to the number of expected input pairs is so the
+        normalization doesn't drastically change the coverage for samples near
+        the expected number of input read pairs. For instance, if
+        expected_input_pairs=20,000,000 and a sample has exactly 20M input read
+        PAIRS, then the coverage will not be normalized at all. If
+        expected_input_pairs=20 and a sample has only 10M input read PAIRS, it
+        will be normalized so that it looks like it had 20M input read pairs
+        (i.e. all coverages will be multiplied by 2).
+
     star_path : str
         Path to STAR aligner.
 
@@ -627,8 +647,8 @@ def pipeline(
     combined_r2 = job.combine_fastqs(r2_fastqs, combined_r2, bg=True)
     # We don't want to keep the fastqs indefinitely, but we need them for the
     # fastQC step later.
-    job.add_output_file(combined_r1)
-    job.add_output_file(combined_r2)
+    combined_r1 = job.add_output_file(combined_r1)
+    combined_r2 = job.add_output_file(combined_r2)
 
     # Align reads.
     (star_bam, log_out, log_final_out, log_progress_out, sj_out, 
@@ -704,24 +724,26 @@ def pipeline(
     job.add_temp_file(coord_sorted_bam)
 
     # Mark duplicates.
-    mdup_bam, duplicates_metrics = job.picard_mark_duplicates(
-        coord_sorted_bam, 
-        picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir)
-    job.add_output_file(mdup_bam)
+    mdup_bam, duplicates_metrics = job.biobambam2_mark_duplicates(
+        coord_sorted_bam,
+        threads=4,
+        bammarkduplicates_path=bammarkduplicates_path)
+    outdir_mdup_bam = job.add_output_file(mdup_bam)
     job.add_output_file(duplicate_metrics)
-    link = job.add_softlink(mdup_bam)
-    # TODO: Add trackline. Maybe move softlinks to mdup function?
-    ## name = os.path.split(mdup_bam)[1]
-    ## job.add_softlink(os.path.join(job.outdir, name), 
-    ##                  os.path.join(link_dir, 'bam', name))
-    ## with open(tracklines_file, "a") as tf:
-    ##     tf_lines = ('track type=bam name="{}_rna_bam" '
-    ##                 'description="RNAseq for {}" '
-    ##                 'bigDataUrl={}/bam/{}\n'.format(
-    ##                     sample_name, sample_name, webpath, name))
-    ##     tf.write(tf_lines)
+    # Add softlink to bam file in outdir and write URL and trackline.
+    link = job.add_softlink(outdir_mdup_bam)
+    name = '{}_rna_'.format(self.sample_name)
+    desc = 'RNAseq alignment for {}.'.format(self.sample_name)
+    url = self.webpath + '/' + os.path.split(outdir_mdup_bam)[1]
+    t_lines = (
+        'track type=bam name="{}" '
+        'description="{}" '
+        'visibility=0 db=hg19 bigDataUrl={}\n'.format(
+            name, desc, url))
+    with open(self.links_tracklines, "a") as f:
+        f.write(t_lines)
+        f.write(url + '\n')
+    link = self.add_softlink(bigwig)
 
     # Index bam file.
     bam_index = job.picard_index(
@@ -730,11 +752,15 @@ def pipeline(
         picard_memory=job.memory,
         picard_tempdir=job.tempdir, 
         bg=False)
-    job.add_output_file(bam_index)
-    link = job.add_softlink(bam_index)
+    outdir_bam_index = job.add_output_file(bam_index)
+    link = job.add_softlink(outdir_bam_index)
 
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
+    
+    # These files will be input for upcoming scripts.
+    mdup_bam = outdir_mdup_bam
+    bam_index = outdir_bam_index
 
     ##### Job 4: Collect Picard metrics. #####
     job = JobScript(
@@ -846,7 +872,7 @@ def pipeline(
     mdup_bam = job.add_input_file(mdup_bam)
 
     # First make bigwig from both strands.
-    bg = bedgraph_from_bam(
+    bg = job.bedgraph_from_bam(
         mdup_bam, 
         bedtools_path=bedtools_path,
         sambamba_path=sambamba_path,
@@ -860,7 +886,7 @@ def pipeline(
     job.add_output_file(bw)
 
     # Now for genes on the plus strand.
-    plus_bg = bedgraph_from_bam(
+    plus_bg = job.bedgraph_from_bam(
         mdup_bam, 
         strand='+',
         bedtools_path=bedtools_path,
@@ -868,7 +894,7 @@ def pipeline(
     )
     job.add_temp_file(plus_bg)
     plus_bw = job.bigwig_from_bedgraph(
-        bg,
+        plus_bg,
         strand='+',
         scale=None,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
@@ -877,7 +903,7 @@ def pipeline(
     job.add_output_file(plus_bw)
 
     # Now for genes on the minus strand.
-    minus_bg = bedgraph_from_bam(
+    minus_bg = job.bedgraph_from_bam(
         mdup_bam, 
         strand='-',
         bedtools_path=bedtools_path,
@@ -885,7 +911,7 @@ def pipeline(
     )
     job.add_temp_file(minus_bg)
     minus_bw = job.bigwig_from_bedgraph(
-        bg,
+        minus_bg,
         strand='-',
         scale=None,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
@@ -893,55 +919,63 @@ def pipeline(
     )
     job.add_output_file(minus_bw)
 
-    # Now we'll make scaled versions.
-    # # TODO: working here. Needed to figure out how to make scaled versions.
-    # # Both strands.
-    # bg = bedgraph_from_bam(
-    #     mdup_bam, 
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.temp_files_to_delete.append(bg)
-    # bw = job.bigwig_from_bedgraph(
-    #     bg,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.output_files_to_copy.append(bw)
+    # Now we'll make scaled versions. First I'll read the star Log.final.out
+    # file and find the number of uniquely mapped reads.
+    import cdpybio as cpb
+    log = cpb.star.make_logs_df([log_final_out])
+    uniq_num = float(log['Uniquely mapped reads number'])
+    factor = expected_input_pairs / uniq_num
 
-    # # Now for genes on the plus strand.
-    # plus_bg = bedgraph_from_bam(
-    #     mdup_bam, 
-    #     strand='+',
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.temp_files_to_delete.append(plus_bg)
-    # plus_bw = job.bigwig_from_bedgraph(
-    #     bg,
-    #     strand='+',
-    #     scale=None,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.output_files_to_copy.append(plus_bw)
+    # Both strands scaled.
+    scaled_bg = job.bedgraph_from_bam(
+        mdup_bam,
+        scale=factor,
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.add_temp_file(scaled_bg)
+    scaled_bw = job.bigwig_from_bedgraph(
+        scaled_bg,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(scaled_bw)
 
-    # # Now for genes on the minus strand.
-    # minus_bg = bedgraph_from_bam(
-    #     mdup_bam, 
-    #     strand='-',
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.temp_files_to_delete.append(minus_bg)
-    # minus_bw = job.bigwig_from_bedgraph(
-    #     bg,
-    #     strand='-',
-    #     scale=None,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.output_files_to_copy.append(minus_bw)
+    # Plus strand scaled.
+    plus_scaled_bg = job.bedgraph_from_bam(
+        mdup_bam, 
+        strand='+',
+        scale=factor,
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.add_temp_file(plus_scaled_bg)
+    plus_scaled_bw = job.bigwig_from_bedgraph(
+        plus_scaled_bg,
+        strand='+',
+        scale=None,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(plus_scaled_bw)
+
+    # Minus strand scaled.
+    minus_scaled_bg = job.bedgraph_from_bam(
+        mdup_bam, 
+        strand='-',
+        scale=factor,
+        bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
+    )
+    job.add_temp_file(minus_scaled_bg)
+    minus_scaled_bw = job.bigwig_from_bedgraph(
+        minus_scaled_bg,
+        strand='-',
+        scale=None,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(minus_scaled_bw)
 
     job.write_end()
     submit_commands.append(job.sge_submit_comand())

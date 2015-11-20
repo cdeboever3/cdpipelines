@@ -663,6 +663,46 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write(lines)
         return index
+
+    def biobambam2_mark_duplicates(
+        in_bam,
+        threads=4,
+        bammarkduplicates_path='bammarkduplicates',
+    ):
+        """
+        Mark and optionally remove duplicates using biobambam2.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        threads : int
+            Number of threads to give biobambam2.
+    
+        bammarkduplicates_path : str
+            Path to bammarkduplicates.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        dup_metrics : str
+            Path to index file for input bam file.
+    
+        """
+        mdup_bam = os.path.join(
+            self.tempdir, '{}_sorted_mdup.bam'.format(self.sample_name))
+        dup_metrics = os.path.join(
+            self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
+        lines = ('{} markthreads={} \\\n\ttmpfile={} \\\n\tI={} \\\n\t'
+                 'O={} \\\n\tM={} \\\n\t'.format(
+                     bammarkduplicates_path, threads, self.tempdir, in_bam,
+                     mdup_bam, dup_metrics))
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return mdup_bam, dup_metrics
     
     def picard_mark_duplicates(
         self,
@@ -696,21 +736,20 @@ class JobScript:
         out_bam : str
             Path to output bam file.
     
-        duplicate_metrics : str
+        dup_metrics : str
             Path to index file for input bam file.
-    
     
         """
         mdup_bam = os.path.join(
             self.tempdir, '{}_sorted_mdup.bam'.format(self.sample_name))
-        duplicate_metrics = os.path.join(
-            self.outdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
+        dup_metrics = os.path.join(
+            self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar '.format(picard_memory),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
             '-jar {} MarkDuplicates'.format(picard_path),
-            'METRICS_FILE={}'.format(duplicate_metrics),
+            'METRICS_FILE={}'.format(dup_metrics),
             'VALIDATION_STRINGENCY=SILENT',
             'ASSUME_SORTED=TRUE',
             'I={}'.format(in_bam), 
@@ -721,7 +760,7 @@ class JobScript:
             lines += '\n\n'
         with open(self.filename, "a") as f:
             f.write(lines)
-        return mdup_bam, duplicate_metrics
+        return mdup_bam, dup_metrics
 
     def picard_gc_bias_metrics(
         self,
