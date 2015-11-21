@@ -1,5 +1,6 @@
 import os
 
+from general import _make_dir
 from general import JobScript
 
 class RNAJobScript(JobScript):
@@ -445,7 +446,101 @@ class RNAJobScript(JobScript):
             link = self.add_softlink(bigwig)
 
         return bigwig
+     
+    def bigwig_hub(
+        self,
+        plus_bw,
+        minus_bw,
+        scale=False,
+    ):
+        """
+        Make a bigwig hub for the plus and minus strand bigwigs. Hub directory
+        is written directly to self.outdir and a link is made to linkdir. The
+        URL of the hub is written to self.links_tracklines.
+    
+        Parameters
+        ----------
+        plus_bw : str
+            Path to output plus strand bigwig file.
         
+        minus_bw : str
+            Path to output minus strand bigwig file.
+        
+        scale : bool
+            If True, add labels indicated scaled.
+
+        """
+        dy = os.path.join(job.outdir, '{}_rna_hub'.format(job.sample_name))
+        if scale:
+            dy += '_scaled'
+        _make_dir(dy)
+        # Make genomes.txt file.
+        with open(os.path.join(dy, 'genomes.txt'), 'w') as f:
+            f.write('genome hg19\ntrackDb hg19/trackDb.txt\n')
+        # Make hub.txt file.
+        lines = '\n'.join([
+            'hub {}_rna_cov'.format(self.sample_name),
+            'shortLabel RNA cov {}'.format(job.sample_name.split('-')[0]),
+            ('longLabel RNA-seq coverage for plus and minus strands '
+             'for {}.'.format(job.sample_name)),
+            'genomesFile genomes.txt',
+            'cdeboeve.ucsd.edu',
+        ]) + '\n'
+        with open(os.path.join(dy, 'hub.txt'), 'w') as f:
+            f.write(lines)
+        # Make trackDb.txt file.
+        _make_dir(os.path.join(dy, 'hg19'))
+        lines = '\n'.join([
+            'track {}_rna_cov'.format(job.sample_name),
+            'type bigWig',
+            'container multiWig',
+            'shortLabel RNA cov {}'.format(job.sample_name.split('-')[0]),
+            ('longLabel RNA-seq coverage for plus and minus strands '
+             'for {}.'.format(job.sample_name)),
+            'visibility dense',
+            'aggregate transparentOverlay',
+            'showSubtrackColorOnUi on',
+        ]) + '\n\n'
+
+        url = self.webpath + '/' + os.path.split(plus_bw)[1]
+        lines += '\t' + '\n\t'.join([
+            'track plus',
+            'bigDataUrl {}'.format(url),
+            'shortLabel Plus cov {}'.format(job.sample_name.split('-')[0]),
+            ('longLabel Coverage for {} from fragments originating from '
+             'the plus strand.'.format(job.sample_name)),
+            'parent {}_rna_cov'.format(self.sample_name),
+            'type bigWig',
+            'color 255,0,0',
+        ]) + '\n\n'
+
+        url = self.webpath + '/' + os.path.split(minus_bw)[1]
+        lines += '\t' + '\n\t'.join([
+            'track plus',
+            'bigDataUrl {}'.format(url),
+            'shortLabel Minus cov {}'.format(job.sample_name.split('-')[0]),
+            ('longLabel Coverage for {} from fragments originating from '
+             'the Minus strand.'.format(job.sample_name)),
+            'parent {}_rna_cov'.format(self.sample_name),
+            'type bigWig',
+            'color 0,0,255',
+        ]) + '\n'
+        if scale:
+            lines.replace('_rna_cov', '_rna_cov_scaled')
+            lines.replace('RNA cov', 'RNA scov')
+            lines.replace('RNA-seq coverage', 'Scaled RNA-seq coverage')
+            lines.replace(' Coverage ', ' Scaled coverage ')
+            lines.replace('us cov', 'us scov')
+
+        _make_dir(os.path.join(dy, 'hg19'))
+        with open(os.path.join(dy, 'hg19', 'trackDb.txt'), 'w') as f:
+            f.write(lines)
+
+        self.add_softlink(dy)
+        url = self.webpath + '/' + os.path.split(dy)[1] + '/' + 'hub.txt'
+        with open(self.links_tracklines, "a") as f:
+            f.write(url + '\n')
+
 def pipeline(
     r1_fastqs, 
     r2_fastqs, 
@@ -900,7 +995,7 @@ def pipeline(
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
-    job.add_output_file(plus_bw)
+    plus_bw = job.add_output_file(plus_bw)
 
     # Now for genes on the minus strand.
     minus_bg = job.bedgraph_from_bam(
@@ -917,7 +1012,13 @@ def pipeline(
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
-    job.add_output_file(minus_bw)
+    minus_bw = job.add_output_file(minus_bw)
+    # I'll make a track hub for the plus/minus strand bigwigs.
+    job.bigwig_hub(
+        plus_bw,
+        minus_bw,
+        scale=False,
+    )
 
     # Now we'll make scaled versions. First I'll read the star Log.final.out
     # file and find the number of uniquely mapped reads.
@@ -957,7 +1058,7 @@ def pipeline(
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
-    job.add_output_file(plus_scaled_bw)
+    plus_scaled_bw = job.add_output_file(plus_scaled_bw)
 
     # Minus strand scaled.
     minus_scaled_bg = job.bedgraph_from_bam(
@@ -975,7 +1076,13 @@ def pipeline(
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
-    job.add_output_file(minus_scaled_bw)
+    minus_scaled_bw = job.add_output_file(minus_scaled_bw)
+    # I'll make a track hub for the plus/minus strand bigwigs.
+    job.bigwig_hub(
+        plus_scaled_bw,
+        minus_scaled_bw,
+        scale=True,
+    )
 
     job.write_end()
     submit_commands.append(job.sge_submit_comand())
