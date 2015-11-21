@@ -77,7 +77,7 @@ class RNAJobScript(JobScript):
         lines += '\n\n'
         lines += 'if [ -d _STARtmp ] ; then rm -r _STARtmp ; fi\n\n'
         bam = os.path.join(
-            self.tempdir, '{}.bam'.format(sample_name))
+            self.tempdir, '{}.bam'.format(self.sample_name))
         log_out = os.path.join(
             self.tempdir, '{}_Log.out'.format(self.sample_name))
         log_final_out = os.path.join(
@@ -93,9 +93,9 @@ class RNAJobScript(JobScript):
         lines += 'mv Log.final.out {}\n'.format(log_final_out)
         lines += 'mv Log.progress.out {}\n'.format(log_progress_out)
         lines += 'mv SJ.out.tab {}\n'.format(sj_out)
-        lines += 'mv Aligned.toTranscriptome.out.bam {\n\n}'.format(
+        lines += 'mv Aligned.toTranscriptome.out.bam {}\n\n'.format(
             transcriptome_bam)
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         if transcriptome_align:
             return (bam, log_out, log_final_out, log_progress_out, sj_out,
@@ -156,7 +156,7 @@ class RNAJobScript(JobScript):
         if strand_specific:
             line += '\\\n\t--forward-prob 0'
         line += '\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(line)
         return genes, isoforms, stats
 
@@ -167,7 +167,8 @@ class RNAJobScript(JobScript):
         paired=True,
         strand_specific=True, 
         dexseq_count_path=None,
-        samtools_path='samtools'):
+        samtools_path='samtools',
+    ):
         """
         Count reads overlapping exonic bins for DEXSeq.
     
@@ -219,8 +220,8 @@ class RNAJobScript(JobScript):
             '-p {} -s {} -a 0 -r pos -f sam \\\n\t'.format(p, s) + 
             '{} \\\n\t- {}\n\n'.format(dexseq_annotation, counts_file)
         )
-        with open(job.filename, "a") as f:
-            f.write(line)
+        with open(self.filename, "a") as f:
+            f.write(lines)
         return counts_file
     
     def htseq_count(
@@ -280,8 +281,8 @@ class RNAJobScript(JobScript):
         lines += 'wanted=`expr $lines - 5`\n'
         lines += 'head -n $wanted temp_out.tsv > {}\n'.format(counts_file)
         lines += 'rm temp_out.tsv\n\n'
-        with open(job.filename, "a") as f:
-            f.write(line)
+        with open(self.filename, "a") as f:
+            f.write(lines)
         return counts_file, stats_file
 
     def bedgraph_from_bam(
@@ -344,19 +345,24 @@ class RNAJobScript(JobScript):
                 '-ibam stdin -g {} -split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
-        if strand == '-':
+        elif strand == '-':
             lines = (
                 '{} view -f bam -F (second_of_pair and mate_is_reverse_strand) '
                 'or (first_of_pair and reverse_strand) {} \\\n | {} genomecov '
                 '-ibam stdin -g {} -split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
+        else:
+            lines = ('{} genomecov -ibam {} -g {} -split -bg -trackline '
+                     '-trackopts \'name="{}"\' '.format(
+                         bedtools_path, bam, genome_file, fn_root))
+
         if scale:
             lines += ' -scale {}'.format(scale)
         
         lines += ' > {}\n\n'.format( bedgraph)
 
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return bedgraph
     
@@ -418,7 +424,7 @@ class RNAJobScript(JobScript):
         bigwig = os.path.join(dy, '{}.bw'.format(root))
         lines = '{} {} {} {}\n\n'.format(bedGraphToBigWig_path, bedgraph,
                                      genome_file, bigwig)
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         if web_available:
             name = '{}_rna_'.format(self.sample_name)
@@ -470,7 +476,7 @@ class RNAJobScript(JobScript):
             If True, add labels indicated scaled.
 
         """
-        dy = os.path.join(job.outdir, '{}_rna_hub'.format(job.sample_name))
+        dy = os.path.join(self.outdir, '{}_rna_hub'.format(self.sample_name))
         if scale:
             dy += '_scaled'
         _make_dir(dy)
@@ -480,9 +486,9 @@ class RNAJobScript(JobScript):
         # Make hub.txt file.
         lines = '\n'.join([
             'hub {}_rna_cov'.format(self.sample_name),
-            'shortLabel RNA cov {}'.format(job.sample_name.split('-')[0]),
+            'shortLabel RNA cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel RNA-seq coverage for plus and minus strands '
-             'for {}.'.format(job.sample_name)),
+             'for {}.'.format(self.sample_name)),
             'genomesFile genomes.txt',
             'cdeboeve.ucsd.edu',
         ]) + '\n'
@@ -491,12 +497,12 @@ class RNAJobScript(JobScript):
         # Make trackDb.txt file.
         _make_dir(os.path.join(dy, 'hg19'))
         lines = '\n'.join([
-            'track {}_rna_cov'.format(job.sample_name),
+            'track {}_rna_cov'.format(self.sample_name),
             'type bigWig',
             'container multiWig',
-            'shortLabel RNA cov {}'.format(job.sample_name.split('-')[0]),
+            'shortLabel RNA cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel RNA-seq coverage for plus and minus strands '
-             'for {}.'.format(job.sample_name)),
+             'for {}.'.format(self.sample_name)),
             'visibility dense',
             'aggregate transparentOverlay',
             'showSubtrackColorOnUi on',
@@ -506,9 +512,9 @@ class RNAJobScript(JobScript):
         lines += '\t' + '\n\t'.join([
             'track plus',
             'bigDataUrl {}'.format(url),
-            'shortLabel Plus cov {}'.format(job.sample_name.split('-')[0]),
+            'shortLabel Plus cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel Coverage for {} from fragments originating from '
-             'the plus strand.'.format(job.sample_name)),
+             'the plus strand.'.format(self.sample_name)),
             'parent {}_rna_cov'.format(self.sample_name),
             'type bigWig',
             'color 255,0,0',
@@ -518,9 +524,9 @@ class RNAJobScript(JobScript):
         lines += '\t' + '\n\t'.join([
             'track plus',
             'bigDataUrl {}'.format(url),
-            'shortLabel Minus cov {}'.format(job.sample_name.split('-')[0]),
+            'shortLabel Minus cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel Coverage for {} from fragments originating from '
-             'the Minus strand.'.format(job.sample_name)),
+             'the Minus strand.'.format(self.sample_name)),
             'parent {}_rna_cov'.format(self.sample_name),
             'type bigWig',
             'color 0,0,255',
@@ -551,6 +557,7 @@ def pipeline(
     rrna_intervals,
     dexseq_annotation,
     gene_gtf,
+    gene_bed,
     exon_bed,
     rsem_reference,
     find_intersecting_snps_path, 
@@ -582,6 +589,8 @@ def pipeline(
     gatk_path='$GATK',
     bigWigAverageOverBed_path='bigWigAverageOverBed',
     bcftools_path='bcftools',
+    bammarkduplicates_path='bammarkduplicates',
+    dexseq_count_path=None,
 ):
     """
     Make a shell script for aligning RNA-seq reads with STAR. The defaults are
@@ -598,7 +607,8 @@ def pipeline(
         single gzipped fastq file with R2 reads.
 
     outdir : str
-        Directory to store shell file and aligment results.
+        Directory to store shell scripts, stdout/stderr logs, and output files
+        and directories.
 
     sample_name : str
         Sample name used for naming files etc.
@@ -618,9 +628,13 @@ def pipeline(
     gene_gtf : str
         Path to GTF file with gene annotations.
 
+    gene_bed : str
+        Path to bed file with gene definitions. The gene ID is used for
+        assigning variants to genes for ASE.
+
     exon_bed : str
-        Path to bed file with exon definitions. The exons should be merged so
-        that no bed file entries overlap each other.
+        Path to bed file with exon definitions. This is used for filtering
+        variants used for ASE.
 
     rsem_reference : str
         Directory with RSEM reference.
@@ -704,6 +718,10 @@ def pipeline(
     bedGraphToBigWig_path : str
         Path bedGraphToBigWig executable.
 
+    dexseq_count_path : str
+        Path to dexseq_count.py script. If not provided, rpy2 will look for the
+        path in R.
+    
     Returns
     -------
     fn : str
@@ -738,8 +756,8 @@ def pipeline(
         job.add_input_file(fq)
 
     # Combine R1 and R2 fastqs.
-    combined_r1 = job.combine_fastqs(r1_fastqs, combined_r1, bg=True)
-    combined_r2 = job.combine_fastqs(r2_fastqs, combined_r2, bg=True)
+    combined_r1 = job.combine_fastqs(r1_fastqs, suffix='R1', bg=True)
+    combined_r2 = job.combine_fastqs(r2_fastqs, suffix='R2', bg=True)
     # We don't want to keep the fastqs indefinitely, but we need them for the
     # fastQC step later.
     combined_r1 = job.add_output_file(combined_r1)
@@ -755,14 +773,13 @@ def pipeline(
     log_final_out = job.add_output_file(log_final_out)
     [job.add_output_file(x) for x in [log_out, log_progress_out, sj_out]]
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
 
     ##### Job 2: Run fastQC. ##### 
-    job = JobScript(
+    job = RNAJobScript(
         sample_name, 
         job_suffix='fastqc', 
         outdir=os.path.join(outdir, 'qc'), 
-        shell_fn=fastqc_shell,
         threads=1, 
         memory=4,
         linkdir=linkdir,
@@ -780,20 +797,19 @@ def pipeline(
     job.add_input_file(combined_r2, delete_original=True)
 
     # Run fastQC.
-    fastqc_html, fastqc_zip = job.fastqc([combined_r1, combined_r2], job.outdir,
-                                         job.threads, fastqc_path)
-    job.add_output_file(fastqc_html)
-    job.add_output_file(fastqc_zip)
+    fastqc_html, fastqc_zip = job.fastqc([combined_r1, combined_r2],
+                                         fastqc_path)
+    [job.add_output_file(x) for x in fastqc_html + fastqc_zip]
         
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
 
     ##### Job 3: Coordinate sort, mark duplicates and index bam. #####
-    job = JobScript(
+    job = RNAJobScript(
         sample_name, 
         job_suffix = 'sort_mdup_index',
         outdir=os.path.join(outdir, 'alignment'), 
-        threads=1, 
+        threads=4, 
         memory=4,
         linkdir=linkdir,
         webpath=webpath,
@@ -811,34 +827,31 @@ def pipeline(
     # Coordinate sort.
     coord_sorted_bam = job.sambamba_sort(
         star_bam, 
-        threads=4,
-        memory=4, 
         tempdir=job.tempdir,
         sambamba_path=sambamba_path,
     )
     job.add_temp_file(coord_sorted_bam)
 
     # Mark duplicates.
-    mdup_bam, duplicates_metrics = job.biobambam2_mark_duplicates(
+    mdup_bam, duplicate_metrics = job.biobambam2_mark_duplicates(
         coord_sorted_bam,
-        threads=4,
         bammarkduplicates_path=bammarkduplicates_path)
     outdir_mdup_bam = job.add_output_file(mdup_bam)
     job.add_output_file(duplicate_metrics)
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_mdup_bam)
-    name = '{}_rna_'.format(self.sample_name)
-    desc = 'RNAseq alignment for {}.'.format(self.sample_name)
-    url = self.webpath + '/' + os.path.split(outdir_mdup_bam)[1]
+    name = '{}_rna_'.format(job.sample_name)
+    desc = 'RNAseq alignment for {}.'.format(job.sample_name)
+    url = job.webpath + '/' + os.path.split(outdir_mdup_bam)[1]
     t_lines = (
         'track type=bam name="{}" '
         'description="{}" '
         'visibility=0 db=hg19 bigDataUrl={}\n'.format(
             name, desc, url))
-    with open(self.links_tracklines, "a") as f:
+    with open(job.links_tracklines, "a") as f:
         f.write(t_lines)
         f.write(url + '\n')
-    link = self.add_softlink(bigwig)
+    link = job.add_softlink(outdir_mdup_bam)
 
     # Index bam file.
     bam_index = job.picard_index(
@@ -851,18 +864,17 @@ def pipeline(
     link = job.add_softlink(outdir_bam_index)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
     
     # These files will be input for upcoming scripts.
     mdup_bam = outdir_mdup_bam
     bam_index = outdir_bam_index
 
     ##### Job 4: Collect Picard metrics. #####
-    job = JobScript(
+    job = RNAJobScript(
         sample_name, 
-        job_suffix, 
-        job_suffix = 'picard_metrics',
-        os.path.join(outdir, 'qc'),
+        job_suffix='picard_metrics',
+        outdir=os.path.join(outdir, 'qc'),
         threads=1, 
         memory=4, 
         linkdir=linkdir,
@@ -912,10 +924,10 @@ def pipeline(
     job.add_output_file(index_err)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
 
     ##### Job 5: Make md5 has for final bam file. #####
-    job = JobScript(
+    job = RNAJobScript(
         sample_name, 
         job_suffix = 'md5',
         outdir=os.path.join(outdir, 'alignment'), 
@@ -939,7 +951,7 @@ def pipeline(
     job.add_output_file(md5sum)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
        
     ##### Job 6: Make bigwig files for final bam file. #####
     job_suffix = 'bigwig'
@@ -949,7 +961,7 @@ def pipeline(
     if exists:
         bigwig_shell = tempfile.NamedTemporaryFile(delete=False).name
 
-    job = JobScript(
+    job = RNAJobScript(
         sample_name, 
         job_suffix, 
         os.path.join(outdir, 'alignment'), 
@@ -1022,70 +1034,70 @@ def pipeline(
 
     # Now we'll make scaled versions. First I'll read the star Log.final.out
     # file and find the number of uniquely mapped reads.
-    import cdpybio as cpb
-    log = cpb.star.make_logs_df([log_final_out])
-    uniq_num = float(log['Uniquely mapped reads number'])
-    factor = expected_input_pairs / uniq_num
+    # import cdpybio as cpb
+    # log = cpb.star.make_logs_df([log_final_out])
+    # uniq_num = float(log['Uniquely mapped reads number'])
+    # factor = expected_input_pairs / uniq_num
 
-    # Both strands scaled.
-    scaled_bg = job.bedgraph_from_bam(
-        mdup_bam,
-        scale=factor,
-        bedtools_path=bedtools_path,
-        sambamba_path=sambamba_path,
-    )
-    job.add_temp_file(scaled_bg)
-    scaled_bw = job.bigwig_from_bedgraph(
-        scaled_bg,
-        bedGraphToBigWig_path=bedGraphToBigWig_path,
-        bedtools_path=bedtools_path,
-    )
-    job.add_output_file(scaled_bw)
+    # # Both strands scaled.
+    # scaled_bg = job.bedgraph_from_bam(
+    #     mdup_bam,
+    #     scale=factor,
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.add_temp_file(scaled_bg)
+    # scaled_bw = job.bigwig_from_bedgraph(
+    #     scaled_bg,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # job.add_output_file(scaled_bw)
 
-    # Plus strand scaled.
-    plus_scaled_bg = job.bedgraph_from_bam(
-        mdup_bam, 
-        strand='+',
-        scale=factor,
-        bedtools_path=bedtools_path,
-        sambamba_path=sambamba_path,
-    )
-    job.add_temp_file(plus_scaled_bg)
-    plus_scaled_bw = job.bigwig_from_bedgraph(
-        plus_scaled_bg,
-        strand='+',
-        scale=None,
-        bedGraphToBigWig_path=bedGraphToBigWig_path,
-        bedtools_path=bedtools_path,
-    )
-    plus_scaled_bw = job.add_output_file(plus_scaled_bw)
+    # # Plus strand scaled.
+    # plus_scaled_bg = job.bedgraph_from_bam(
+    #     mdup_bam, 
+    #     strand='+',
+    #     scale=factor,
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.add_temp_file(plus_scaled_bg)
+    # plus_scaled_bw = job.bigwig_from_bedgraph(
+    #     plus_scaled_bg,
+    #     strand='+',
+    #     scale=None,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # plus_scaled_bw = job.add_output_file(plus_scaled_bw)
 
-    # Minus strand scaled.
-    minus_scaled_bg = job.bedgraph_from_bam(
-        mdup_bam, 
-        strand='-',
-        scale=factor,
-        bedtools_path=bedtools_path,
-        sambamba_path=sambamba_path,
-    )
-    job.add_temp_file(minus_scaled_bg)
-    minus_scaled_bw = job.bigwig_from_bedgraph(
-        minus_scaled_bg,
-        strand='-',
-        scale=None,
-        bedGraphToBigWig_path=bedGraphToBigWig_path,
-        bedtools_path=bedtools_path,
-    )
-    minus_scaled_bw = job.add_output_file(minus_scaled_bw)
-    # I'll make a track hub for the plus/minus strand bigwigs.
-    job.bigwig_hub(
-        plus_scaled_bw,
-        minus_scaled_bw,
-        scale=True,
-    )
+    # # Minus strand scaled.
+    # minus_scaled_bg = job.bedgraph_from_bam(
+    #     mdup_bam, 
+    #     strand='-',
+    #     scale=factor,
+    #     bedtools_path=bedtools_path,
+    #     sambamba_path=sambamba_path,
+    # )
+    # job.add_temp_file(minus_scaled_bg)
+    # minus_scaled_bw = job.bigwig_from_bedgraph(
+    #     minus_scaled_bg,
+    #     strand='-',
+    #     scale=None,
+    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
+    #     bedtools_path=bedtools_path,
+    # )
+    # minus_scaled_bw = job.add_output_file(minus_scaled_bw)
+    # # I'll make a track hub for the plus/minus strand bigwigs.
+    # job.bigwig_hub(
+    #     plus_scaled_bw,
+    #     minus_scaled_bw,
+    #     scale=True,
+    # )
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
     
     ##### Job 7: Get HTSeq and DEXSeq counts. #####
     job = RNAJobScript(
@@ -1112,7 +1124,8 @@ def pipeline(
         mdup_bam, 
         gene_gtf, 
         strand_specific=strand_specific,
-        samtools_path=samtools_path)
+        samtools_path=samtools_path,
+    )
     job.add_output_file(gene_counts)
     job.add_output_file(gene_count_stats)
 
@@ -1122,11 +1135,13 @@ def pipeline(
         dexseq_annotation,
         paired=True, 
         strand_specific=strand_specific,
-        samtools_path=samtools_path)
+        dexseq_count_path=dexseq_count_path,
+        samtools_path=samtools_path,
+    )
     job.add_output_file(dexseq_counts)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
     
     ##### Job 8: Run RSEM. #####
     job = RNAJobScript(
@@ -1161,12 +1176,12 @@ def pipeline(
     job.add_output_file(stats)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_comand())
+    submit_commands.append(job.sge_submit_command())
    
     # We'll only go through the ASE steps if a VCF was provided.
     if vcf:
         ##### Job 9: WASP first step. #####
-        job = JobScript(
+        job = RNAJobScript(
             sample_name, 
             job_suffix = 'wasp_allele_swap',
             outdir=os.path.join(outdir, 'wasp'),
@@ -1212,13 +1227,13 @@ def pipeline(
         job.add_output_file(to_remap_num)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_comand())
+        submit_commands.append(job.sge_submit_command())
         
         ##### Job 10: WASP second step. #####
-        job = JobScript(
+        job = RNAJobScript(
             sample_name, 
-            job_suffix = 'wasp_remap',
-            os.path.join(outdir, 'wasp'),
+            job_suffix='wasp_remap',
+            outdir=os.path.join(outdir, 'wasp'),
             threads=8, 
             memory=10, 
             linkdir=linkdir,
@@ -1248,10 +1263,10 @@ def pipeline(
         job.add_temp_file(sj_out)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_comand())
+        submit_commands.append(job.sge_submit_command())
         
         ##### Job 11: WASP third step. #####
-        job = JobScript(
+        job = RNAJobScript(
             sample_name, 
             job_suffix = 'wasp_alignment_compare',
             outdir=os.path.join(outdir, 'wasp'),
@@ -1301,10 +1316,10 @@ def pipeline(
         job.add_output_file(allele_counts)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_comand())
+        submit_commands.append(job.sge_submit_command())
         
         ##### Job 12: Run MBASED for ASE. #####
-        job = JobScript(
+        job = RNAJobScript(
             job_suffix = 'mbased',
             outdir=os.path.join(outdir, 'mbased'),
             threads=8, 
@@ -1336,7 +1351,7 @@ def pipeline(
         job.add_output_file(snv_outfile)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_comand())
+        submit_commands.append(job.sge_submit_command())
 
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the

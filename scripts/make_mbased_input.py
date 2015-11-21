@@ -293,17 +293,17 @@ def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
         Path to bigWigAverageOverBed. Required if mappability is provided.
 
     """
-    if mappability is not None:
-        assert bigWigAverageOverBed_path is not None
     if vcf is not None:
         assert sample_name is not None
     if type(counts) == str:
         counts = pd.read_table(counts)
     assert type(counts) == pd.DataFrame
-
-    # I've mentioned the references for the filters in comments below. The GTEx
-    # methods are primarily in 10.1038/nature12531 and 10.1126/science.1262110.
-    # The MBASED paper is 10.1186/s13059-014-0405-3.
+    
+    # This method applies several filters (depending on the input provided) and
+    # the makes the final input file for MBASED. I've mentioned the references
+    # for the filters in comments below. The GTEx methods are primarily in
+    # 10.1038/nature12531 and 10.1126/science.1262110. The MBASED paper is
+    # 10.1186/s13059-014-0405-3.
 
     counts.index = counts.contig + ':' + counts.position.astype(str)
     # Only keep SNVs with 8 or more counts. GTEx filter.
@@ -355,9 +355,10 @@ def main():
     h = ('Bigwig file with mappability scores (1 means unique mappability). '
          'SNVs that do not have unique mappability will be removed.')
     parser.add_argument('-m', metavar='mappability', default=None, help=h)
-    parser.add_argument('-p', metavar='bigWigAverageOverBed_path', default=None,
-                        help=('Path to bigWigAverageOverBed. Required if -m '
-                              'provided.'))
+    parser.add_argument('-p', metavar='bigWigAverageOverBed_path',
+                        default='bigWigAverageOverBed',
+                        help=('Path to bigWigAverageOverBed. Only needed if -m '
+                              'provided. Default: bigWigAverageOverBed.'))
     args = parser.parse_args()
     counts = args.counts
     out = args.out

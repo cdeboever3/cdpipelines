@@ -247,7 +247,7 @@ class JobScript:
     
         """
         lines = 'ln -s {} {}\n\n'.format(target, link)
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return link
     
@@ -275,10 +275,10 @@ class JobScript:
     
         """
         if self.sample_name not in os.path.split(target)[1]:
-            name = '{}_{}'.format(sample_name, os.path.split(target)[1])
+            name = '{}_{}'.format(self.sample_name, os.path.split(target)[1])
             link = os.path.join(self.linkdir, name)
         else:
-            name = os.path.split(fn)[1]
+            name = os.path.split(target)[1]
             link = os.path.join(self.linkdir, name)
         self.softlinks.append([target, link])
         return link
@@ -326,7 +326,7 @@ class JobScript:
 
     def add_temp_file(self, fn):
         """Add temporary file to self.temp_files_to_delete."""
-        self._temp_files_to_delete(fn)
+        self._temp_files_to_delete.append(fn)
 
     def add_output_file(self, fn):
         """Add output file to be copied to self.outdir. Returns final path (in
@@ -366,7 +366,7 @@ class JobScript:
         fn):
         """Make an md5sum for fn. Returns path to md5 file."""
         lines = 'md5sum {0} > {0}.md5\n\n'.format(fn)
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return fn + '.md5'
 
@@ -557,7 +557,7 @@ class JobScript:
     
         """
         index = os.path.join(self.tempdir, os.path.splitext(in_bam)[0] + '.bai')
-        line = (' \\\n\t'.join([
+        lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar'.format(picard_memory),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(picard_tempdir), 
@@ -565,9 +565,9 @@ class JobScript:
             'I={}'.format(in_bam),
             'O={}'.format(index)]))
         if bg:
-            line += ' &\n\n'
+            lines += ' &\n\n'
         else:
-            line += '\n\n'
+            lines += '\n\n'
         with open(self.filename, "a") as f:
             f.write(lines)
         return index
@@ -665,8 +665,8 @@ class JobScript:
         return index
 
     def biobambam2_mark_duplicates(
+        self,
         in_bam,
-        threads=4,
         bammarkduplicates_path='bammarkduplicates',
     ):
         """
@@ -676,9 +676,6 @@ class JobScript:
         ----------
         in_bam : str
             Path to input bam file.
-    
-        threads : int
-            Number of threads to give biobambam2.
     
         bammarkduplicates_path : str
             Path to bammarkduplicates.
@@ -698,7 +695,7 @@ class JobScript:
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = ('{} markthreads={} \\\n\ttmpfile={} \\\n\tI={} \\\n\t'
                  'O={} \\\n\tM={} \\\n\t'.format(
-                     bammarkduplicates_path, threads, self.tempdir, in_bam,
+                     bammarkduplicates_path, self.threads, self.tempdir, in_bam,
                      mdup_bam, dup_metrics))
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -1010,8 +1007,6 @@ class JobScript:
         self,
         in_bam, 
         queryname=False,
-        threads=4,
-        memory=4, 
         tempdir='.',
         sambamba_path='sambamba',
     ):
@@ -1026,12 +1021,6 @@ class JobScript:
         queryname : bool
             If True, sort by query name.
 
-        threads : int
-            Number of threads to give sambamba.
-
-        memory : int
-            Amount of memory in Gb to give picard.
-    
         tempdir : str
             Path to directory to use for temporary files. Default is current
             directory.
@@ -1051,14 +1040,15 @@ class JobScript:
         else:
             out_bam = os.path.join(
                 self.tempdir, '{}_sorted.bam'.format(self.sample_name))
-        lines = '{} sort -m {}GB -t {}'.format(sambamba_path, memory, threads)
+        lines = '{} sort -m {}GB -t {}'.format(sambamba_path, self.memory,
+                                               self.threads)
         if queryname:
             lines += ' -n'
         lines += ' \\\n\t'
         lines += '-T {} \\\n\t'.format(tempdir)
         lines += '> {}\n\n'.format(out_bam)
 
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out_bam
     
@@ -1119,7 +1109,7 @@ class JobScript:
             old_index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
             lines += 'mv {} {}\n\n'.format(old_index, out_index)
 
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         if index:
             return out_bam, out_index
@@ -1165,7 +1155,7 @@ class JobScript:
             line += ' &\n\n'
         else:
             line += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out
     
@@ -1210,7 +1200,7 @@ class JobScript:
             '{} {}'.format(bedgraph_to_bigwig_path, bedgraph),
             '{}'.format(bedtools_genome_path),
             '{} &\n'.format(bigwig)])
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return bigwig
     
@@ -1244,14 +1234,14 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return stats_file
     
     def combine_fastqs(
         self,
         fastqs,
-        out_fastq,
+        suffix=None,
         bg=False,
     ):
         """
@@ -1265,8 +1255,8 @@ class JobScript:
             Either a list of paths to gzipped fastq files or path to a single
             gzipped fastq file.
     
-        out_fastq : str
-            Path to single output fastq file.
+        suffix : str
+            Add this to the combined file name (for instance, R1 or R2).
     
         Returns
         -------
@@ -1274,6 +1264,10 @@ class JobScript:
             Path to single output fastq file.
     
         """
+        root = '{}_combined'.format(self.sample_name)
+        if suffix:
+            root += '_' + suffix
+        out_fastq = os.path.join(self.tempdir, root + '.fastq.gz')
         fastqs = sorted(fastqs)
         if type(fastqs) == list:
             lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
@@ -1284,15 +1278,13 @@ class JobScript:
             lines += ' &\n\n'
         else:
             lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return out_fastq
     
     def fastqc(
         self,
         fastqs, 
-        outdir, 
-        threads=1,
         web_available=True,
         write_to_outdir=True,
         fastqc_path='fastqc',
@@ -1306,12 +1298,6 @@ class JobScript:
         fastqs : list
             List of paths to fastq files.
     
-        outdir : str
-            Path to directory to store FastQC results to.
-    
-        threads : int
-            Number of threads to run FastQC with.
-
         web_available : bool
             If True, write URL to self.links_tracklines, make softlink to
             self.linkdir, and set write_to_outdir = True.
@@ -1340,16 +1326,16 @@ class JobScript:
         for fq in fastqs:
             fastqc_html.append(
                 os.path.join(dy, '{}_fastqc.html'.format(
-                    '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
+                    '.'.join(os.path.split(fq)[1].split('.')[0:-2]))))
             fastqc_zip.append(
                 os.path.join(dy, '{}_fastqc.zip'.format(
-                    '.'.join(os.path.split(fq)[1].split('.'))[0:-2])))
+                    '.'.join(os.path.split(fq)[1].split('.')[0:-2]))))
         fastqs = ' \\\n\t'.join(fastqs)
 
         lines = ('{} --outdir {} --nogroup --threads {} \\\n'
-                 '\t{}\n'.format(fastqc_path, dy, threads, fastqs))
+                 '\t{}\n'.format(fastqc_path, dy, self.threads, fastqs))
         
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
 
         if web_available:
@@ -1424,16 +1410,16 @@ class JobScript:
 
         # Files that will be created.
         uniq_bam = os.path.join(
-            job.tempdir, '{}_uniq.bam'.format(sample_name))
+            self.tempdir, '{}_uniq.bam'.format(self.sample_name))
         
-        keep_bam = os.path.join(job.tempdir, '{}.keep.bam'.format(prefix))
-        wasp_r1_fastq = os.path.join(job.tempdir,
+        keep_bam = os.path.join(self.tempdir, '{}.keep.bam'.format(prefix))
+        wasp_r1_fastq = os.path.join(self.tempdir,
                                      '{}.remap.fq1.gz'.format(prefix))
-        wasp_r2_fastq = os.path.join(job.tempdir,
+        wasp_r2_fastq = os.path.join(self.tempdir,
                                      '{}.remap.fq2.gz'.format(prefix))
-        to_remap_bam = os.path.join(job.tempdir,
+        to_remap_bam = os.path.join(self.tempdir,
                                     '{}.to.remap.bam'.format(prefix))
-        to_remap_num = os.path.join(job.tempdir,
+        to_remap_num = os.path.join(self.tempdir,
                                     '{}.to.remap.num.gz'.format(prefix))
 
         from __init__ import _scripts
@@ -1457,7 +1443,7 @@ class JobScript:
         # Run WASP to swap alleles.
         lines += ('python {} -s -p \\\n\t{} \\\n\t{}\n\n'.format(
             find_intersecting_snps_path, uniq_bam, snp_directory))
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
                 to_remap_bam, to_remap_num)
@@ -1505,7 +1491,7 @@ class JobScript:
                  '\\\n\t{}\n\n'.format(
                      filter_remapped_reads_path, to_remap_bam,
                      remapped_bam, wasp_filtered_bam, to_remap_num))
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return wasp_filtered_bam
         
@@ -1550,7 +1536,7 @@ class JobScript:
             '-U ALLOW_N_CIGAR_READS',
         ])
         lines += '\n\nwait\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return counts
 
@@ -1634,9 +1620,9 @@ class JobScript:
         lines += 'Rscript '
         lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile,
                                  snv_outfile, job.sample_name, is_phased,
-                                 str(num_sim), str(job.threads)])
+                                 str(num_sim), str(self.threads)])
         lines += '\n\n'
-        with open(job.filename, "a") as f:
+        with open(self.filename, "a") as f:
             f.write(lines)
         return mbased_infile, locus_outfile, snv_outfile
 
