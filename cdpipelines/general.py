@@ -147,12 +147,12 @@ class JobScript:
         self._temp_files_to_delete = []
         # List of [target, link_name] pairs to create softlinks for at the end
         # of the shell script.
-        self.softlinks = []
+        self._softlinks = []
         # Whether to delete shell script after we create it.
         self.delete_sh = False
         # File to write web URLs and tracklines to.
-        self.links_tracklines = os.path.join(self.outdir,
-                                             'links_tracklines.txt')
+        self.links_tracklines = os.path.join(
+            self.outdir, '{}_links_tracklines.txt'.format(self.sample_name))
         # Set shell script file name.
         self._set_filename()
         # Write shell/SGE header.
@@ -225,8 +225,8 @@ class JobScript:
         """Softlinks are made at the end of shell script when all of the files
         are in their final locations."""
         with open(self.filename, "a") as f:
-            for p in self.softlinks:
-                f.write(self.softlink(p[0], p[1]))
+            for p in self._softlinks:
+                self.softlink(p[0], p[1])
 
     def softlink(self, target, link):
         """
@@ -280,7 +280,7 @@ class JobScript:
         else:
             name = os.path.split(target)[1]
             link = os.path.join(self.linkdir, name)
-        self.softlinks.append([target, link])
+        self._softlinks.append([target, link])
         return link
 
     def sge_submit_command(self):
@@ -517,6 +517,49 @@ class JobScript:
                                    'insert_size_metrics']]
         return tuple(output)
     
+    def sambamba_index(
+        self,
+        in_bam, 
+        sambamba_path='sambamba',
+    ):
+        """
+        Index bam file using sambamba.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to file input bam file.
+    
+        index : str
+            Path to index file for input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        picard_memory : int
+            Amount of memory in Gb to give picard.
+    
+        picard_tempdir : str
+            Path to directory to use for Picard temporary files. Default is
+            current directory.
+    
+        bg : boolean
+            Whether to run the process in the background.
+    
+        Returns
+        -------
+        index : str
+            Path to output index file.
+    
+        """
+        index = os.path.join(self.tempdir, os.path.split(in_bam)[1] + '.bai')
+        lines = '{} index -t {} \\\n\t{} \\\n\t{}\n\n'.format(
+            sambamba_path, self.threads, in_bam, index)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return index
+    
     def picard_index(
         self,
         in_bam, 
@@ -556,7 +599,7 @@ class JobScript:
             Path to output index file.
     
         """
-        index = os.path.join(self.tempdir, os.path.splitext(in_bam)[0] + '.bai')
+        index = os.path.join(self.tempdir, os.path.split(in_bam)[1] + '.bai')
         lines = (' \\\n\t'.join([
             'java -Xmx{}g -jar'.format(picard_memory),
             '-XX:ParallelGCThreads=1',
@@ -694,7 +737,7 @@ class JobScript:
         dup_metrics = os.path.join(
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = ('{} markthreads={} \\\n\ttmpfile={} \\\n\tI={} \\\n\t'
-                 'O={} \\\n\tM={} \\\n\t'.format(
+                 'O={} \\\n\tM={} \n\n'.format(
                      bammarkduplicates_path, self.threads, self.tempdir, in_bam,
                      mdup_bam, dup_metrics))
         with open(self.filename, "a") as f:
@@ -1045,8 +1088,9 @@ class JobScript:
         if queryname:
             lines += ' -n'
         lines += ' \\\n\t'
-        lines += '-T {} \\\n\t'.format(tempdir)
-        lines += '> {}\n\n'.format(out_bam)
+        lines += '--tmpdir {} \\\n\t'.format(tempdir)
+        lines += '{} \\\n\t'.format(in_bam)
+        lines += '-o {}\n\n'.format(out_bam)
 
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -1187,7 +1231,7 @@ class JobScript:
     
         """
         bigwig = os.path.join(
-            job.tempdir,
+            self.tempdir,
             '{}.bw'.format(os.path.splitext(os.path.split(bedgraph)[1])))
         # If bedtools is in the path, I'll assume the genome file is as well.
         if bedtools_path == 'bedtools':
@@ -1227,7 +1271,7 @@ class JobScript:
         -------
         """
         stats_file = os.path.join(
-            job.tempdir, '{}_flagstat.txt'.format(
+            self.tempdir, '{}_flagstat.txt'.format(
                 os.path.splitext(os.path.split(bam)[1])[0]))
         lines = '{} flagstat {} > {}'.format(samtools_path, bam, stats_file)
         if bg:
@@ -1245,15 +1289,13 @@ class JobScript:
         bg=False,
     ):
         """
-        If fastqs is a string with a path to a single fastq file, make a
-        softlink to out_fastq. If fastqs is a list of fastqs, cat the fastqs
-        together into the file out_fastq.
-    
+        Cat the fastqs together into a single file. If fastqs only contains one
+        fastq file, make a softlink to that file.
+
         Parameters
         ----------
-        fastqs : list or str
-            Either a list of paths to gzipped fastq files or path to a single
-            gzipped fastq file.
+        fastqs : list
+            List of paths to gzipped fastq files.
     
         suffix : str
             Add this to the combined file name (for instance, R1 or R2).
@@ -1269,11 +1311,10 @@ class JobScript:
             root += '_' + suffix
         out_fastq = os.path.join(self.tempdir, root + '.fastq.gz')
         fastqs = sorted(fastqs)
-        if type(fastqs) == list:
-            lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
-                                                       out_fastq)
-        elif type(fastqs) == str:
-            lines = 'ln -s {} {}'.format(fastqs, out_fastq)
+        if len(fastqs) > 1:
+            lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs))
+        else:
+            lines = 'ln -s {} {}'.format(fastqs[0], out_fastq)
         if bg:
             lines += ' &\n\n'
         else:
@@ -1357,6 +1398,7 @@ class JobScript:
         vcf_sample_name=None, 
         threads=1,
         samtools_path='samtools',
+        bcftools_path='bcftools',
     ):
         """
         Swap alleles for reads that overlap heterozygous variants.
@@ -1412,6 +1454,7 @@ class JobScript:
         uniq_bam = os.path.join(
             self.tempdir, '{}_uniq.bam'.format(self.sample_name))
         
+        prefix = '{}_uniq'.format(self.sample_name)
         keep_bam = os.path.join(self.tempdir, '{}.keep.bam'.format(prefix))
         wasp_r1_fastq = os.path.join(self.tempdir,
                                      '{}.remap.fq1.gz'.format(prefix))
@@ -1428,15 +1471,15 @@ class JobScript:
         # Merge bed file.
 
         # Make SNP directory needed for WASP.
-        snp_directory = os.path.join(job.tempdir, 'snps')
-        lines = ' \\\n\t'.join(
+        snp_directory = os.path.join(self.tempdir, 'snps')
+        lines = ' \\\n\t'.join([
             'python {}'.format(input_script),
             vcf,
             vcf_sample_name,
             snp_directory,
             bed,
-            '-b {}'.format(bcftools_path))
-        lines +- ('{} view -b -q 255 -F 1024 \\\n\t{} '
+            '-b {}'.format(bcftools_path)])
+        lines += ('{} view -b -q 255 -F 1024 \\\n\t{} '
                   '\\\n\t> {}\n\n'.format(
                     samtools_path, bam, uniq_bam))
         lines += 'wait\n\n'
@@ -1484,7 +1527,7 @@ class JobScript:
         """
         # Files that will be created.
         wasp_filtered_bam = os.path.join(
-            job.tempdir, '{}_filtered.bam'.format(sample_name))
+            self.tempdir, '{}_filtered.bam'.format(self.sample_name))
         
         # Run WASP alignment compare.
         lines = ('python {} -p \\\n\t{} \\\n\t{} \\\n\t{} '
@@ -1524,7 +1567,7 @@ class JobScript:
     
         # Count allele coverage.
         counts = os.path.join(
-            job.tempdir, '{}_allele_counts.tsv'.format(sample_name))
+            self.tempdir, '{}_allele_counts.tsv'.format(self.sample_name))
         lines = ' \\\n\t'.join([
             'java -jar {}'.format(gatk_path),
             '-R {}'.format(fasta),
@@ -1601,11 +1644,11 @@ class JobScript:
         """
         from __init__ import _scripts
         mbased_infile = os.path.join(
-            job.tempdir, '{}_mbased_input.tsv'.format(job.sample_name))
+            self.tempdir, '{}_mbased_input.tsv'.format(self.sample_name))
         locus_outfile = os.path.join(
-            job.tempdir, '{}_locus.tsv'.format(job.sample_name))
+            self.tempdir, '{}_locus.tsv'.format(self.sample_name))
         snv_outfile = os.path.join(
-            job.outdir, '{}_snv.tsv'.format(job.sample_name))
+            self.outdir, '{}_snv.tsv'.format(self.sample_name))
         is_phased = str(is_phased).upper()
         script = os.path.join(_scripts, 'make_mbased_input.py')
         lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
@@ -1619,7 +1662,7 @@ class JobScript:
         script = os.path.join(_scripts, 'mbased.R')
         lines += 'Rscript '
         lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile,
-                                 snv_outfile, job.sample_name, is_phased,
+                                 snv_outfile, self.sample_name, is_phased,
                                  str(num_sim), str(self.threads)])
         lines += '\n\n'
         with open(self.filename, "a") as f:

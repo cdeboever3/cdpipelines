@@ -325,8 +325,10 @@ class RNAJobScript(JobScript):
     
         """
         fn_root = self.sample_name
-        if strand:
-            fn_root += '_{}'.format(strand)
+        if strand == '+':
+            fn_root += '_plus'
+        elif strand == '-':
+            fn_root += '_minus'
         if scale:
             fn_root += '_scaled'.format(scale)
         bedgraph = os.path.join(self.tempdir, '{}.bg'.format(fn_root))
@@ -341,20 +343,20 @@ class RNAJobScript(JobScript):
         if strand == '+':
             lines = (
                 '{} view -f bam -F (first_of_pair and mate_is_reverse_strand) '
-                'or (second_of_pair and reverse_strand) {} | {} genomecov '
-                '-ibam stdin -g {} -split -bg -trackline -trackopts '
-                '\'name="{}"\' '.format(
+                'or (second_of_pair and reverse_strand) {} \\\n\t| {} '
+                'genomecov -ibam stdin -g {} \\\n\t-split -bg -trackline '
+                '-trackopts \'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         elif strand == '-':
             lines = (
                 '{} view -f bam -F (second_of_pair and mate_is_reverse_strand) '
-                'or (first_of_pair and reverse_strand) {} \\\n | {} genomecov '
-                '-ibam stdin -g {} -split -bg -trackline -trackopts '
+                'or (first_of_pair and reverse_strand) {} \\\n\t| {} genomecov '
+                '-ibam stdin -g {} \\\n\t-split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         else:
-            lines = ('{} genomecov -ibam {} -g {} -split -bg -trackline '
-                     '-trackopts \'name="{}"\' '.format(
+            lines = ('{} genomecov -ibam {} \\\n\t-g {} -split -bg \\\n\t'
+                     '-trackline -trackopts \'name="{}"\' '.format(
                          bedtools_path, bam, genome_file, fn_root))
 
         if scale:
@@ -415,7 +417,7 @@ class RNAJobScript(JobScript):
         else:
             dy = self.tempdir
         if bedtools_path == 'bedtools':
-            genome_file = 'human.hg19.genome'
+            genome_file = '$(which human.hg19.genome)'
         else:
             genome_file = os.path.join(
                 os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
@@ -427,7 +429,7 @@ class RNAJobScript(JobScript):
         with open(self.filename, "a") as f:
             f.write(lines)
         if web_available:
-            name = '{}_rna_'.format(self.sample_name)
+            name = '{}_rna'.format(self.sample_name)
             desc = 'RNAseq coverage for {}.'.format(self.sample_name)
             if strand == '+':
                 name += '_plus'
@@ -490,7 +492,7 @@ class RNAJobScript(JobScript):
             ('longLabel RNA-seq coverage for plus and minus strands '
              'for {}.'.format(self.sample_name)),
             'genomesFile genomes.txt',
-            'cdeboeve.ucsd.edu',
+            'cdeboeve@ucsd.edu',
         ]) + '\n'
         with open(os.path.join(dy, 'hub.txt'), 'w') as f:
             f.write(lines)
@@ -756,8 +758,16 @@ def pipeline(
         job.add_input_file(fq)
 
     # Combine R1 and R2 fastqs.
+    if type(r1_fastqs) == str:
+        r1_fastqs = [r1_fastqs]
+    if type(r2_fastqs) == str:
+        r2_fastqs = [r2_fastqs]
+    r1_fastqs = [os.path.realpath(x) for x in r1_fastqs]
+    r2_fastqs = [os.path.realpath(x) for x in r2_fastqs]
     combined_r1 = job.combine_fastqs(r1_fastqs, suffix='R1', bg=True)
     combined_r2 = job.combine_fastqs(r2_fastqs, suffix='R2', bg=True)
+    with open(job.filename, "a") as f:
+            f.write('\nwait\n\n')
     # We don't want to keep the fastqs indefinitely, but we need them for the
     # fastQC step later.
     combined_r1 = job.add_output_file(combined_r1)
@@ -840,7 +850,7 @@ def pipeline(
     job.add_output_file(duplicate_metrics)
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_mdup_bam)
-    name = '{}_rna_'.format(job.sample_name)
+    name = '{}_rna'.format(job.sample_name)
     desc = 'RNAseq alignment for {}.'.format(job.sample_name)
     url = job.webpath + '/' + os.path.split(outdir_mdup_bam)[1]
     t_lines = (
@@ -851,15 +861,9 @@ def pipeline(
     with open(job.links_tracklines, "a") as f:
         f.write(t_lines)
         f.write(url + '\n')
-    link = job.add_softlink(outdir_mdup_bam)
 
     # Index bam file.
-    bam_index = job.picard_index(
-        mdup_bam, 
-        picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir, 
-        bg=False)
+    bam_index = job.sambamba_index(mdup_bam, sambamba_path)
     outdir_bam_index = job.add_output_file(bam_index)
     link = job.add_softlink(outdir_bam_index)
 
@@ -1160,7 +1164,7 @@ def pipeline(
     rsem_jobname = job.jobname
     
     # Input files.
-    transcriptome_bam = job.add_input_file(mdup_bam)
+    transcriptome_bam = job.add_input_file(transcriptome_bam)
 
     # Run RSEM.
     genes, isoforms, stats = job.rsem_calculate_expression(
@@ -1209,13 +1213,14 @@ def pipeline(
             vcf_sample_name = sample_name
         (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq, to_remap_bam,
          to_remap_num) = job.wasp_allele_swap(
-            mdup_bam, 
-            find_intersecting_snps_path, 
-            vcf, 
-            exon_bed,
-            vcf_sample_name=vcf_sample_name, 
-            threads=1,
-            samtools_path='samtools',
+             mdup_bam, 
+             find_intersecting_snps_path, 
+             vcf, 
+             exon_bed,
+             vcf_sample_name=vcf_sample_name, 
+             threads=1,
+             samtools_path=samtools_path,
+             bcftools_path=bcftools_path,
         )
         # WASP outputs a file (keep_bam) that has reads that don't overlap
         # variants.  I'm going to discard that file.
@@ -1299,7 +1304,7 @@ def pipeline(
         # Coordinate sort and index filtered bam file.
         wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
             temp_filtered_bam, 
-            bam_index=True,
+            index=True,
             picard_path=picard_path,
             picard_memory=job.memory,
             picard_tempdir=job.tempdir)
@@ -1320,7 +1325,8 @@ def pipeline(
         
         ##### Job 12: Run MBASED for ASE. #####
         job = RNAJobScript(
-            job_suffix = 'mbased',
+            sample_name,
+            job_suffix='mbased',
             outdir=os.path.join(outdir, 'mbased'),
             threads=8, 
             memory=16, 
@@ -1329,7 +1335,8 @@ def pipeline(
             tempdir=tempdir, 
             queue=queue,
             conda_env=conda_env, 
-            modules=modules)
+            modules=modules,
+        )
         mbased_jobname = job.jobname
     
         # Input files.
@@ -1337,10 +1344,9 @@ def pipeline(
 
         mbased_infile, locus_outfile, snv_outfile = job.mbased(
             allele_counts, 
-            feature_bed, 
+            gene_bed, 
             is_phased=is_phased, 
             num_sim=1000000, 
-            threads=8, 
             vcf=vcf,
             vcf_sample_name=vcf_sample_name, 
             mappability=mappability,
@@ -1356,7 +1362,7 @@ def pipeline(
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the
     # appropriate dependencies.
-    submit_fn = os.path.join(outdir, 'sh', 'submit.sh')
+    submit_fn = os.path.join(outdir, 'sh', '{}_submit.sh'.format(sample_name))
     with open(submit_fn, 'w') as f:
         f.write('#!/bin/bash\n\n')
         while True:
