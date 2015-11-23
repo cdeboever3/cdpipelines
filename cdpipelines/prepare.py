@@ -416,17 +416,24 @@ def download_wgEncodeCrgMapabilityAlign100mer(outdir):
         shutil.copyfileobj(req, d)
     
 def download_hg19(
-    outdir, 
+    outdir,
+    create_sorted=True,
     samtools_path='samtools',
+    picard_path='$picard',
     twoBitToFa_path='twoBitToFa',
 ):
     """
-    Download hg19.
+    Download hg19, create index, and sequence dictionary files. 
 
     Parameters
     ----------
     outdir : str
         Directory to save hg19 fasta to.
+
+    create_sorted : bool
+        Create hg19_sorted.fa version that has chromosomes ordered
+        lexicographically as expected by bedtools. The fasta is indexed and a
+        sequence dictionary is created as well.
 
     samtools_path : str
         Path to Samtools executable needed to index fasta.
@@ -442,6 +449,8 @@ def download_hg19(
 
     with open(dest, 'w') as d:
         shutil.copyfileobj(req, d)
+    cwd = os.getcwd()
+    os.chdir(outdir)
     # req = urlopen(
     #     'http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa')
     # dest = os.path.join(outdir, 'twoBitToFa')
@@ -450,15 +459,37 @@ def download_hg19(
     # subprocess.check_call('chmod 755 {}'.format(os.path.join(outdir, 
     #                                                          'twoBitToFa')),
     #                       shell=True)
-    subprocess.check_call('{} {} {}'.format(
-        twoBitToFa_path,
-        os.path.join(outdir, 'hg19.2bit'), 
-        os.path.join(outdir, 'hg19.fa')),
-                          shell=True)    
-    subprocess.check_call('{} faidx {}'.format(
-        samtools_path,
-        os.path.join(outdir, 'hg19.fa')),
+
+    # Convert from 2bit to fasta.
+    subprocess.check_call('{} hg19.2bit hg19.fa'.format(twoBitToFa_path),
                           shell=True)
+    # Index fasta.
+    subprocess.check_call('{} faidx hg19.fa'.format(samtools_path), shell=True)
+    # Create sequence dictionary.
+    c = ('java -jar {} CreateSequenceDictionary R=hg19.fa '
+         'O=hg19.dict'.format(picard_path))
+    subprocess.check_call(c, shell=True)
+    if create_sorted:
+        # Sort fasta lexographically. This is the native ordering for bedtools
+        # etc.
+        c = ('grep \\> hg19.fa | cut -d ">" -f 2 | sort | '
+             'awk \'{print $1".fa"}\' > order.txt')
+        subprocess.check_call(c, shell=True)
+        c = ('awk \'{if (substr($1, 1, 1) == ">") {x=substr($1, 2)}} '
+             '{print $0 >> x".fa"}\' hg19.fa')
+        subprocess.check_call(c, shell=True)
+        c = ('xargs -d\'\\n\' cat <order.txt >> hg19_sorted.fa')
+        subprocess.check_call(c, shell=True)
+        subprocess.check_call('rm chr*.fa', shell=True)
+        subprocess.check_call('rm order.txt', shell=True)
+        # Index sorted fasta.
+        subprocess.check_call('{} faidx hg19_sorted.fa'.format(samtools_path),
+                              shell=True)
+        # Create sequence dictionary.
+        c = ('java -jar {} CreateSequenceDictionary R=hg19_sorted.fa '
+             'O=hg19_sorted.dict'.format(picard_path))
+        subprocess.check_call(c, shell=True)
+    os.chdir(cwd)
 
 def download_htsjdk(outdir):
     """
