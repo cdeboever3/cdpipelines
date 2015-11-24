@@ -1395,10 +1395,11 @@ class JobScript:
         find_intersecting_snps_path, 
         vcf, 
         bed,
+        sequence_dict=None,
         vcf_sample_name=None, 
-        threads=1,
         samtools_path='samtools',
         bcftools_path='bcftools',
+        picard_path='$picard',
     ):
         """
         Swap alleles for reads that overlap heterozygous variants.
@@ -1417,13 +1418,15 @@ class JobScript:
         bed : str
             Path to bed file defining regions to look for variants in. This file
             will be merged to make sure there are no overlapping regions.
-        
+       
+        sequence_dict : str
+            Sequence dictionary from Picard CreateSequenceDictionary. If
+            provided, the VCF will be sorted to match the contig order in the
+            sequence_dict file. 
+
         vcf_sample_name : str
             Sample name of this sample in the VCF file (if different than
             sample_name).
-
-        threads : int
-            Number of threads to request for PBS script.
 
         Returns
         -------
@@ -1452,8 +1455,7 @@ class JobScript:
 
         # Files that will be created.
         uniq_bam = os.path.join(
-            self.tempdir, '{}_uniq.bam'.format(self.sample_name))
-        
+            self.tempdir, '{}_uniq.bam'.format(vcf_sample_name))
         prefix = '{}_uniq'.format(self.sample_name)
         keep_bam = os.path.join(self.tempdir, '{}.keep.bam'.format(prefix))
         wasp_r1_fastq = os.path.join(self.tempdir,
@@ -1464,21 +1466,27 @@ class JobScript:
                                     '{}.to.remap.bam'.format(prefix))
         to_remap_num = os.path.join(self.tempdir,
                                     '{}.to.remap.num.gz'.format(prefix))
+        vcf_out = os.path.join(self.tempdir,
+                               '{}_hets.vcf'.format(self.sample_name))
 
         from __init__ import _scripts
         input_script = os.path.join(_scripts, 'make_wasp_input.py')
-
-        # Merge bed file.
 
         # Make SNP directory needed for WASP.
         snp_directory = os.path.join(self.tempdir, 'snps')
         lines = ' \\\n\t'.join([
             'python {}'.format(input_script),
             vcf,
+            vcf_out,
             vcf_sample_name,
             snp_directory,
             bed,
-            '-b {}'.format(bcftools_path)])
+            '-s {}'.format(sequence_dict),
+            '-b {}'.format(bcftools_path),
+            '-t {}'.format(self.tempdir),
+            '-m {}'.format(self.memory),
+            '-p {}'.format(picard_path),
+        ]) + '\n\n'
         lines += ('{} view -b -q 255 -F 1024 \\\n\t{} '
                   '\\\n\t> {}\n\n'.format(
                     samtools_path, bam, uniq_bam))
@@ -1488,7 +1496,7 @@ class JobScript:
             find_intersecting_snps_path, uniq_bam, snp_directory))
         with open(self.filename, "a") as f:
             f.write(lines)
-        return (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
+        return (snp_directory, vcf_out, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
                 to_remap_bam, to_remap_num)
 
     def wasp_alignment_compare(
@@ -1669,8 +1677,18 @@ class JobScript:
             f.write(lines)
         return mbased_infile, locus_outfile, snv_outfile
 
-def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
-                        fai=None, bcftools_path='bcftools'):
+def _wasp_snp_directory(
+    vcf, 
+    directory, 
+    vcf_sample_name, 
+    regions, 
+    vcf_out,
+    gatk_fasta=None, 
+    picard_memory=4, 
+    tempdir='.', 
+    bcftools_path='bcftools',
+    picard_path='$picard',
+):
     """
     Convert VCF file into input files directory and files needed for WASP. Only
     bi-allelic heterozygous sites are used. Both SNPs and indels are included.
@@ -1695,11 +1713,17 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
         Path to output vcf file that contains heterozygous variants for this
         sample. 
 
-    fai : str
-        Path genome fasta fai file. If provided, the VCF will be sorted to match
-        the contig order in the fai file. When fai is provided, some temporary
-        files are written in the current working directory while the script
-        runs.
+    gatk_fasta : str
+        Path to karyotypically sorted fasta file that works with GATK. The
+        output VCF file will be sorted in the order of this fasta file for
+        compatibility with GATK.
+
+    picard_memory : int
+        Amount of memory in Gb to give Picard. Only used when sequence_dict is
+        provided.
+
+    tempdir : str
+        Path to temporary directory. Only used when sequence_dict is provided.
 
     """
     import glob
@@ -1727,24 +1751,18 @@ def _wasp_snp_directory(vcf, directory, vcf_sample_name, regions, vcf_out,
     for fn in fns:
         subprocess.check_call('gzip {}'.format(fn), shell=True)
 
-    # If a fai file is provided, we need to reorder the VCF to match fai's
-    # fasta.
-    if fai:
-        c = 'grep -v ^\\# {} > {}_hets_no_header.vcf'.format(vcf_out,
-                                                             vcf_sample_name)
+    # If a sequence_dict file is provided, we need to reorder the VCF to match
+    # sequence_dict.
+    if sequence_dict:
+        vcf_sorted = os.path.join(tempdir,
+                                  '{}_sorted.vcf'.format(vcf_sample_name))
+        c = ('java -Xmx{}g -jar -XX:ParallelGCThreads=1 -Djava.io.tmpdir={}'
+             '-jar {} SortVcf I={} O={} SEQUENCE_DICTIONARY={}'.format(
+                 picard_memory, tempdir, picard_path, vcf_out, vcf_sorted,
+                 sequence_dict))
         subprocess.check_call(c, shell=True)
-        sortByRef_path = os.path.join(_scripts, 'SortByRef.pl')
-        c = ('perl {} {}_hets_no_header.vcf {} > '
-             '{}_hets_sorted_no_header.vcf'.format(
-            vcf_sample_name, sortByRef_path, fai, vcf_sample_name))
+        c = 'mv {} {}'.format(vcf_sorted, vcf_out)
         subprocess.check_call(c, shell=True)
-        c = ('cat <(grep \\# {}) {}_hets_sorted_no_header.vcf > '
-             'hets_sorted.vcf'.format(vcf_out, vcf_sample_name))
-        subprocess.check_call(c, shell=True)
-        c = 'mv {}_hets_sorted.vcf {}'.format(vcf_sample_name, vcf_out)
-        subprocess.check_call(c, shell=True)
-        os.remove('{}_hets_no_header.vcf'.format(vcf_sample_name))
-        os.remove('{}_hets_sorted_no_header.vcf'.format(vcf_sample_name))
 
 # The method below needs to be updated for SGE and JobScript. I've done a little
 # already.

@@ -560,7 +560,9 @@ def make_star_index(
                            outdir, '--genomeFastaFiles',
                            genome, '--sjdbGTFfile', gtf],
                           shell=False)
-    shutil.move('Log.out', outdir)
+    cwd = os.getcwd()
+    if os.path.realpath(cwd) != os.path.realpath(outdir):
+        shutil.move('Log.out', outdir)
 
 def download_picard(outdir):
     """

@@ -342,15 +342,15 @@ class RNAJobScript(JobScript):
 
         if strand == '+':
             lines = (
-                '{} view -f bam -F (first_of_pair and mate_is_reverse_strand) '
-                'or (second_of_pair and reverse_strand) {} \\\n\t| {} '
+                '{} view -f bam -F "(first_of_pair and mate_is_reverse_strand) '
+                'or (second_of_pair and reverse_strand)" {} \\\n\t| {} '
                 'genomecov -ibam stdin -g {} \\\n\t-split -bg -trackline '
                 '-trackopts \'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         elif strand == '-':
             lines = (
-                '{} view -f bam -F (second_of_pair and mate_is_reverse_strand) '
-                'or (first_of_pair and reverse_strand) {} \\\n\t| {} genomecov '
+                '{} view -f bam -F "(second_of_pair and mate_is_reverse_strand) '
+                'or (first_of_pair and reverse_strand)" {} \\\n\t| {} genomecov '
                 '-ibam stdin -g {} \\\n\t-split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
@@ -565,6 +565,7 @@ def pipeline(
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
     genome_fasta,
+    genome_sequence_dict,
     linkdir=None,
     webpath_file=None,
     vcf=None,
@@ -646,6 +647,13 @@ def pipeline(
     
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py from WASP.
+
+    genome_fasta : str
+        Fasta file used for STAR index. 
+
+    genome_sequence_dict : str
+        Sequence dictionary from Picard CreateSequenceDictionary for the fasta
+        used to align to STAR.
 
     linkdir : str
         Path to directory where softlinks should be made. Some pipeline parts
@@ -1211,25 +1219,28 @@ def pipeline(
         # Run WASP allele swap.
         if not vcf_sample_name:
             vcf_sample_name = sample_name
-        (snp_directory, keep_bam, wasp_r1_fastq, wasp_r2_fastq, to_remap_bam,
-         to_remap_num) = job.wasp_allele_swap(
+        (snp_directory, hets_vcf, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
+         to_remap_bam, to_remap_num) = job.wasp_allele_swap(
              mdup_bam, 
              find_intersecting_snps_path, 
              vcf, 
              exon_bed,
+             sequence_dict=genome_sequence_dict,
              vcf_sample_name=vcf_sample_name, 
-             threads=1,
              samtools_path=samtools_path,
              bcftools_path=bcftools_path,
+             picard_path=picard_path,
         )
         # WASP outputs a file (keep_bam) that has reads that don't overlap
-        # variants.  I'm going to discard that file.
+        # variants. I'm going to discard that file. I'll discard the WASP SNP
+        # directory as well since I have the hets in a VCF file.
         job.add_temp_file(keep_bam)
-        job.add_output_file(snp_directory)
-        job.add_output_file(wasp_r1_fastq)
-        job.add_output_file(wasp_r2_fastq)
-        job.add_output_file(to_remap_bam)
-        job.add_output_file(to_remap_num)
+        snp_directory = job.add_temp_file(snp_directory)
+        hets_vcf = job.add_output_file(hets_vcf)
+        wasp_r1_fastq = job.add_output_file(wasp_r1_fastq)
+        wasp_r2_fastq = job.add_output_file(wasp_r2_fastq)
+        to_remap_bam = job.add_output_file(to_remap_bam)
+        to_remap_num = job.add_output_file(to_remap_num)
 
         job.write_end()
         submit_commands.append(job.sge_submit_command())
@@ -1314,7 +1325,7 @@ def pipeline(
         # Get allele counts.
         allele_counts = job.count_allele_coverage(
             wasp_filtered_bam, 
-            vcf,
+            hets_vcf,
             genome_fasta, 
             gatk_path=gatk_path,
         )
