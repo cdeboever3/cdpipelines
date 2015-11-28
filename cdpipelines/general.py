@@ -1248,7 +1248,8 @@ class JobScript:
         out_fastq = os.path.join(self.tempdir, root + '.fastq.gz')
         fastqs = sorted(fastqs)
         if len(fastqs) > 1:
-            lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs))
+            lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs),
+                                                     out_fastq)
         else:
             lines = 'ln -s \\\n\t{} \\\n\t{}'.format(fastqs[0], out_fastq)
         if bg:
