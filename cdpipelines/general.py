@@ -990,7 +990,7 @@ class JobScript:
         else:
             out_bam = os.path.join(
                 self.tempdir, '{}_sorted.bam'.format(self.sample_name))
-        lines = '{} sort -m {}GB -t {}'.format(sambamba_path, self.memory,
+        lines = '{} sort -m {}GB -t {}'.format(sambamba_path, self.memory - 2,
                                                self.threads)
         if queryname:
             lines += ' -n'

@@ -143,6 +143,7 @@ class RNAJobScript(JobScript):
         bam, 
         reference, 
         threads=1, 
+        calc_ci=False,
         ci_mem=1024, 
         strand_specific=True,
         rsem_calculate_expression_path='rsem-calculate-expression',
@@ -157,6 +158,9 @@ class RNAJobScript(JobScript):
     
         reference : str
             RSEM reference.
+
+        calc_ci : bool
+            Whether to calculate confidence intervals.
     
         ci_mem : int
             Amount of memory in mb to give RSEM for calculating confidence
@@ -188,11 +192,17 @@ class RNAJobScript(JobScript):
                 '--ci-memory {} --estimate-rspd \\\n\t{} \\\n\t{} {}'.format(
                     rsem_calculate_expression_path, threads, ci_mem, bam,
                     reference, self.sample_name))
+        lines = ('{} --bam --paired-end --num-threads {} \\\n\t--no-bam-output '
+                 '--seed 3272015 --estimate-rspd \\\n\t'.format(
+                     rsem_calculate_expression_path, threads))
+        if calc_ci:
+                lines += '--calc-ci --ci-memory {} \\\n\t'.format(ci_mem)
         if strand_specific:
-            line += '\\\n\t--forward-prob 0'
-        line += '\n'
+            lines += '--forward-prob 0 \\\n\t'
+        lines += '{} \\\n\t{} \\\n\t{}\n\n'.format(bam, reference,
+                                                   self.sample_name)
         with open(self.filename, "a") as f:
-            f.write(line)
+            f.write(lines)
         return genes, isoforms, stats
 
     def dexseq_count(
@@ -862,7 +872,7 @@ def pipeline(
         job_suffix = 'sort_mdup_index',
         outdir=os.path.join(outdir, 'alignment'), 
         threads=4, 
-        memory=4,
+        memory=6,
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
