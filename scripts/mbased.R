@@ -61,7 +61,7 @@ main <- function() {
 			)
 		)
 	    ),
-	rowData=snvs
+	rowRanges=snvs
 	)
 	
 	results = runMBASED(se, isPhased=isPhased, numSim=numSim,
@@ -76,7 +76,7 @@ main <- function() {
 	write.table(locus_df, file=locus_outfile, sep="\t", quote=FALSE,
 		    col.names=NA)
 
-	snv_gr <- rowData(exptData(results)$locusSpecificResults)
+	snv_gr <- rowRanges(exptData(results)$locusSpecificResults)
 	snv_gr$ref_is_major <- 
 		assays(exptData(results)$locusSpecificResults)$allele1IsMajor[,1]
 	snv_gr$maf <- 

@@ -96,7 +96,7 @@ class JobScript:
         # Brief description of job.
         self.job_suffix = job_suffix
         # Job name for SGE.
-        self.jobname = '{}_{}'.format(sample_name, job_suffix)
+        self.jobname = 'job_{}_{}'.format(sample_name, job_suffix)
         # Directory for storing output files.
         self.outdir = outdir
         # Directory for storing temp files. The job is executed in this
@@ -163,7 +163,7 @@ class JobScript:
         current shell script will be stored as a temp file."""
         _make_dir(os.path.join(os.path.split(self.outdir)[0], 'sh'))
         self.filename = os.path.join(os.path.split(self.outdir)[0], 'sh',
-                                     '{}.sh'.format(self.jobname))
+                                     '{}.sh'.format(self.jobname[4:]))
         # If the shell script already exists we'll assume that the script is
         # just being created to get the output filenames etc. so we'll write to
         # a temp file.
@@ -176,10 +176,9 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
             if self.queue:
-                assert self.queue in ['short', 'long']
                 f.write('#$ -q {}\n'.format(self.queue))
             f.write('#$ -N {}\n'.format(self.jobname))
-            f.write('#$ -l h_vmem={}\n'.format(
+            f.write('#$ -l h_vmem={}G\n'.format(
                 self.memory / float(self.threads)))
             f.write('#$ -pe smp {}\n'.format(self.threads))
             f.write('#$ -S /bin/bash\n')
@@ -246,7 +245,7 @@ class JobScript:
             Full path to softlink.
     
         """
-        lines = 'ln -s {} {}\n\n'.format(target, link)
+        lines = 'ln -s \\\n\t{} \\\n\t{}\n\n'.format(target, link)
         with open(self.filename, "a") as f:
             f.write(lines)
         return link
@@ -359,7 +358,7 @@ class JobScript:
         self._delete_tempdir()
         self._make_softlinks()
         if self.delete_sh:
-            os.remove(self.jobname)
+            os.remove(self.filename)
 
     def make_md5sum(
         self,
@@ -376,8 +375,6 @@ class JobScript:
         ref_flat, 
         rrna_intervals,
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         strand_specific=True, 
         bg=False,
     ):
@@ -400,13 +397,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         bg : boolean
             Whether to run the process in the background.
 
@@ -428,10 +418,10 @@ class JobScript:
         else:
             ss = 'NONE'
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
-            '-jar {} CollectRnaSeqMetrics'.format( picard_path),
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
+            '-jar {} CollectRnaSeqMetrics'.format(picard_path),
             'I={}'.format(in_bam),
             'REF_FLAT={}'.format(ref_flat),
             'STRAND_SPECIFICITY={}'.format(ss),
@@ -451,8 +441,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -467,13 +455,6 @@ class JobScript:
         picard_path : str
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
-    
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
     
         bg : boolean
             Whether to run the process in the background.
@@ -490,9 +471,9 @@ class JobScript:
     
         """
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectMultipleMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'ASSUME_SORTED=TRUE',
@@ -533,17 +514,6 @@ class JobScript:
         index : str
             Path to index file for input bam file.
     
-        picard_path : str
-            Path to picard jar file. Default assumes the environmental variable
-            $picard contains the path to the jar file.
-    
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         bg : boolean
             Whether to run the process in the background.
     
@@ -564,8 +534,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -583,13 +551,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         bg : boolean
             Whether to run the process in the background.
     
@@ -601,9 +562,9 @@ class JobScript:
         """
         index = os.path.join(self.tempdir, os.path.split(in_bam)[1] + '.bai')
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar'.format(picard_memory),
+            'java -Xmx{}g -jar'.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} BuildBamIndex'.format(picard_path),
             'I={}'.format(in_bam),
             'O={}'.format(index)]))
@@ -620,8 +581,6 @@ class JobScript:
         bams, 
         out_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -637,13 +596,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         bg : boolean
             Whether to run the process in the background.
     
@@ -654,9 +606,9 @@ class JobScript:
     
         """
         merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
-        lines = ['java -Xmx{}g -jar'.format(picard_memory),
+        lines = ['java -Xmx{}g -jar'.format(self.memory - 1),
                  '\t-XX:ParallelGCThreads=1',
-                 '\t-Djava.io.tmpdir={}'.format(picard_tempdir), 
+                 '\t-Djava.io.tmpdir={}'.format(self.tempdir), 
                  '\t-jar {} MergeSamFiles'.format(picard_path),
                  '\tASSUME_SORTED=TRUE',
                  '\tUSE_THREADING=TRUE']
@@ -748,8 +700,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         remove_dups=False,
     ):
         """
@@ -764,13 +714,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-
         Returns
         -------
         out_bam : str
@@ -785,9 +728,9 @@ class JobScript:
         dup_metrics = os.path.join(
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} MarkDuplicates'.format(picard_path),
             'METRICS_FILE={}'.format(dup_metrics),
             'VALIDATION_STRINGENCY=SILENT',
@@ -806,8 +749,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -822,13 +763,6 @@ class JobScript:
         picard_path : str
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
-    
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
     
         bg : boolean
             Whether to run the process in the background.
@@ -852,9 +786,9 @@ class JobScript:
         out = os.path.join(self.tempdir,
                            '{}_gc_bias_metrics_out.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectGcBiasMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'I={}'.format(in_bam), 
@@ -874,8 +808,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -889,13 +821,6 @@ class JobScript:
         picard_path : str
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
-    
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
     
         bg : boolean
             Whether to run the process in the background.
@@ -914,9 +839,9 @@ class JobScript:
         err = os.path.join(self.outdir,
                            '{}_index_stats.err'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} BamIndexStats'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'I={}'.format(in_bam),
@@ -934,8 +859,6 @@ class JobScript:
         self,
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -950,13 +873,6 @@ class JobScript:
         picard_path : str
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
-    
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
     
         bg : boolean
             Whether to run the process in the background.
@@ -975,9 +891,9 @@ class JobScript:
         hist = os.path.join(self.tempdir,
                             '{}_insert_size.pdf'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectInsertSizeMetrics'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'I={}'.format(in_bam), 
@@ -995,8 +911,6 @@ class JobScript:
     def picard_query_sort(
         in_bam, 
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
         bg=False,
     ):
         """
@@ -1011,13 +925,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         bg : boolean
             Whether to run the process in the background.
     
@@ -1030,9 +937,9 @@ class JobScript:
         out_bam = os.path.join(self.tempdir,
                                '{}_qsorted.bam'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} SortSam'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'I={}'.format(in_bam), 
@@ -1101,8 +1008,6 @@ class JobScript:
         in_bam, 
         index=False,
         picard_path='$picard',
-        picard_memory=2, 
-        picard_tempdir='.',
     ):
         """
         Coordinate sort using Picard Tools.
@@ -1116,13 +1021,6 @@ class JobScript:
             Path to picard jar file. Default assumes the environmental variable
             $picard contains the path to the jar file.
     
-        picard_memory : int
-            Amount of memory in Gb to give picard.
-    
-        picard_tempdir : str
-            Path to directory to use for Picard temporary files. Default is
-            current directory.
-    
         Returns
         -------
         out_bam : str
@@ -1135,23 +1033,21 @@ class JobScript:
         out_bam = os.path.join(self.tempdir,
                                '{}_sorted.bam'.format(self.sample_name))
         if index:
-            out_index = os.path.join(
-                self.tempdir, 
-                os.path.join(self.tempdir, os.path.splitext(in_bam)[0] +
-                             '.bai'))
+            out_index = os.path.join(out_bam + '.bai')
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(picard_memory),
+            'java -Xmx{}g -jar '.format(self.memory - 1),
             '-XX:ParallelGCThreads=1',
-            '-Djava.io.tmpdir={}'.format(picard_tempdir), 
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} SortSam'.format(picard_path),
             'VALIDATION_STRINGENCY=SILENT',
             'I={}'.format(in_bam), 
             'O={}'.format(out_bam),
             'SO=coordinate']))
         if index:
-            lines += ' \\\n\tCREATE_INDEX=TRUE' 
+            lines += ' \\\n\tCREATE_INDEX=TRUE\n\n' 
             old_index = '.'.join(out_bam.split('.')[0:-1]) + '.bai'
-            lines += 'mv {} {}\n\n'.format(old_index, out_index)
+            lines += 'mv {} {}'.format(old_index, out_index)
+        lines += '\n\n'
 
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -1159,6 +1055,46 @@ class JobScript:
             return out_bam, out_index
         else: 
             return out_bam
+    
+    def picard_reorder(
+        self,
+        in_bam, 
+        fasta,
+        picard_path='$picard',
+    ):
+        """
+        Reorder bam file according to seq_dict.
+    
+        Parameters
+        ----------
+        in_bam : str
+            Path to input bam file.
+    
+        picard_path : str
+            Path to picard jar file. Default assumes the environmental variable
+            $picard contains the path to the jar file.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output bam file.
+    
+        """
+        out_bam = os.path.join(self.tempdir,
+                               '{}_reordered.bam'.format(self.sample_name))
+        lines = (' \\\n\t'.join([
+            'java -Xmx{}g -jar '.format(self.memory - 1),
+            '-XX:ParallelGCThreads=1',
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
+            '-jar {} ReorderSam'.format(picard_path),
+            'VALIDATION_STRINGENCY=SILENT',
+            'I={}'.format(in_bam), 
+            'O={}'.format(out_bam),
+            'REFERENCE={}'.format(fasta)])) + '\n\n'
+
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out_bam
     
     def cutadapt_trim(
         self,
@@ -1314,7 +1250,7 @@ class JobScript:
         if len(fastqs) > 1:
             lines = 'cat \\\n\t{} \\\n\t> {}'.format(' \\\n\t'.join(fastqs))
         else:
-            lines = 'ln -s {} {}'.format(fastqs[0], out_fastq)
+            lines = 'ln -s \\\n\t{} \\\n\t{}'.format(fastqs[0], out_fastq)
         if bg:
             lines += ' &\n\n'
         else:
@@ -1395,11 +1331,10 @@ class JobScript:
         find_intersecting_snps_path, 
         vcf, 
         bed,
-        sequence_dict=None,
+        gatk_fai=None,
         vcf_sample_name=None, 
         samtools_path='samtools',
         bcftools_path='bcftools',
-        picard_path='$picard',
     ):
         """
         Swap alleles for reads that overlap heterozygous variants.
@@ -1419,10 +1354,11 @@ class JobScript:
             Path to bed file defining regions to look for variants in. This file
             will be merged to make sure there are no overlapping regions.
        
-        sequence_dict : str
-            Sequence dictionary from Picard CreateSequenceDictionary. If
-            provided, the VCF will be sorted to match the contig order in the
-            sequence_dict file. 
+        gatk_fai : str
+            Path to karyotypically sorted fasta index (fai) file that works with
+            GATK.  The output VCF file will be sorted in the order of this fai
+            file for compatibility with GATK. Assumed to have associated fai and
+            dict files.
 
         vcf_sample_name : str
             Sample name of this sample in the VCF file (if different than
@@ -1455,7 +1391,7 @@ class JobScript:
 
         # Files that will be created.
         uniq_bam = os.path.join(
-            self.tempdir, '{}_uniq.bam'.format(vcf_sample_name))
+            self.tempdir, '{}_uniq.bam'.format(self.sample_name))
         prefix = '{}_uniq'.format(self.sample_name)
         keep_bam = os.path.join(self.tempdir, '{}.keep.bam'.format(prefix))
         wasp_r1_fastq = os.path.join(self.tempdir,
@@ -1467,7 +1403,7 @@ class JobScript:
         to_remap_num = os.path.join(self.tempdir,
                                     '{}.to.remap.num.gz'.format(prefix))
         vcf_out = os.path.join(self.tempdir,
-                               '{}_hets.vcf'.format(self.sample_name))
+                               '{}_hets.vcf'.format(vcf_sample_name))
 
         from __init__ import _scripts
         input_script = os.path.join(_scripts, 'make_wasp_input.py')
@@ -1481,11 +1417,9 @@ class JobScript:
             vcf_sample_name,
             snp_directory,
             bed,
-            '-s {}'.format(sequence_dict),
+            '-g {}'.format(gatk_fai),
             '-b {}'.format(bcftools_path),
             '-t {}'.format(self.tempdir),
-            '-m {}'.format(self.memory),
-            '-p {}'.format(picard_path),
         ]) + '\n\n'
         lines += ('{} view -b -q 255 -F 1024 \\\n\t{} '
                   '\\\n\t> {}\n\n'.format(
@@ -1577,7 +1511,10 @@ class JobScript:
         counts = os.path.join(
             self.tempdir, '{}_allele_counts.tsv'.format(self.sample_name))
         lines = ' \\\n\t'.join([
-            'java -jar {}'.format(gatk_path),
+            'java -Xmx{}g -jar'.format(self.memory - 2),
+            '-XX:ParallelGCThreads=1',
+            '-Djava.io.tmpdir={}'.format(self.tempdir), 
+            '-jar {}'.format(gatk_path),
             '-R {}'.format(fasta),
             '-T ASEReadCounter',
             '-o {}'.format(counts),
@@ -1683,11 +1620,9 @@ def _wasp_snp_directory(
     vcf_sample_name, 
     regions, 
     vcf_out,
-    gatk_fasta=None, 
-    picard_memory=4, 
+    gatk_fai=None, 
     tempdir='.', 
     bcftools_path='bcftools',
-    picard_path='$picard',
 ):
     """
     Convert VCF file into input files directory and files needed for WASP. Only
@@ -1713,17 +1648,14 @@ def _wasp_snp_directory(
         Path to output vcf file that contains heterozygous variants for this
         sample. 
 
-    gatk_fasta : str
-        Path to karyotypically sorted fasta file that works with GATK. The
-        output VCF file will be sorted in the order of this fasta file for
-        compatibility with GATK.
-
-    picard_memory : int
-        Amount of memory in Gb to give Picard. Only used when sequence_dict is
-        provided.
+    gatk_fai : str
+        Path to karyotypically sorted fasta index (fai) file that works with
+        GATK.  The output VCF file will be sorted in the order of this fai file
+        for compatibility with GATK. Assumed to have associated fai and dict
+        files.
 
     tempdir : str
-        Path to temporary directory. Only used when sequence_dict is provided.
+        Path to temporary directory. Only used when gatk_fai is provided.
 
     """
     import glob
@@ -1751,18 +1683,28 @@ def _wasp_snp_directory(
     for fn in fns:
         subprocess.check_call('gzip {}'.format(fn), shell=True)
 
-    # If a sequence_dict file is provided, we need to reorder the VCF to match
-    # sequence_dict.
-    if sequence_dict:
+    # If a gatk_fai file is provided, we need to reorder the VCF to match
+    # the fai.
+    if gatk_fai:
         vcf_sorted = os.path.join(tempdir,
                                   '{}_sorted.vcf'.format(vcf_sample_name))
-        c = ('java -Xmx{}g -jar -XX:ParallelGCThreads=1 -Djava.io.tmpdir={}'
-             '-jar {} SortVcf I={} O={} SEQUENCE_DICTIONARY={}'.format(
-                 picard_memory, tempdir, picard_path, vcf_out, vcf_sorted,
-                 sequence_dict))
+        sortByRef_path = os.path.join(_scripts, 'sortByRef.pl')
+        c = 'perl {} {} {} > {}'.format(sortByRef_path, vcf_out, gatk_fai,
+                                           vcf_sorted)
         subprocess.check_call(c, shell=True)
-        c = 'mv {} {}'.format(vcf_sorted, vcf_out)
+        vcf_header = os.path.join(tempdir,
+                                  '{}_header.vcf'.format(vcf_sample_name))
+        c = 'grep ^\\# {} > {}'.format(vcf_sorted, vcf_header)
         subprocess.check_call(c, shell=True)
+        vcf_body = os.path.join(tempdir,
+                                  '{}_body.vcf'.format(vcf_sample_name))
+        c = 'grep -v ^\\# {} > {}'.format(vcf_sorted, vcf_body)
+        subprocess.check_call(c, shell=True)
+        c = 'cat {} {} > {}'.format(vcf_header, vcf_body, vcf_out)
+        subprocess.check_call(c, shell=True)
+        os.remove(vcf_sorted)
+        os.remove(vcf_header)
+        os.remove(vcf_body)
 
 # The method below needs to be updated for SGE and JobScript. I've done a little
 # already.

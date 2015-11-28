@@ -4,6 +4,39 @@ from general import _make_dir
 from general import JobScript
 
 class RNAJobScript(JobScript):
+    def scale_bigwig(
+        self,
+        bg,
+        log_final_out,
+        expected_num,
+    ):
+        """
+        Align paired fastq files with STAR.
+    
+        Parameters
+        ----------
+        bg : str 
+            Path to input bedgraph file.
+    
+        log_final_out : str 
+            Path to STAR Log.final.out file.
+    
+        Returns
+        -------
+        out_bg : str
+            Path to output scaled bedgraph file.
+        
+        """
+        from __init__ import _scripts
+        script = os.path.join(_scripts, 'scale_bedgraph_by_star.py')
+        root = os.path.splitext(os.path.split(bg)[1])[0]
+        out_bg = os.path.join(self.tempdir, '{}_scaled.bg'.format(root))
+        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
+            script, bg, out_bg, log_final_out, expected_num)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out_bg
+
     def star_align(
         self,
         r1_fastq, 
@@ -93,8 +126,10 @@ class RNAJobScript(JobScript):
         lines += 'mv Log.final.out {}\n'.format(log_final_out)
         lines += 'mv Log.progress.out {}\n'.format(log_progress_out)
         lines += 'mv SJ.out.tab {}\n'.format(sj_out)
-        lines += 'mv Aligned.toTranscriptome.out.bam {}\n\n'.format(
-            transcriptome_bam)
+        if transcriptome_align:
+            lines += 'mv Aligned.toTranscriptome.out.bam {}\n'.format(
+                transcriptome_bam)
+        lines += '\n'
         with open(self.filename, "a") as f:
             f.write(lines)
         if transcriptome_align:
@@ -343,14 +378,14 @@ class RNAJobScript(JobScript):
         if strand == '+':
             lines = (
                 '{} view -f bam -F "(first_of_pair and mate_is_reverse_strand) '
-                'or (second_of_pair and reverse_strand)" {} \\\n\t| {} '
+                'or (second_of_pair and reverse_strand)" \\\n\t{} \\\n\t| {} '
                 'genomecov -ibam stdin -g {} \\\n\t-split -bg -trackline '
                 '-trackopts \'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         elif strand == '-':
             lines = (
                 '{} view -f bam -F "(second_of_pair and mate_is_reverse_strand) '
-                'or (first_of_pair and reverse_strand)" {} \\\n\t| {} genomecov '
+                'or (first_of_pair and reverse_strand)" \\\n\t{} \\\n\t| {} genomecov '
                 '-ibam stdin -g {} \\\n\t-split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
@@ -362,7 +397,7 @@ class RNAJobScript(JobScript):
         if scale:
             lines += ' -scale {}'.format(scale)
         
-        lines += ' > {}\n\n'.format( bedgraph)
+        lines += ' \\\n\t> {}\n\n'.format( bedgraph)
 
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -424,8 +459,8 @@ class RNAJobScript(JobScript):
                 'human.hg19.genome')
         root = os.path.splitext(os.path.split(bedgraph)[1])[0]
         bigwig = os.path.join(dy, '{}.bw'.format(root))
-        lines = '{} {} {} {}\n\n'.format(bedGraphToBigWig_path, bedgraph,
-                                     genome_file, bigwig)
+        lines = '{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
+            bedGraphToBigWig_path, bedgraph, genome_file, bigwig)
         with open(self.filename, "a") as f:
             f.write(lines)
         if web_available:
@@ -492,7 +527,7 @@ class RNAJobScript(JobScript):
             ('longLabel RNA-seq coverage for plus and minus strands '
              'for {}.'.format(self.sample_name)),
             'genomesFile genomes.txt',
-            'cdeboeve@ucsd.edu',
+            'email cdeboeve@ucsd.edu',
         ]) + '\n'
         with open(os.path.join(dy, 'hub.txt'), 'w') as f:
             f.write(lines)
@@ -505,9 +540,10 @@ class RNAJobScript(JobScript):
             'shortLabel RNA cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel RNA-seq coverage for plus and minus strands '
              'for {}.'.format(self.sample_name)),
-            'visibility dense',
+            'visibility full',
             'aggregate transparentOverlay',
             'showSubtrackColorOnUi on',
+            'viewLimits 1:400',
         ]) + '\n\n'
 
         url = self.webpath + '/' + os.path.split(plus_bw)[1]
@@ -524,21 +560,21 @@ class RNAJobScript(JobScript):
 
         url = self.webpath + '/' + os.path.split(minus_bw)[1]
         lines += '\t' + '\n\t'.join([
-            'track plus',
+            'track minus',
             'bigDataUrl {}'.format(url),
             'shortLabel Minus cov {}'.format(self.sample_name.split('-')[0]),
             ('longLabel Coverage for {} from fragments originating from '
-             'the Minus strand.'.format(self.sample_name)),
+             'the minus strand.'.format(self.sample_name)),
             'parent {}_rna_cov'.format(self.sample_name),
             'type bigWig',
             'color 0,0,255',
         ]) + '\n'
         if scale:
-            lines.replace('_rna_cov', '_rna_cov_scaled')
-            lines.replace('RNA cov', 'RNA scov')
-            lines.replace('RNA-seq coverage', 'Scaled RNA-seq coverage')
-            lines.replace(' Coverage ', ' Scaled coverage ')
-            lines.replace('us cov', 'us scov')
+            lines = lines.replace('_rna_cov', '_rna_cov_scaled')
+            lines = lines.replace('RNA cov', 'RNA scov')
+            lines = lines.replace('RNA-seq coverage', 'Scaled RNA-seq coverage')
+            lines = lines.replace(' Coverage ', ' Scaled coverage ')
+            lines = lines.replace('us cov', 'us scov')
 
         _make_dir(os.path.join(dy, 'hg19'))
         with open(os.path.join(dy, 'hg19', 'trackDb.txt'), 'w') as f:
@@ -564,8 +600,7 @@ def pipeline(
     rsem_reference,
     find_intersecting_snps_path, 
     filter_remapped_reads_path,
-    genome_fasta,
-    genome_sequence_dict,
+    gatk_fasta,
     linkdir=None,
     webpath_file=None,
     vcf=None,
@@ -580,7 +615,7 @@ def pipeline(
     strand_specific=True, 
     tempdir=None,
     mappability=None,
-    expected_input_pairs=20000000,
+    expected_unique_pairs=20000000,
     star_path='STAR',
     picard_path='$picard',
     bedtools_path='bedtools',
@@ -648,12 +683,10 @@ def pipeline(
     filter_remapped_reads_path : str
         Path to filter_remapped_reads.py from WASP.
 
-    genome_fasta : str
-        Fasta file used for STAR index. 
-
-    genome_sequence_dict : str
-        Sequence dictionary from Picard CreateSequenceDictionary for the fasta
-        used to align to STAR.
+    gatk_fasta : str
+        Fasta file that corresponds to the fasta file used for STAR but is
+        sorted karyotypically for GATK. Assumed to have associated dict and fai
+        files.
 
     linkdir : str
         Path to directory where softlinks should be made. Some pipeline parts
@@ -697,24 +730,23 @@ def pipeline(
     tempdir : str
         Directory to store temporary files.
 
-    expected_input_pairs : int
-        The number of expected inputs pairs for this group of experiments. This
-        only needs to be a rough estimate. You should keep this number constant
-        for all samples across an experiment/project (i.e. any samples you want
-        to compare against each other). For example, say you are doing RNA-seq
-        for 10 samples on a lane and the lane yields 100,000,000 PAIRS of reads.
-        Then you would want expected_input_pairs = 10,000,000. This number is
-        used to make scaled bigwig files that are rougly corrected for library
-        size. The bigwig coverage is divided by actual number of input read
-        pairs and then multipied by expected_input_pairs. The reason you want
-        this number close to the number of expected input pairs is so the
-        normalization doesn't drastically change the coverage for samples near
-        the expected number of input read pairs. For instance, if
-        expected_input_pairs=20,000,000 and a sample has exactly 20M input read
-        PAIRS, then the coverage will not be normalized at all. If
-        expected_input_pairs=20 and a sample has only 10M input read PAIRS, it
-        will be normalized so that it looks like it had 20M input read pairs
-        (i.e. all coverages will be multiplied by 2).
+    expected_unique_pairs : int
+        Number of expected mapped READ PAIRS. This only needs to be a rough 
+        estimate. You should keep this number constant for all samples across 
+        an experiment/project (i.e. any samples you want to compare against 
+        each other). For example, say you are doing RNA-seq for 10 samples on 
+        a lane, the lane yields 100,000,000 pairs of reads, and you expect 
+        90%% of the read pairs to align uniquely. Then you would want 
+        expected_num = 9,000,000. In this case, you would set actual_num to 
+        the actual number of uniquely mapped reads. The reason you want this 
+        number close to the number of expected number of uniquely mapped 
+        pairs is so the normalization does not drastically change the 
+        coverage for samples near the expected number of input read pairs. 
+        For instance, if expected_num=20M and a sample has exactly 20M 
+        uniquely mapped read pairs, then the coverage will not be changed. If 
+        expected_num=20M and a sample has only 10M input read PAIRS, it will 
+        be normalized so that it looks like it had 20M input read pairs (i.e. 
+        all coverages will be multiplied by 2).
 
     star_path : str
         Path to STAR aligner.
@@ -791,7 +823,8 @@ def pipeline(
     log_final_out = job.add_output_file(log_final_out)
     [job.add_output_file(x) for x in [log_out, log_progress_out, sj_out]]
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
 
     ##### Job 2: Run fastQC. ##### 
     job = RNAJobScript(
@@ -820,7 +853,8 @@ def pipeline(
     [job.add_output_file(x) for x in fastqc_html + fastqc_zip]
         
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
 
     ##### Job 3: Coordinate sort, mark duplicates and index bam. #####
     job = RNAJobScript(
@@ -850,12 +884,17 @@ def pipeline(
     )
     job.add_temp_file(coord_sorted_bam)
 
+    # Index sorted bam file.
+    temp_bam_index = job.sambamba_index(coord_sorted_bam, sambamba_path)
+    job.add_temp_file(temp_bam_index)
+
     # Mark duplicates.
     mdup_bam, duplicate_metrics = job.biobambam2_mark_duplicates(
         coord_sorted_bam,
         bammarkduplicates_path=bammarkduplicates_path)
     outdir_mdup_bam = job.add_output_file(mdup_bam)
     job.add_output_file(duplicate_metrics)
+
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_mdup_bam)
     name = '{}_rna'.format(job.sample_name)
@@ -876,7 +915,8 @@ def pipeline(
     link = job.add_softlink(outdir_bam_index)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
     
     # These files will be input for upcoming scripts.
     mdup_bam = outdir_mdup_bam
@@ -888,7 +928,7 @@ def pipeline(
         job_suffix='picard_metrics',
         outdir=os.path.join(outdir, 'qc'),
         threads=1, 
-        memory=4, 
+        memory=5, 
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
@@ -906,9 +946,8 @@ def pipeline(
     metrics_files = job.picard_collect_multiple_metrics(
         mdup_bam, 
         picard_path=picard_path, 
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir,
-        bg=False)
+        bg=False,
+    )
     for fn in metrics_files:
         job.add_output_file(fn)
 
@@ -918,10 +957,9 @@ def pipeline(
         ref_flat, 
         rrna_intervals,
         picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir,
         strand_specific=strand_specific, 
-        bg=False)
+        bg=False,
+    )
     job.add_output_file(metrics)
     job.add_output_file(chart)
 
@@ -929,19 +967,19 @@ def pipeline(
     index_out, index_err = job.picard_bam_index_stats(
         mdup_bam, 
         picard_path=picard_path,
-        picard_memory=job.memory,
-        picard_tempdir=job.tempdir,
-        bg=False)
+        bg=False,
+    )
     job.add_output_file(index_out)
     job.add_output_file(index_err)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
 
     ##### Job 5: Make md5 has for final bam file. #####
     job = RNAJobScript(
         sample_name, 
-        job_suffix = 'md5',
+        job_suffix='md5',
         outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=1,
@@ -963,20 +1001,14 @@ def pipeline(
     job.add_output_file(md5sum)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
        
     ##### Job 6: Make bigwig files for final bam file. #####
-    job_suffix = 'bigwig'
-    bigwig_jobname = '{}_{}'.format(sample_name, job_suffix)
-    bigwig_shell = os.path.join(outdir, 'sh', '{}.sh'.format(bigwig_jobname))
-    exists = os.path.exists(bigwig_shell)
-    if exists:
-        bigwig_shell = tempfile.NamedTemporaryFile(delete=False).name
-
     job = RNAJobScript(
         sample_name, 
-        job_suffix, 
-        os.path.join(outdir, 'alignment'), 
+        job_suffix='bigwig',
+        outdir=os.path.join(outdir, 'alignment'), 
         threads=1, 
         memory=4,
         linkdir=linkdir,
@@ -985,7 +1017,9 @@ def pipeline(
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[sort_mdup_index_jobname])
+        wait_for=[sort_mdup_index_jobname],
+    )
+    bigwig_jobname = job.jobname
         
     # Input files.
     mdup_bam = job.add_input_file(mdup_bam)
@@ -1015,7 +1049,7 @@ def pipeline(
     plus_bw = job.bigwig_from_bedgraph(
         plus_bg,
         strand='+',
-        scale=None,
+        scale=False,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
@@ -1046,70 +1080,62 @@ def pipeline(
 
     # Now we'll make scaled versions. First I'll read the star Log.final.out
     # file and find the number of uniquely mapped reads.
-    # import cdpybio as cpb
-    # log = cpb.star.make_logs_df([log_final_out])
-    # uniq_num = float(log['Uniquely mapped reads number'])
-    # factor = expected_input_pairs / uniq_num
+    # Both strands scaled.
+    scaled_bg = job.scale_bigwig(
+        bg,
+        log_final_out,
+        expected_unique_pairs,
+    )
+    job.add_temp_file(scaled_bg)
+    scaled_bw = job.bigwig_from_bedgraph(
+        scaled_bg,
+        scale=True,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(scaled_bw)
 
-    # # Both strands scaled.
-    # scaled_bg = job.bedgraph_from_bam(
-    #     mdup_bam,
-    #     scale=factor,
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.add_temp_file(scaled_bg)
-    # scaled_bw = job.bigwig_from_bedgraph(
-    #     scaled_bg,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.add_output_file(scaled_bw)
+    # Plus strand scaled.
+    plus_scaled_bg = job.scale_bigwig(
+        plus_bg,
+        log_final_out,
+        expected_unique_pairs / 2,
+    )
+    job.add_temp_file(plus_scaled_bg)
+    plus_scaled_bw = job.bigwig_from_bedgraph(
+        plus_scaled_bg,
+        strand='+',
+        scale=True,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    plus_scaled_bw = job.add_output_file(plus_scaled_bw)
 
-    # # Plus strand scaled.
-    # plus_scaled_bg = job.bedgraph_from_bam(
-    #     mdup_bam, 
-    #     strand='+',
-    #     scale=factor,
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.add_temp_file(plus_scaled_bg)
-    # plus_scaled_bw = job.bigwig_from_bedgraph(
-    #     plus_scaled_bg,
-    #     strand='+',
-    #     scale=None,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # plus_scaled_bw = job.add_output_file(plus_scaled_bw)
-
-    # # Minus strand scaled.
-    # minus_scaled_bg = job.bedgraph_from_bam(
-    #     mdup_bam, 
-    #     strand='-',
-    #     scale=factor,
-    #     bedtools_path=bedtools_path,
-    #     sambamba_path=sambamba_path,
-    # )
-    # job.add_temp_file(minus_scaled_bg)
-    # minus_scaled_bw = job.bigwig_from_bedgraph(
-    #     minus_scaled_bg,
-    #     strand='-',
-    #     scale=None,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # minus_scaled_bw = job.add_output_file(minus_scaled_bw)
-    # # I'll make a track hub for the plus/minus strand bigwigs.
-    # job.bigwig_hub(
-    #     plus_scaled_bw,
-    #     minus_scaled_bw,
-    #     scale=True,
-    # )
+    # Minus strand scaled.
+    minus_scaled_bg = job.scale_bigwig(
+        minus_bg,
+        log_final_out,
+        expected_unique_pairs / 2,
+    )
+    job.add_temp_file(minus_scaled_bg)
+    minus_scaled_bw = job.bigwig_from_bedgraph(
+        minus_scaled_bg,
+        strand='-',
+        scale=True,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    minus_scaled_bw = job.add_output_file(minus_scaled_bw)
+    # I'll make a track hub for the plus/minus strand bigwigs.
+    job.bigwig_hub(
+        plus_scaled_bw,
+        minus_scaled_bw,
+        scale=True,
+    )
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
     
     ##### Job 7: Get HTSeq and DEXSeq counts. #####
     job = RNAJobScript(
@@ -1153,7 +1179,8 @@ def pipeline(
     job.add_output_file(dexseq_counts)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
     
     ##### Job 8: Run RSEM. #####
     job = RNAJobScript(
@@ -1188,7 +1215,8 @@ def pipeline(
     job.add_output_file(stats)
 
     job.write_end()
-    submit_commands.append(job.sge_submit_command())
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
    
     # We'll only go through the ASE steps if a VCF was provided.
     if vcf:
@@ -1225,11 +1253,10 @@ def pipeline(
              find_intersecting_snps_path, 
              vcf, 
              exon_bed,
-             sequence_dict=genome_sequence_dict,
+             gatk_fai=gatk_fasta + '.fai',
              vcf_sample_name=vcf_sample_name, 
              samtools_path=samtools_path,
              bcftools_path=bcftools_path,
-             picard_path=picard_path,
         )
         # WASP outputs a file (keep_bam) that has reads that don't overlap
         # variants. I'm going to discard that file. I'll discard the WASP SNP
@@ -1243,7 +1270,8 @@ def pipeline(
         to_remap_num = job.add_output_file(to_remap_num)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_command())
+        if not job.delete_sh:
+            submit_commands.append(job.sge_submit_command())
         
         ##### Job 10: WASP second step. #####
         job = RNAJobScript(
@@ -1251,7 +1279,7 @@ def pipeline(
             job_suffix='wasp_remap',
             outdir=os.path.join(outdir, 'wasp'),
             threads=8, 
-            memory=10, 
+            memory=32, 
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir,
@@ -1279,7 +1307,8 @@ def pipeline(
         job.add_temp_file(sj_out)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_command())
+        if not job.delete_sh:
+            submit_commands.append(job.sge_submit_command())
         
         ##### Job 11: WASP third step. #####
         job = RNAJobScript(
@@ -1287,7 +1316,7 @@ def pipeline(
             job_suffix = 'wasp_alignment_compare',
             outdir=os.path.join(outdir, 'wasp'),
             threads=1, 
-            memory=4, 
+            memory=5, 
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir, 
@@ -1317,22 +1346,41 @@ def pipeline(
             temp_filtered_bam, 
             index=True,
             picard_path=picard_path,
-            picard_memory=job.memory,
-            picard_tempdir=job.tempdir)
+        )
+        # I'll keep this bam file and its index as a record of which reads were
+        # used to calculate ASE. It might be useful for visualization. The bam
+        # file is pretty small anyway.
         job.add_output_file(wasp_filtered_bam)
         job.add_output_file(wasp_bam_index)
 
+        # Reorder bam file so it will work with GATK.
+        reordered_bam = job.picard_reorder(
+            wasp_filtered_bam, 
+            fasta=gatk_fasta,
+            picard_path=picard_path,
+        )
+        job.add_temp_file(reordered_bam)
+
+        # Index reordered bam.
+        reordered_index = job.picard_index(
+            reordered_bam, 
+            picard_path=picard_path,
+            bg=False,
+        )
+        job.add_temp_file(reordered_index)
+
         # Get allele counts.
         allele_counts = job.count_allele_coverage(
-            wasp_filtered_bam, 
+            reordered_bam, 
             hets_vcf,
-            genome_fasta, 
+            gatk_fasta, 
             gatk_path=gatk_path,
         )
         job.add_output_file(allele_counts)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_command())
+        if not job.delete_sh:
+            submit_commands.append(job.sge_submit_command())
         
         ##### Job 12: Run MBASED for ASE. #####
         job = RNAJobScript(
@@ -1347,6 +1395,7 @@ def pipeline(
             queue=queue,
             conda_env=conda_env, 
             modules=modules,
+            wait_for=[wasp_alignment_compare_jobname],
         )
         mbased_jobname = job.jobname
     
@@ -1368,23 +1417,19 @@ def pipeline(
         job.add_output_file(snv_outfile)
 
         job.write_end()
-        submit_commands.append(job.sge_submit_command())
+        if not job.delete_sh:
+            submit_commands.append(job.sge_submit_command())
 
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the
     # appropriate dependencies.
-    submit_fn = os.path.join(outdir, 'sh', '{}_submit.sh'.format(sample_name))
+    import datetime as dt
+    now = str(dt.datetime.now())
+    now = now.replace('-', '_').replace(' ', '_').replace(':', '_').replace('.', '_')
+    submit_fn = os.path.join(outdir, 'sh', '{}_submit_{}.sh'.format(
+        sample_name, now))
     with open(submit_fn, 'w') as f:
         f.write('#!/bin/bash\n\n')
-        while True:
-            try:
-                jn,holds = job_holds.popitem(False)
-            except:
-                break
-            if holds:
-                f.write('qsub -hold_jid {} {}.sh\n'.format(
-                    ','.join(holds), os.path.join(outdir, jn)))
-            else:
-                f.write('qsub {}.sh\n'.format(os.path.join(outdir, jn)))
+        f.write('\n'.join(submit_commands))
 
     return submit_fn
