@@ -1198,7 +1198,7 @@ def pipeline(
         job_suffix = 'rsem',
         outdir=os.path.join(outdir, 'rsem'),
         threads=8, 
-        memory=4, 
+        memory=32, 
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, queue=queue,
