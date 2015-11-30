@@ -924,6 +924,10 @@ def download_roadmap_25_state_chromatin_model(outdir):
 
     """
     import re
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
     pattern = 'href="E\d\d\d_25_imputed12marks_mnemonics.bed.gz"'
     compiled = re.compile(pattern)
     url = ('http://egg2.wustl.edu/roadmap/data/byFileType'
@@ -947,6 +951,53 @@ def download_roadmap_25_state_chromatin_model(outdir):
     to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
                        'chromhmmSegmentations/ChmmModels/imputed12marks/'
                        'jointModel/final/annotation_25_imputed12marks.txt')
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        _download_file(src, dest)
+
+def download_roadmap_18_state_chromatin_model(outdir):
+    """
+    Download 18 state chromatin model from Roadmap Epigenomics. There is a bed
+    file for each cell type as well as an annotation file with state information
+    and file to convert the roadmap ID's to human readable cell types. Bed files
+    are sorted so they work with bedtools -sorted option.
+
+    Parameters
+    ----------
+    outdir : str
+        Directory to save files to.
+
+    """
+    import re
+    try:
+        os.makedirs(outdir)
+    except OSError:
+        pass
+    pattern = 'href="E\d\d\d_18_core_K27ac_mnemonics.bed.gz"'
+    compiled = re.compile(pattern)
+    url = ('http://egg2.wustl.edu/roadmap/data/byFileType/'
+           'chromhmmSegmentations/ChmmModels/core_K27ac/jointModel/final')
+    s = urlopen(url).read()
+    res = compiled.findall(s)
+    res = [x[5:].strip('"') for x in res]
+    to_download = ['{}/{}'.format(url, x) for x in res]
+    for src in to_download:
+        dest = os.path.join(outdir, os.path.split(src)[1])
+        sorted_dest = '{}_sorted.bed'.format(dest.strip('.bed.gz'))
+        _download_and_gunzip(src, dest)
+        subprocess.check_call('sort -k 1,1 -k2,2n {} > {}'.format(
+            dest.strip('.gz'), sorted_dest), shell=True)
+        os.remove(dest.strip('.gz'))
+    to_download = []
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/core_K27ac/'
+                       'jointModel/final/browserlabelmap_18_core_K27ac.tab')
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/core_K27ac/jointModel/'
+                       'final/colormap_18_core_K27ac.tab')
+    to_download.append('http://egg2.wustl.edu/roadmap/data/byFileType/'
+                       'chromhmmSegmentations/ChmmModels/imputed12marks/'
+                       'jointModel/final/EIDlegend.txt')
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
         _download_file(src, dest)
