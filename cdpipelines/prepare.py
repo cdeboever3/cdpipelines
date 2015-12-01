@@ -954,6 +954,26 @@ def download_roadmap_25_state_chromatin_model(outdir):
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
         _download_file(src, dest)
+    # Now I'll make a more useful annotation file that has better column names
+    # and a few extra columns.
+    import numpy as np
+    import pandas as pd
+    state_annot = pd.read_table(
+        os.path.join(outdir, 'annotation_25_imputed12marks.txt.tsv'),
+        index_col=0)
+    state_annot.index.name = 'state_number'
+    state_annot.columns = [x.lower().replace(' ', '_') for x in
+                           state_annot.columns]
+    state_annot['name'] = (state_annot.index.astype(str).values + '_' +
+                           state_annot.mnemonic)
+    state_annot['color_code_norm'] = state_annot['color_code'].apply(
+            lambda x: np.array([int(x) for x in x.split(',')]))
+    state_annot['color_code_norm'] = state_annot['color_code_norm'].apply(
+        lambda x: x / 255.)
+    state_annot['color_code_norm'] = state_annot.color_code_norm.apply(
+        lambda x: ','.join([str(y) for y in x]))
+    state_annot.to_csv(os.path.join(outdir, 'frazer_parsed_annotation.tsv'),
+                       sep='\t')
 
 def download_roadmap_18_state_chromatin_model(outdir):
     """
@@ -1001,6 +1021,52 @@ def download_roadmap_18_state_chromatin_model(outdir):
     for src in to_download:
         dest = os.path.join(outdir, os.path.split(src)[1])
         _download_file(src, dest)
+    # The 18 state model doesn't have a nice annotation file like the 25 state
+    # model (although the table is on the website), so I'm just putting the info
+    # in here and I'll write the file myself.
+    columns = [u'STATE NO.', u'MNEMONIC', u'DESCRIPTION', u'COLOR NAME',
+               u'COLOR CODE']
+    vals = [[1, 'TssA', 'Active TSS', 'Red', '255,0,0'],
+       [2, 'TssFlnk', 'Flanking TSS', 'Orange Red', '255,69,0'],
+       [3, 'TssFlnkU', 'Flanking TSS Upstream', 'Orange Red', '255,69,0'],
+       [4, 'TssFlnkD', 'Flanking TSS Downstream', 'Orange Red', '255,69,0'],
+       [5, 'Tx', 'Strong transcription', 'Green', '0,128,0'],
+       [6, 'TxWk', 'Weak transcription', 'DarkGreen', '0,100,0'],
+       [7, 'EnhG1', 'Genic enhancer1', 'GreenYellow', '194,225,5'],
+       [8, 'EnhG2', 'Genic enhancer2', 'GreenYellow', '194,225,5'],
+       [9, 'EnhA1', 'Active Enhancer 1', 'Orange', '255,195,77'],
+       [10, 'EnhA2', 'Active Enhancer 2', 'Orange', '255,195,77'],
+       [11, 'EnhWk', 'Weak Enhancer', 'Yellow', '255,255,0'],
+       [12, 'ZNF/Rpts', 'ZNF genes & repeats', 'Medium Aquamarine',
+        '102,205,170'],
+       [13, 'Het', 'Heterochromatin', 'PaleTurquoise', '138,145,208'],
+       [14, 'TssBiv', 'Bivalent/Poised TSS', 'IndianRed', '205,92,92'],
+       [15, 'EnhBiv', 'Bivalent Enhancer', 'DarkKhaki', '189,183,107'],
+       [16, 'ReprPC', 'Repressed PolyComb', 'Silver', '128,128,128'],
+       [17, 'ReprPC', 'Weak Repressed PolyComb', 'Gainsboro', '192,192,192'],
+       [18, 'Quies', 'Quiescent/Low', 'White', '255,255,255']]
+    import numpy as np
+    import pandas as pd
+    df = pd.DataFrame(vals, columns=columns)
+    df.to_csv(os.path.join(outdir, 'frazer_annotation.tsv'), index=None,
+              sep='\t')
+    # Now I'll make a more useful annotation file that has better column names
+    # and a few extra columns.
+    state_annot = pd.read_table(os.path.join(outdir, 'frazer_annotation.tsv'),
+                                index_col=0)
+    state_annot.index.name = 'state_number'
+    state_annot.columns = [x.lower().replace(' ', '_') for x in
+                           state_annot.columns]
+    state_annot['name'] = (state_annot.index.astype(str).values + '_' +
+                           state_annot.mnemonic)
+    state_annot['color_code_norm'] = state_annot['color_code'].apply(
+            lambda x: np.array([int(x) for x in x.split(',')]))
+    state_annot['color_code_norm'] = state_annot['color_code_norm'].apply(
+        lambda x: x / 255.)
+    state_annot['color_code_norm'] = state_annot.color_code_norm.apply(
+        lambda x: ','.join([str(y) for y in x]))
+    state_annot.to_csv(os.path.join(outdir, 'frazer_parsed_annotation.tsv'),
+              sep='\t')
 
 def download_roadmap_15_state_chromatin_model(outdir):
     """
@@ -1069,7 +1135,25 @@ def download_roadmap_15_state_chromatin_model(outdir):
              '205,92,92', '233,150,122', '189,183,107', '128,128,128',
              '192,192,192', '255,255,255']
            ]
+    import numpy as np
     import pandas as pd
     df = pd.DataFrame(vals, index=columns).T
     df.to_csv(os.path.join(outdir, 'frazer_annotation.tsv'), index=None,
               sep='\t')
+    # Now I'll make a more useful annotation file that has better column names
+    # and a few extra columns.
+    state_annot = pd.read_table(os.path.join(outdir, 'frazer_annotation.tsv'),
+                                index_col=0)
+    state_annot.index.name = 'state_number'
+    state_annot.columns = [x.lower().replace(' ', '_') for x in
+                           state_annot.columns]
+    state_annot['name'] = (state_annot.index.astype(str).values + '_' +
+                           state_annot.mnemonic)
+    state_annot['color_code_norm'] = state_annot['color_code'].apply(
+            lambda x: np.array([int(x) for x in x.split(',')]))
+    state_annot['color_code_norm'] = state_annot['color_code_norm'].apply(
+        lambda x: x / 255.)
+    state_annot['color_code_norm'] = state_annot.color_code_norm.apply(
+        lambda x: ','.join([str(y) for y in x]))
+    state_annot.to_csv(os.path.join(outdir, 'frazer_parsed_annotation.tsv'),
+                       sep='\t')
