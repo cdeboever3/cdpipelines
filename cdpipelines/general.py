@@ -369,6 +369,64 @@ class JobScript:
             f.write(lines)
         return fn + '.md5'
 
+    def homer_motif_analysis(
+        self,
+        bed,
+        size='given',
+        mask=True,
+        web_available=True,
+        write_to_outdir=True,
+    ):
+        """
+        Perform a motif analysis using HOMER on the input bed file. The HOMER
+        scripts and other necessary HOMER stuff are assumed to be in your path.
+
+        Parameters
+        ----------
+        bed : str
+            Path to bed file defining intervals to use for motif analysis.
+
+        size : int or str
+            Size for HOMER -size parameter. See HOMER documentation for more
+            information.
+
+        mask : bool
+            Whether to pass the -mask parameter to HOMER.
+
+        web_available : bool
+            If True, write URL to self.links_tracklines, make softlink to
+            self.linkdir, and set write_to_outdir = True.
+
+        write_to_outdir : bool
+            If True, write output files directly to self.outdir.
+    
+        Returns
+        -------
+        dy : str
+            Path to HOMER output diretory that contains output files.
+
+        """
+        if write_to_outdir or web_available:
+            dy = self.outdir
+        dy = os.path.join(self.tempdir,
+                          '{}_homer_motif'.format(self.sample_name))
+        lines = ('findMotifsGenome.pl {} hg19 {} -size {} -p {}'.format(
+            bed, dy, size, self.threads))
+        if mask:
+            lines += ' -mask'
+        lines += ''
+        
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        
+        if web_available:
+            link = self.add_softlink(dy)
+            url = self.webpath + '/' + os.path.split(dy)[1]
+            with open(self.links_tracklines, "a") as f:
+                f.write(url + '\n')
+
+        return dy
+
     def scale_bedgraph(
         self,
         bg,
@@ -428,6 +486,63 @@ class JobScript:
         bam,
         featureCounts_path='featureCounts',
     ):
+        """
+        Run featureCounts to count the number of fragments that overlap
+        intervals defined in a bed file. The bed file is converted to saf format
+        for use with featureCounts.
+    
+        Parameters
+        ----------
+        bed : str
+            Path to bed file defining regions to count for.
+        
+        bam : str
+            Path to bam file to count reads for.
+    
+        Returns
+        -------
+        out : str
+            Path to output counts file.
+    
+        out_summary : str
+            Path to output counts summary file.
+    
+        """
+        out = '{}_featureCounts.tsv'.format(self.sample_name)
+        out_summary = '{}.summary'.format(out)
+        saf = self.convert_bed_to_saf(bed)
+        self.add_temp_file(saf)
+        lines = '{} -p -T {} -F SAF -a {} -o {} {}\n\n'.format(
+            featureCounts_path, self.threads, saf, counts, bam)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out, out_summary
+
+    def convert_saf_to_bed(
+        self,
+        bed,
+    ):
+        """
+        Convert bed file to saf file for use with featureCounts.
+    
+        Parameters
+        ----------
+        bed : str
+            Path to bed file to convert.
+    
+        Returns
+        -------
+        saf : str
+            Path to output saf file.
+    
+        """
+        saf = os.path.splitext(os.path.split(bed)[1])[0] + '.saf'
+        from __init__ import _scripts
+        input_script = os.path.join(_scripts, 'convert_bed_to_saf.py')
+        lines = 'python {} {} {}\n\n'.format(input_script, bed, saf)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return saf
 
     def bedgraph_from_bam(
         self,

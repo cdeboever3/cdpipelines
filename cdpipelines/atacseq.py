@@ -291,9 +291,9 @@ class ATACJobScript(JobScript):
         broad=False,
     ):
         """
-        Call peaks with MACS2. The macs2 executable is assumed to be in your path
-        which it should be if you installed it using pip install MACS2 into your
-        python environment.
+        Call peaks with MACS2. The macs2 executable is assumed to be in your
+        path which it should be if you installed it using pip install MACS2 into
+        your Python environment.
     
         Parameters
         ----------
@@ -404,6 +404,7 @@ def pipeline(
     bigWigAverageOverBed_path='bigWigAverageOverBed',
     bcftools_path='bcftools',
     bammarkduplicates_path='bammarkduplicates',
+    featureCounts_path='featureCounts',
 ):
     """
     Make a SGE/shell scripts for running the entire ATAC-seq pipeline. The
@@ -845,7 +846,6 @@ def pipeline(
     
     # Input files.
     mdup_bam = job.add_input_file(mdup_bam)
-    query_sorted_bam = job.add_input_file(query_sorted_bam)
 
     # Run macs2 peak calling.
     excel, narrow_peak, summits = job.macs2(
@@ -854,10 +854,17 @@ def pipeline(
         broad=False,
     )
     job.add_output_file(excel)
-    job.add_output_file(narrow_peak)
+    outdir_narrow_peak = job.add_output_file(narrow_peak)
     job.add_output_file(summits)
 
-    # TODO: Add motif analysis?
+    # Motif analysis.
+    homer_outdir = job.homer_motif_analysis(
+        summits,
+        size=200,
+        mask=True,
+        web_available=True,
+        write_to_outdir=True,
+    )
 
     job.write_end()
     if not job.delete_sh:
@@ -880,22 +887,17 @@ def pipeline(
     counts_jobname = job.jobname
     
     # Input files.
-    mdup_bam = job.add_input_file(outdir_mdup_bam)
+    query_sorted_bam = job.add_input_file(query_sorted_bam)
+    narrow_peak = job.add_input_file(outdir_narrow_peak)
 
     # Run featureCounts.
-
-
-    genes, isoforms, stats = job.rsem_calculate_expression(
-        transcriptome_bam, 
-        rsem_reference, 
-        threads=job.threads, 
-        ci_mem=1024,
-        strand_specific=strand_specific,
-        rsem_calculate_expression_path=rsem_calculate_expression_path,
+    counts, counts_summary = job.featureCounts_count(
+        narrow_peak,
+        query_sorted_bam,
+        featureCounts_path=featureCounts_path,
     )
-    job.add_output_file(genes)
-    job.add_output_file(isoforms)
-    job.add_output_file(stats)
+    job.add_output_file(counts)
+    job.add_output_file(counts_summary)
 
     job.write_end()
     if not job.delete_sh:
@@ -1190,151 +1192,6 @@ def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
                           '\t--seedSearchStartLmax 20']) + '\n\n')
     return line
 
-# def _genome_browser_files(tracklines_file, link_dir, web_path_file,
-#                           coord_sorted_bam, bam_index, r1_fastqc,
-#                           r2_fastqc, narrow_peak, broad_peak, sample_name,
-#                           outdir):
-#     """
-#     Make files and softlinks for displaying results on UCSC genome browser.
-# 
-#     Parameters
-#     ----------
-#     tracklines_file : str
-#         Path to file for writing tracklines. The tracklines will be added to the
-#         file; the contents of the file will not be overwritten. These tracklines
-#         can be pasted into the genome browser upload for custom data.
-# 
-#     link_dir : str
-#         Path to directory where softlink should be made.
-# 
-#     web_path_file : str
-#         File whose first line is the URL that points to link_dir. For example,
-#         if we make a link to the file s1_coord_sorted.bam in link_dir and
-#         web_path_file has http://site.com/files on its first line, then
-#         http://site.com/files/s1_coord_sorted.bam should be available on the
-#         web. If the web directory is password protected (it probably should be),
-#         then the URL should look like http://username:password@site.com/files.
-#         This is a file so you don't have to make the username/password combo
-#         public (although I'd recommend not using a sensitive password). You can
-#         just put the web_path_file in a directory that isn't tracked by git, 
-#         figshare, etc.
-# 
-#     coord_sorted_bam : str
-#         Path to coordinate sorted bam file.
-# 
-#     bam_index : str
-#         Path to index file for coordinate sorted bam file.
-# 
-#     r1_fastqc : str
-#         Path to fastqc_report.html for R1 reads.
-# 
-#     r2_fastqc : str
-#         Path to fastqc_report.html for R2 reads.
-# 
-#     sample_name : str
-#         Sample name used for naming files.
-# 
-#     Returns
-#     -------
-#     lines : str
-#         Lines to be printed to shell/PBS script.
-# 
-#     """
-#     lines = ''
-#     link_dir = os.path.join(link_dir, 'atac')
-# 
-#     with open(web_path_file) as wpf:
-#         web_path = wpf.readline().strip()
-#     web_path = web_path + '/atac'
-# 
-#     # File with UCSC tracklines.
-#     if os.path.exists(tracklines_file):
-#         with open(tracklines_file) as f:
-#             tf_lines = f.read()
-#     else:
-#         tf_lines = ''
-# 
-#     # FastQC results.
-#     temp_link_dir = os.path.join(link_dir, 'fastqc')
-#     temp_web_path = web_path + '/fastqc'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     new_lines, r1_name = _make_softlink(r1_fastqc, sample_name + '_R1',
-#                                         temp_link_dir)
-#     lines += new_lines
-#     new_lines, r2_name = _make_softlink(r2_fastqc, sample_name + '_R2',
-#                                         temp_link_dir)
-#     lines += new_lines
-# 
-#     # Bam file and index.
-#     temp_link_dir = os.path.join(link_dir, 'bam')
-#     temp_web_path = web_path + '/bam'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     fn = os.path.join(outdir, os.path.split(coord_sorted_bam)[1])
-#     new_lines, bam_name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-# 
-#     fn = os.path.join(outdir, os.path.split(bam_index)[1])
-#     new_lines, index_name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-# 
-#     tf_lines += ' '.join(['track', 'type=bam',
-#                           'name="{}_bam"'.format(sample_name),
-#                           'description="ATAC-seq for {}"'.format(sample_name),
-#                           'visibility=0',
-#                           'db=hg19',
-#                           'bigDataUrl={}/{}\n'.format(temp_web_path, bam_name)])
-#    
-#     # HOMER bigwig.
-#     temp_link_dir = os.path.join(link_dir, 'bigwig')
-#     temp_web_path = web_path + '/bigwig'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     fn = os.path.join(outdir, '{}_tags'.format(sample_name),
-#                       '{}_tags.ucsc.bigWig'.format(sample_name))
-#     new_lines, bigwig_name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-#     tf_lines += ('track type=bigWig name="{0}_atac_cov" description="ATAC-seq '
-#                  'coverage for {0}" visibility=0 db=hg19 bigDataUrl='
-#                  '{1}/{0}_tags.ucsc.bigWig\n'.format(sample_name,
-#                                                      temp_web_path))
-# 
-#     # HOMER peaks.
-#     temp_link_dir = os.path.join(link_dir, 'peak')
-#     temp_web_path = web_path + '/peak'
-#     try:
-#         os.makedirs(temp_link_dir)
-#     except OSError:
-#         pass
-#     fn = os.path.join(outdir, '{}_tags'.format(sample_name),
-#                       '{}_atac_homer_peaks.bed'.format(sample_name))
-#     new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
-#     lines += new_lines
-#     tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
-# 
-#     # Peaks from MACS2. Note that this file is just directly uploaded to UCSC so
-#     # we don't provide a trackline but rather just a URL to UCSC.
-#     # fn = os.path.join(outdir, os.path.split(narrow_peak)[1])
-#     # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
-#     # lines += new_lines
-#     # fn = os.path.join(outdir, os.path.split(broad_peak)[1])
-#     # new_lines, name = _make_softlink(fn, sample_name, temp_link_dir)
-#     # lines += new_lines
-#     # tf_lines += '{}/{}\n'.format(temp_web_path, os.path.split(fn)[1])
-# 
-#     with open(tracklines_file, 'w') as tf:
-#         tf.write(tf_lines)
-#     
-#     lines += '\n'
-#     return lines
-
 def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
            bedtools_path, bigwig=False):
     """
@@ -1548,390 +1405,6 @@ def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
     lines.append('rm temp.bed temp2.bed')
     return '\n'.join(lines) + '\n'
-
-def align(
-    r1_fastqs, 
-    r2_fastqs, 
-    outdir, 
-    sample_name, 
-    star_index,
-    tracklines_file,
-    link_dir,
-    web_path_file,
-    star_path,
-    picard_path,
-    bedtools_path,
-    bedgraph_to_bigwig_path,
-    fastqc_path,
-    samtools_path,
-    blacklist_bed,
-    conda_env=None,
-    environment=None,
-    rgpl='ILLUMINA',
-    rgpu='',
-    tempdir='/scratch', 
-    threads=10, 
-    picard_memory=15, 
-    shell=False,
-    trim=None,
-):
-    """
-    Make a PBS or shell script for aligning ATAC-seq reads with STAR. The
-    defaults are set for use on the Frazer lab's PBS scheduler on FLC.
-
-    Parameters
-    ----------
-    r1_fastqs : list or str
-        Either a list of paths to gzipped fastq files with R1 reads or path to a
-        single gzipped fastq file with R1 reads.
-
-    r2_fastqs : list or str
-        Either a list of paths to gzipped fastq files with R2 reads or path to a
-        single gzipped fastq file with R2 reads.
-
-    outdir : str
-        Directory to store PBS/shell file and aligment results.
-
-    sample_name : str
-        Sample name used for naming files etc.
-
-    star_index : str
-        Path to STAR index.
-
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
-    star_path : str
-        Path to STAR aligner.
-
-    picard_path : str
-        Path to Picard tools.
-
-    bedtools_path : str
-        Path to bedtools.
-
-    bedgraph_to_bigwig_path : str
-        Path bedGraphToBigWig executable.
-
-    fastqc_path : str
-        Path to FastQC executable.
-
-    samtools_path : str
-        Path to samtools executable.
-
-    blacklist_bed : str
-        String to bed file with blacklist regions. This should at least include
-        the ENCODE blacklist regions. Read pairs where one or both reads
-        intersect these regions are filtered out.
-
-    conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of MACS2 is used.
-
-    environment : str
-        Path to shell file that is sourced to set environmental variables and
-        paths.
-
-    rgpl : str
-        Read Group platform (e.g. illumina, solid). 
-
-    rgpu : str
-        Read Group platform unit (eg. run barcode). 
-
-    tempdir : str
-        Directory to store files as STAR runs.
-
-    threads : int
-        Number of threads to reserve using PBS scheduler. This number of threads
-        minus 2 will be used by STAR, so this must be at least 3.
-
-    picard_memory : int
-        Amount of memory (in gb) to give Picard Tools.
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    trim : int
-        Positive or negative integer. Positive numbers remove bases at the front
-        of the read and negative numbers remove bases at the end of the read.
-
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    assert threads >= 3
-    with open(web_path_file) as wpf:
-        web_path = wpf.readline().strip()
-    web_path = web_path + '/atac'
-    link_dir = os.path.join(link_dir, 'atac')
-    job_suffix = 'alignment'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, queue='high', copy_input=True,
-                    conda_env=conda_env, environment=environment)
-
-    # I'm going to handle the copying and deleting of the fastqs myself rather
-    # than have the JobScript do it because I don't want to the fastqs to sit
-    # around on the disk the whole time after I'm done with them.
-    temp_r1_fastqs = _process_fastqs(r1_fastqs, job.tempdir)
-    temp_r2_fastqs = _process_fastqs(r2_fastqs, job.tempdir)
-    if type(r1_fastqs) != list:
-        r1_fastqs = [r1_fastqs]
-    if type(r2_fastqs) != list:
-        r2_fastqs = [r2_fastqs]
-    combined_r1 = os.path.join(
-        job.tempdir, '{}_combined_R1.fastq.gz'.format(sample_name))
-    combined_r2 = os.path.join(
-        job.tempdir, '{}_combined_R2.fastq.gz'.format(sample_name))
-
-    # Files that will be created.
-    aligned_bam = job.add_temp_file('Aligned.out.bam', copy=True)
-    # aligned_bam = os.path.join(job.tempdir, 'Aligned.out.bam')
-    # job.output_files_to_copy.append(aligned_bam)
-    
-    job.temp_files_to_delete.append('_STARtmp')
-
-    filtered_bam = job.add_temp_file('{}_atac_filtered.bam'.format(sample_name))
-    # filtered_bam = os.path.join(
-    #     job.tempdir, '{}_atac_filtered.bam'.format(sample_name))
-    # job.temp_files_to_delete.append(filtered_bam)
-
-    coord_sorted_bam = job.add_temp_file('{}_atac_filtered_coord_sorted.bam'.format(sample_name))
-    # coord_sorted_bam = os.path.join(
-    #     job.tempdir, '{}_atac_filtered_coord_sorted.bam'.format(sample_name))
-    # job.temp_files_to_delete.append(coord_sorted_bam)
-
-    no_dup_bam = job.add_temp_file('{}_atac_no_dup.bam'.format(sample_name),
-                                   copy=True)
-    # no_dup_bam = os.path.join(
-    #     job.tempdir, '{}_atac_no_dup.bam'.format(sample_name))
-    # job.output_files_to_copy.append(no_dup_bam)
-
-    bam_index = job.add_temp_file('{}_atac_no_dup.bam.bai'.format(sample_name),
-                                  copy=True)
-    # bam_index = os.path.join(
-    #     job.tempdir, '{}_atac_no_dup.bam.bai'.format(sample_name))
-    # job.output_files_to_copy.append(bam_index)
-
-    qsorted_bam = job.add_temp_file('{}_atac_no_dup_qsorted.bam'.format(sample_name),
-                                    copy=True)
-    # qsorted_bam = os.path.join(
-    #     job.tempdir, '{}_atac_no_dup_qsorted.bam'.format(sample_name))
-
-    out_bigwig = job.add_temp_file(os.path.join(job.tempdir,
-                                                '{}_atac.bw'.format(sample_name)),
-                                   copy=True)
-
-    # out_bigwig = os.path.join(job.tempdir, '{}_atac.bw'.format(sample_name))
-    # job.output_files_to_copy.append(out_bigwig)
-
-    insert_metrics = os.path.join(
-        job.outdir, '{}_insert_metrics.txt'.format(sample_name))
-
-    insert_hist = os.path.join(
-        job.outdir, '{}_insert_histogram.pdf'.format(sample_name))
-
-    duplicate_metrics = os.path.join(
-        job.outdir, '{}_duplicate_metrics.txt'.format(sample_name))
-
-    stats_file = os.path.join(
-        job.outdir, '{}_atac_no_dup.bam.flagstat'.format(sample_name))
-
-    chrM_counts = os.path.join(
-        job.outdir, '{}_chrM_counts.txt'.format(sample_name))
-
-    tn = os.path.split(combined_r1)[1]
-    r1_fastqc = os.path.join(
-        job.outdir, 
-        '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
-        'fastqc_report.html')
-    tn = os.path.split(combined_r2)[1]
-    r2_fastqc = os.path.join(
-        job.outdir, 
-        '{}_fastqc'.format('.'.join(tn.split('.')[0:-2])),
-        'fastqc_report.html')
-    
-    job.output_files_to_copy += ['Log.out', 'Log.final.out', 'Log.progress.out',
-                                 'SJ.out.tab']
-
-    with open(job.filename, "a") as f:
-        # I'm going to copy the fastq files here rather than have the JobScript
-        # class do it because I want to delete them as soon as I've combined
-        # them into a single file.
-        f.write('rsync -Lavz \\\n\t{} \\\n \t{}\n\n'.format( 
-            '\\\n\t'.join(r1_fastqs + r2_fastqs), job.tempdir))
-
-        # Combine fastq files.
-        if len(temp_r1_fastqs) > 1:
-            f.write('cat \\\n{} \\\n\t> {} &\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs]),
-                combined_r1))
-        else:
-            f.write('mv {} {}\n\n'.format(temp_r1_fastqs[0], combined_r1))
-
-        if len(temp_r2_fastqs) > 1:
-            f.write('cat \\\n{} \\\n\t> {}\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs]),
-                combined_r2))
-        else:
-            f.write('mv {} {}\n\n'.format(temp_r2_fastqs[0], combined_r2))
-        f.write('wait\n\n')
-
-        # Remove temp fastqs.
-        if len(temp_r1_fastqs) > 1:
-            f.write('rm \\\n{} &\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r1_fastqs])))
-        if len(temp_r2_fastqs) > 1:
-            f.write('rm \\\n{}\n\n'.format(
-                ' \\\n'.join(['\t{}'.format(x) for x in temp_r2_fastqs])))
-            f.write('wait\n\n')
-
-        # Run FASTQC.
-        lines = _fastqc([combined_r1, combined_r2], threads, job.outdir,
-                        fastqc_path)
-        f.write(lines)
-        f.write('wait\n\n')
-        r1 = '.'.join(os.path.split(combined_r1)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(job.outdir, r1), 
-                         os.path.join(link_dir, 'fastqc', r1))
-        r2 = '.'.join(os.path.split(combined_r2)[1].split('.')[0:-2])
-        job.add_softlink(os.path.join(job.outdir, r2), 
-                         os.path.join(link_dir, 'fastqc', r2))
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                web_path, r1))
-            tf.write(tf_lines)
-            tf_lines = ('{}/fastqc/{}/fastqc_report.html\n'.format(
-                web_path, r2))
-            tf.write(tf_lines)
-    
-        # Optionally trim.
-        if trim:
-            assert(type(trim) is int)
-            trimmed_r1 = os.path.join(
-                job.tempdir, '{}_trimmed_R1.fastq.gz'.format(sample_name))
-            trimmed_r2 = os.path.join(
-                job.tempdir, '{}_trimmed_R2.fastq.gz'.format(sample_name))
-            job.temp_files_to_delete.append(trimmed_r1)
-            job.temp_files_to_delete.append(trimmed_r2)
-            lines = _cutadapt_trim(combined_r1, trim, trimmed_r1, bg=True)
-            lines += _cutadapt_trim(combined_r2, trim, trimmed_r2, bg=True)
-            to_align_r1 = trimmed_r1
-            to_align_r2 = trimmed_r2
-            f.write(lines)
-            f.write('\nwait\n\n')
-            lines = _fastqc([trimmed_r1, trimmed_r2], threads, job.outdir,
-                            fastqc_path)
-            f.write(lines)
-            f.write('wait\n\n')
-        else:
-            to_align_r1 = combined_r1
-            to_align_r2 = combined_r2
-
-        # Align with STAR.
-        lines = _star_align(to_align_r1, to_align_r2, sample_name, rgpl,
-                            rgpu, star_index, star_path, threads)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        # Count the number of primary alignments for each chromosome.
-        f.write('{} view -q 255 {} | \\\n\tcut -f 3 | \\\n\tgrep chrM '
-                '| \\\n\tuniq -c > {} &\n\n'.format(
-            samtools_path, aligned_bam, chrM_counts))
-
-        # Remove mitochondrial reads, read pairs that are not uniquely aligned,
-        # and reads where one or both of the reads were in the ENCODE blacklist
-        # regions.
-        lines = (
-            '{} view -h -q 255 {} | \\\n'.format(samtools_path, aligned_bam) + 
-            '\tawk \'{if ($3 != "chrM") {print} ' + 
-            'else if (substr($1,1,1) == "@") {print}}\' | \\\n' + 
-            '\t{} view -Su - | \\\n'.format(samtools_path) + 
-            '\t{} intersect -v -ubam -abam stdin -b {} | \\\n'.format(
-                bedtools_path, blacklist_bed) + 
-            '\t{} view -h - | \\\n'.format(samtools_path) + 
-            '\tawk \'{if (substr($1,1,1) == "@") {print} ' + 
-            'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | \\\n' +
-            '\t{} view -Sb - > {}\n\n'.format(samtools_path, filtered_bam)
-        )
-        f.write(lines)
-
-        # Coordinate sort bam file.
-        lines = _picard_coord_sort(filtered_bam, coord_sorted_bam, picard_path,
-                                   picard_memory, job.tempdir)
-        f.write(lines)
-        f.write('wait\n\n')
-
-        # Remove duplicates.
-        lines = _picard_mark_duplicates(coord_sorted_bam, no_dup_bam,
-                                        duplicate_metrics, picard_path,
-                                        picard_memory, job.tempdir,
-                                        remove_dups=True)
-        f.write(lines)
-        f.write('wait\n\n')
-        name = os.path.split(no_dup_bam)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bam', name))
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bam name="{}_atac_bam" '
-                        'description="ATACseq for {}" '
-                        'bigDataUrl={}/bam/{}\n'.format(
-                            sample_name, sample_name, web_path, name))
-            tf.write(tf_lines)
-
-        # Query sort.
-        lines = _picard_query_sort(no_dup_bam, qsorted_bam, picard_path,
-                                   picard_memory, job.tempdir, bg=True)
-        f.write(lines)
-
-        # Index bam file and collect flagstats.
-        lines = _samtools_index(no_dup_bam, samtools_path, bg=True)
-        f.write(lines)
-        name = os.path.split(bam_index)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bam', name))
-        lines = _flagstat(no_dup_bam, stats_file, samtools_path, bg=True)
-        f.write(lines)
-        f.write('wait\n\n')
-        lines = _picard_insert_size_metrics(no_dup_bam, insert_metrics,
-                                            insert_hist, picard_path,
-                                            picard_memory, job.tempdir, bg=True)
-        f.write(lines)
-
-        # Make bigwig file.
-        lines = _bigwig_files(no_dup_bam, out_bigwig, sample_name,
-                              bedgraph_to_bigwig_path, bedtools_path)
-        f.write(lines)
-        name = os.path.split(out_bigwig)[1]
-        job.add_softlink(os.path.join(job.outdir, name), 
-                         os.path.join(link_dir, 'bw', name))
-        with open(tracklines_file, "a") as tf:
-            tf_lines = ('track type=bigWig name="{}_atac_cov" '
-                        'description="ATACseq coverage for {}" '
-                        'visibility=0 db=hg19 bigDataUrl={}/bw/{}\n'.format(
-                            sample_name, sample_name, web_path, name))
-            tf.write(tf_lines)
-
-    job.write_end()
-    return job.filename
 
 def combined_homer_peaks(
     tagdirs, 
@@ -2244,106 +1717,6 @@ def nucleoatac(
 
     f.close()
     return fn
-
-def macs2_peak_calling(
-    bam, 
-    sample_name, 
-    outdir,
-    tracklines_file,
-    link_dir,
-    web_path_file,
-    environment,
-    conda_env='',
-    tempdir='/scratch', 
-    threads=4, 
-    shell=False,
-):
-    """
-    Make a PBS or shell script for calling broad and narrow peaks with macs2.
-
-    Parameters
-    ----------
-    bam : str 
-        Path to bam file with aligned reads to use for calling peaks.
-
-    sample_name : str
-        Name used for naming files and directories.
-
-    outdir : str
-        Directory to store directory containing PBS/shell file and results.
-
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
-    environment : str
-        Bash file with PATH information that will be sourced. 
-
-    conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of macs2 is used.
-
-    tempdir : str
-        Directory to store files as macs2 runs.
-
-    threads : int
-        Number of threads to reserve using PBS scheduler and for nucleoatac to
-        use.
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    with open(web_path_file) as wpf:
-        web_path = wpf.readline().strip()
-    web_path = web_path + '/atac'
-    link_dir = os.path.join(link_dir, 'atac')
-    job_suffix = 'macs2'
-    job = JobScript(sample_name, job_suffix, outdir, threads, tempdir=tempdir,
-                    shell=shell, queue='high', copy_input=True,
-                    conda_env=conda_env, environment=environment)
-
-    # I'm going to define some file names used later.
-    temp_bam = job.add_input_file(bam)
-    job.copy_input_files()
-    
-    with open(job.filename, "a") as f:
-        # Run macs2 for narrow peaks.
-        lines = _macs2(
-            temp_bam, 
-            sample_name, 
-            job.outdir,
-            tracklines_file,
-            link_dir,
-            web_path_file,
-            broad=False,
-        )
-        f.write(lines)
-        f.write('wait\n\n')
-
-    job.write_end()
-    return job.filename
 
 def motif_analysis(
     bed, 
