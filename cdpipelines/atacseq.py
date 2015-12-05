@@ -91,6 +91,42 @@ class ATACJobScript(JobScript):
             f.write(lines)
         return bam, log_out, log_final_out, log_progress_out, sj_out
 
+    def filter_tlen(
+        self,
+        bam,
+        tlen_max=140,
+        samtools_path='samtools',
+    ):
+        """
+        Filter out reads whose tlen column in bam file is greater than tlen_max.
+    
+        Parameters
+        ----------
+        bam : str
+            Path to bam file to filter. Uniquely mapped reads should have
+            quality score greater than 255 (e.g. STAR alignments).
+
+        encode_blacklist : str
+            Path to ENCODE blacklist bed file.
+    
+        Returns
+        -------
+        out_bam : str
+            Path to output filtered bam file.
+    
+        """
+        root = os.path.splitext(os.path.split(bam)[1])[0]
+        out_bam = os.path.join(self.tempdir, '{}_tlen_leq_{}.bam'.format(
+            root, tlen_max))
+        lines = ('{} view -h {} | awk \'function abs(x){{return '
+                 '((x < 0.0) ? -x : x)}} {{if (abs($9) <= {}) {{print}}'
+                 'else if (substr($1,1,1) == "@") {{print}}}}\' \\\n\t'
+                 '{} view -Sb - \\\n\t | > {}\n\n'.format(
+                     samtools_path, bam, tlen, out_bam))
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out_bam
+
     def filter_multi_mt_blacklist_reads(
         self,
         bam,
@@ -291,9 +327,9 @@ class ATACJobScript(JobScript):
         broad=False,
     ):
         """
-        Call peaks with MACS2. The macs2 executable is assumed to be in your
-        path which it should be if you installed it using pip install MACS2 into
-        your Python environment.
+        Call peaks with MACS2 for ATAC-seq data. The macs2 executable is assumed
+        to be in your path which it should be if you installed it using pip
+        install MACS2 into your Python environment.
     
         Parameters
         ----------
@@ -658,28 +694,24 @@ def pipeline(
     job.add_temp_file(temp_bam_index)
 
     # Mark and remove duplicates.
-    mdup_bam, duplicate_metrics, removed_reads = job.biobambam2_mark_duplicates(
+    rmdup_bam, duplicate_metrics, removed_reads = job.biobambam2_mark_duplicates(
         coord_sorted_bam,
         remove_duplicates=True,
         bammarkduplicates_path=bammarkduplicates_path)
-    outdir_mdup_bam = job.add_output_file(mdup_bam)
+    outdir_rmdup_bam = job.add_output_file(rmdup_bam)
     job.add_output_file(duplicate_metrics)
     job.add_output_file(removed_reads)
 
-    # Query name sort.
-    query_sorted_bam = job.sambamba_sort(
-        mdup_bam, 
-        tempdir=job.tempdir,
-        queryname=True,
-        sambamba_path=sambamba_path,
-    )
-    query_sorted_bam = job.add_output_file(query_sorted_bam)
+    # Index rmdup bam file.
+    bam_index = job.sambamba_index(rmdup_bam, sambamba_path)
+    outdir_bam_index = job.add_output_file(bam_index)
+    link = job.add_softlink(outdir_bam_index)
 
     # Add softlink to bam file in outdir and write URL and trackline.
-    link = job.add_softlink(outdir_mdup_bam)
+    link = job.add_softlink(outdir_rmdup_bam)
     name = '{}_atac'.format(job.sample_name)
-    desc = 'ATACAseq alignment for {}.'.format(job.sample_name)
-    url = job.webpath + '/' + os.path.split(outdir_mdup_bam)[1]
+    desc = 'ATAC-seq alignment for {}.'.format(job.sample_name)
+    url = job.webpath + '/' + os.path.split(outdir_rmdup_bam)[1]
     t_lines = (
         'track type=bam name="{}" '
         'description="{}" '
@@ -689,19 +721,46 @@ def pipeline(
         f.write(t_lines)
         f.write(url + '\n')
 
-    # Index bam file.
-    bam_index = job.sambamba_index(mdup_bam, sambamba_path)
-    outdir_bam_index = job.add_output_file(bam_index)
-    link = job.add_softlink(outdir_bam_index)
+    # Filter out reads with fragment size greater than 140.
+    tlen_bam = job.filter_tlen(
+        rmdup_bam,
+        tlen_max=140,
+        samtools_path=samtools_path,
+    )
+    outdir_tlen_bam = job.add_output_file(tlen_bam)
+
+    # Index sorted bam file.
+    tlen_bam_index = job.sambamba_index(tlen_sorted_bam, sambamba_path)
+    job.add_output_file(tlen_bam_index)
+
+    # Query name sort.
+    query_sorted_bam = job.sambamba_sort(
+        tlen_bam, 
+        tempdir=job.tempdir,
+        queryname=True,
+        root=os.path.splitext(os.path.split(tlen_sorted_bam)[1])[0],
+        sambamba_path=sambamba_path,
+    )
+    query_sorted_bam = job.add_output_file(query_sorted_bam)
+
+    # Add softlink to bam file in outdir and write URL and trackline.
+    link = job.add_softlink(outdir_tlen_bam)
+    name = '{}_atac_140'.format(job.sample_name)
+    desc = 'ATAC-seq alignment for {}. Fragments <= 140.'.format(job.sample_name)
+    url = job.webpath + '/' + os.path.split(outdir_tlen_bam)[1]
+    t_lines = (
+        'track type=bam name="{}" '
+        'description="{}" '
+        'visibility=0 db=hg19 bigDataUrl={}\n'.format(
+            name, desc, url))
+    with open(job.links_tracklines, "a") as f:
+        f.write(t_lines)
+        f.write(url + '\n')
 
     job.write_end()
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
     
-    # These files will be input for upcoming scripts.
-    mdup_bam = outdir_mdup_bam
-    bam_index = outdir_bam_index
-
     ##### Job 4: Collect QC metrics. #####
     job = ATACJobScript(
         sample_name, 
@@ -720,18 +779,18 @@ def pipeline(
     qc_metrics_jobname = job.jobname
     
     # Input files.
-    mdup_bam = job.add_input_file(mdup_bam)
+    rmdup_bam = job.add_input_file(outdir_rmdup_bam)
 
     # Collect Picard insert size metrics.
     insert_metrics, insert_hist = job.picard_insert_size_metrics(
-        mdup_bam, 
+        rmdup_bam, 
         picard_path=picard_path,
         bg=False,
     )
 
     # Collect index stats.
     index_out, index_err = job.picard_bam_index_stats(
-        mdup_bam, 
+        rmdup_bam, 
         picard_path=picard_path,
         bg=False,
     )
@@ -742,7 +801,7 @@ def pipeline(
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
 
-    ##### Job 5: Make md5 hash for STAR and final bam files. #####
+    ##### Job 5: Make md5 hash for STAR bam file. #####
     job = ATACJobScript(
         sample_name, 
         job_suffix='md5',
@@ -760,12 +819,9 @@ def pipeline(
     md5_jobname = job.jobname
     
     # Input files.
-    mdup_bam = job.add_input_file(outdir_mdup_bam)
     star_bam = job.add_input_file(outdir_star_bam)
 
     # Make md5 hashes for bam files.
-    mdup_md5sum = job.make_md5sum(mdup_bam)
-    job.add_output_file(mdup_md5sum)
     star_md5sum = job.make_md5sum(star_bam)
     job.add_output_file(star_md5sum)
 
@@ -774,6 +830,7 @@ def pipeline(
         submit_commands.append(job.sge_submit_command())
       
     ##### Job 6: Make bigwig files for final bam file. #####
+    # TODO: I need to make a bigwig for the bam file with only small fragments.
     job = ATACJobScript(
         sample_name, 
         job_suffix='bigwig',
@@ -791,11 +848,12 @@ def pipeline(
     bigwig_jobname = job.jobname
         
     # Input files.
-    mdup_bam = job.add_input_file(mdup_bam)
+    rmdup_bam = job.add_input_file(outdir_rmdup_bam)
+    tlen_bam = job.add_input_file(outdir_tlen_bam)
 
     # Make bigwig.
     bg = job.bedgraph_from_bam(
-        mdup_bam, 
+        rmdup_bam, 
         bedtools_path=bedtools_path,
     )
     job.add_temp_file(bg)
@@ -806,9 +864,7 @@ def pipeline(
     )
     job.add_output_file(bw)
 
-    # Make scaled bigwig file. First I'll read the star Log.final.out
-    # file and find the number of uniquely mapped reads.
-    # Both strands scaled.
+    # Make scaled bigwig file. 
     scaled_bg = job.scale_bigwig(
         bg,
         log_final_out,
@@ -822,6 +878,34 @@ def pipeline(
         bedtools_path=bedtools_path,
     )
     job.add_output_file(scaled_bw)
+
+    # Make bigwig for tlen filtered bam.
+    tlen_bg = job.bedgraph_from_bam(
+        tlen_bam, 
+        bedtools_path=bedtools_path,
+    )
+    job.add_temp_file(tlen_bg)
+    tlen_bw = job.bigwig_from_bedgraph(
+        tlen_bg,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(tlen_bw)
+
+    # Make scaled bigwig file for tlen filtered bam.
+    scaled_bg = job.scale_bigwig(
+        tlen_bg,
+        log_final_out,
+        expected_unique_pairs,
+    )
+    job.add_temp_file(tlen_scaled_bg)
+    tlen_scaled_bw = job.bigwig_from_bedgraph(
+        tlen_scaled_bg,
+        scale=True,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(tlen_scaled_bw)
 
     job.write_end()
     if not job.delete_sh:
@@ -845,11 +929,11 @@ def pipeline(
     macs2_jobname = job.jobname
     
     # Input files.
-    mdup_bam = job.add_input_file(mdup_bam)
+    tlen_bam = job.add_input_file(outdir_tlen_bam)
 
     # Run macs2 peak calling.
     excel, narrow_peak, summits = job.macs2(
-        mdup_bam,
+        tlen_bam,
         web_available=True, 
         broad=False,
     )
@@ -923,7 +1007,7 @@ def pipeline(
         wasp_allele_swap_jobname = job.jobname
            
         # Input files.
-        mdup_bam = job.add_input_file(mdup_bam)
+        rmdup_bam = job.add_input_file(rmdup_bam)
         # The VCF might be large so we probably don't want to copy it ever.
         vcf = job.add_input_file(vcf, copy=False)
         # The exon bed file is small so we don't need to copy it ever.
@@ -934,7 +1018,7 @@ def pipeline(
             vcf_sample_name = sample_name
         (snp_directory, hets_vcf, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
          to_remap_bam, to_remap_num) = job.wasp_allele_swap(
-             mdup_bam, 
+             rmdup_bam, 
              find_intersecting_snps_path, 
              vcf, 
              exon_bed,

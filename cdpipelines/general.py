@@ -1186,6 +1186,7 @@ class JobScript:
         in_bam, 
         queryname=False,
         tempdir='.',
+        root=None,
         sambamba_path='sambamba',
     ):
         """
@@ -1202,6 +1203,10 @@ class JobScript:
         tempdir : str
             Path to directory to use for temporary files. Default is current
             directory.
+
+        root : str
+            If provided, use for naming the file [root]_query_sorted.bam or
+            [root]_sorted.bam.
     
         sambamba_path : str
             Path to sambaba executable.
@@ -1212,12 +1217,14 @@ class JobScript:
             Path to output bam file.
     
         """
+        if not root:
+            root = self.sample_name
         if queryname:
             out_bam = os.path.join(
-                self.tempdir, '{}_query_sorted.bam'.format(self.sample_name))
+                self.tempdir, '{}_query_sorted.bam'.format(root))
         else:
             out_bam = os.path.join(
-                self.tempdir, '{}_sorted.bam'.format(self.sample_name))
+                self.tempdir, '{}_sorted.bam'.format(root))
         lines = '{} sort -m {}GB -t {}'.format(sambamba_path, self.memory - 2,
                                                self.threads)
         if queryname:
