@@ -369,6 +369,106 @@ class JobScript:
             f.write(lines)
         return fn + '.md5'
 
+    def scale_bedgraph(
+        self,
+        bg,
+        log_final_out,
+        expected_num,
+    ):
+        """
+        Scale a bedgraph file using a STAR Log.final.out file by multipyling by
+        expected_num / actual_num. This is designed to make normalized bigwig
+        files that can be roughly compared between samples.
+    
+        Parameters
+        ----------
+        bg : str 
+            Path to input bedgraph file.
+    
+        log_final_out : str 
+            Path to STAR Log.final.out file.
+    
+        expected_num : int
+            Number of expected reads (pairs). This only needs to be a rough
+            estimate. You should keep this number constant for all samples
+            across an experiment/project (i.e. any samples you want to compare
+            against each other). For example, say you are doing RNA-seq for 10
+            samples on a lane, the lane yields 100,000,000 pairs of reads, and
+            you expect 90% of the read pairs to align uniquely. Then you would
+            want expected_num = 9,000,000. In this case, you would set
+            actual_num to the actual number of uniquely mapped reads. The reason
+            you want this number close to the number of expected number of
+            uniquely mapped pairs is so the normalization doesn't drastically
+            change the coverage for samples near the expected number of input
+            read pairs. For instance, if expected_num=20M and a sample has
+            exactly 20M uniquely mapped read pairs, then the coverage will not
+            be changed.  If expected_num=20M and a sample has only 10M input
+            read PAIRS, it will be normalized so that it looks like it had 20M
+            input read pairs (i.e. all coverages will be multiplied by 2).
+    
+        Returns
+        -------
+        out_bg : str
+            Path to output scaled bedgraph file.
+        
+        """
+        from __init__ import _scripts
+        script = os.path.join(_scripts, 'scale_bedgraph_by_star.py')
+        root = os.path.splitext(os.path.split(bg)[1])[0]
+        out_bg = os.path.join(self.tempdir, '{}_scaled.bg'.format(root))
+        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
+            script, bg, out_bg, log_final_out, expected_num)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out_bg
+
+    def featureCounts_count(
+        self,
+        bed,
+        bam,
+        featureCounts_path='featureCounts',
+    ):
+
+    def bedgraph_from_bam(
+        self,
+        bam, 
+        bedtools_path='bedtools',
+    ):
+        """
+        Make lines that create a coverage bedgraph file.
+    
+        Parameters
+        ----------
+        bam : str
+            Bam file to calculate coverage for.
+    
+        bedtools_path : str
+            Path to bedtools. If bedtools_path == 'bedtools', it is assumed that
+            the hg19 human.hg19.genome file from bedtools is also in your path.
+
+        Returns
+        -------
+        bedgraph : str
+            Path to output bedgraph file.
+    
+        """
+        bedgraph = os.path.join(self.tempdir, '{}.bg'.format(self.sample_name))
+
+        if bedtools_path == 'bedtools':
+            genome_file = 'human.hg19.genome'
+        else:
+            genome_file = os.path.join(
+                os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
+                'human.hg19.genome')
+
+        lines = ('{} genomecov -ibam {} \\\n\t-g {} -split -bg \\\n\t'
+                 '-trackline -trackopts \'name="{}"\' '.format(
+                     bedtools_path, bam, genome_file, fn_root))
+        lines += ' \\\n\t> {}\n\n'.format( bedgraph)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return bedgraph
+    
     def picard_collect_rna_seq_metrics(
         self,
         in_bam, 
@@ -662,6 +762,7 @@ class JobScript:
     def biobambam2_mark_duplicates(
         self,
         in_bam,
+        remove_duplicates=False,
         bammarkduplicates_path='bammarkduplicates',
     ):
         """
@@ -682,6 +783,9 @@ class JobScript:
     
         dup_metrics : str
             Path to index file for input bam file.
+
+        removed_reads : str
+            Path to bam file with removed reads if remove_duplicates == True.
     
         """
         mdup_bam = os.path.join(
@@ -689,12 +793,21 @@ class JobScript:
         dup_metrics = os.path.join(
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = ('{} markthreads={} \\\n\ttmpfile={} \\\n\tI={} \\\n\t'
-                 'O={} \\\n\tM={} \n\n'.format(
+                 'O={} \\\n\tM={}'.format(
                      bammarkduplicates_path, self.threads, self.tempdir, in_bam,
                      mdup_bam, dup_metrics))
+        if remove_duplicates:
+            removed_reads = os.path.join(
+                self.tempdir,
+                '{}_removed_duplicates.bam'.format(self.sample_name))
+            lines += ('rmdup=1 \\\n\tD={}'.format(removed_reads))
+        lines += '\n\n'
         with open(self.filename, "a") as f:
             f.write(lines)
-        return mdup_bam, dup_metrics
+        if remove_duplicates:
+            return mdup_bam, dup_metrics, removed_reads
+        else:
+            return mdup_bam, dup_metrics
     
     def picard_mark_duplicates(
         self,
@@ -1188,7 +1301,8 @@ class JobScript:
         self,
         bam, 
         samtools_path='samtools',
-        bg=False):
+        bg=False,
+    ):
         """
         Run flagstat for a bam file.
     

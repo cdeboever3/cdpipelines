@@ -4,39 +4,6 @@ from general import _make_dir
 from general import JobScript
 
 class RNAJobScript(JobScript):
-    def scale_bigwig(
-        self,
-        bg,
-        log_final_out,
-        expected_num,
-    ):
-        """
-        Align paired fastq files with STAR.
-    
-        Parameters
-        ----------
-        bg : str 
-            Path to input bedgraph file.
-    
-        log_final_out : str 
-            Path to STAR Log.final.out file.
-    
-        Returns
-        -------
-        out_bg : str
-            Path to output scaled bedgraph file.
-        
-        """
-        from __init__ import _scripts
-        script = os.path.join(_scripts, 'scale_bedgraph_by_star.py')
-        root = os.path.splitext(os.path.split(bg)[1])[0]
-        out_bg = os.path.join(self.tempdir, '{}_scaled.bg'.format(root))
-        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
-            script, bg, out_bg, log_final_out, expected_num)
-        with open(self.filename, "a") as f:
-            f.write(lines)
-        return out_bg
-
     def star_align(
         self,
         r1_fastq, 
@@ -346,12 +313,6 @@ class RNAJobScript(JobScript):
         bam : str
             Bam file to calculate coverage for.
     
-        bedtools_path : str
-            Path to bedtools.
-    
-        sample_name : str
-            Sample name for naming files etc.
-    
         strand : str
             If '+' or '-', calculate strand-specific coverage. Otherwise,
             calculate coverage using all reads.
@@ -608,9 +569,9 @@ def pipeline(
     gene_bed,
     exon_bed,
     rsem_reference,
-    find_intersecting_snps_path, 
-    filter_remapped_reads_path,
-    gatk_fasta,
+    find_intersecting_snps_path=None,
+    filter_remapped_reads_path=None,
+    gatk_fasta=None,
     linkdir=None,
     webpath_file=None,
     vcf=None,
@@ -641,8 +602,8 @@ def pipeline(
     dexseq_count_path=None,
 ):
     """
-    Make a shell script for aligning RNA-seq reads with STAR. The defaults are
-    set for use on the Frazer lab's SGE scheduler on flh1/flh2.
+    Make SGE/shell scripts for running the entire RNA-seq pipeline. The defaults
+    are set for use on the Frazer lab's SGE scheduler on flh1/flh2.
 
     Parameters
     ----------
@@ -696,7 +657,7 @@ def pipeline(
     gatk_fasta : str
         Fasta file that corresponds to the fasta file used for STAR but is
         sorted karyotypically for GATK. Assumed to have associated dict and fai
-        files.
+        files. This is needed for ASE.
 
     linkdir : str
         Path to directory where softlinks should be made. Some pipeline parts
@@ -777,7 +738,7 @@ def pipeline(
     Returns
     -------
     fn : str
-        Path to shell script.
+        Path to submission shell script.
 
     """
     with open(webpath_file) as wpf:
@@ -986,7 +947,7 @@ def pipeline(
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
 
-    ##### Job 5: Make md5 has for final bam file. #####
+    ##### Job 5: Make md5 hash for final bam file. #####
     job = RNAJobScript(
         sample_name, 
         job_suffix='md5',
@@ -1004,7 +965,7 @@ def pipeline(
     md5_jobname = job.jobname
     
     # Input files.
-    mdup_bam = job.add_input_file(mdup_bam)
+    mdup_bam = job.add_input_file(outdir_mdup_bam)
 
     # Make md5 hash for output bam file.
     md5sum = job.make_md5sum(mdup_bam)
@@ -1091,7 +1052,7 @@ def pipeline(
     # Now we'll make scaled versions. First I'll read the star Log.final.out
     # file and find the number of uniquely mapped reads.
     # Both strands scaled.
-    scaled_bg = job.scale_bigwig(
+    scaled_bg = job.scale_bedgraph(
         bg,
         log_final_out,
         expected_unique_pairs,
@@ -1106,7 +1067,7 @@ def pipeline(
     job.add_output_file(scaled_bw)
 
     # Plus strand scaled.
-    plus_scaled_bg = job.scale_bigwig(
+    plus_scaled_bg = job.scale_bedgraph(
         plus_bg,
         log_final_out,
         expected_unique_pairs / 2,
@@ -1122,7 +1083,7 @@ def pipeline(
     plus_scaled_bw = job.add_output_file(plus_scaled_bw)
 
     # Minus strand scaled.
-    minus_scaled_bg = job.scale_bigwig(
+    minus_scaled_bg = job.scale_bedgraph(
         minus_bg,
         log_final_out,
         expected_unique_pairs / 2,
