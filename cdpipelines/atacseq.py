@@ -53,7 +53,7 @@ class ATACJobScript(JobScript):
         lines = (' \\\n\t'.join([
             star_path, 
             '--runThreadN {}'.format(threads),
-            '--alignIntronMax 1'
+            '--alignIntronMax 1',
             '--genomeDir {}'.format(star_index), 
             '--genomeLoad {}'.format(genome_load),
             '--readFilesCommand zcat',
@@ -106,8 +106,8 @@ class ATACJobScript(JobScript):
             Path to bam file to filter. Uniquely mapped reads should have
             quality score greater than 255 (e.g. STAR alignments).
 
-        encode_blacklist : str
-            Path to ENCODE blacklist bed file.
+        tlen_max : str
+            All reads with tlen greater than this will be filtered out.
     
         Returns
         -------
@@ -118,11 +118,11 @@ class ATACJobScript(JobScript):
         root = os.path.splitext(os.path.split(bam)[1])[0]
         out_bam = os.path.join(self.tempdir, '{}_tlen_leq_{}.bam'.format(
             root, tlen_max))
-        lines = ('{} view -h {} | awk \'function abs(x){{return '
-                 '((x < 0.0) ? -x : x)}} {{if (abs($9) <= {}) {{print}}'
+        lines = ('{} view -h {} \\\n\t| awk \'function abs(x){{return '
+                 '((x < 0.0) ? -x : x)}} {{if (abs($9) <= {}) {{print}} '
                  'else if (substr($1,1,1) == "@") {{print}}}}\' \\\n\t'
-                 '{} view -Sb - \\\n\t | > {}\n\n'.format(
-                     samtools_path, bam, tlen, out_bam))
+                 '| {} view -Sb - \\\n\t> {}\n\n'.format(
+                     samtools_path, bam, tlen_max, samtools_path, out_bam))
         with open(self.filename, "a") as f:
             f.write(lines)
         return out_bam
@@ -153,18 +153,22 @@ class ATACJobScript(JobScript):
             Path to output filtered bam file.
     
         """
+        out_bam = os.path.join(self.tempdir, '{}_filtered.bam'.format(
+            self.sample_name))
         lines = (
-            '{} view -h -q 255 {} | \\\n'.format(samtools_path, bam) + 
-            '\tawk \'{if ($3 != "chrM") {print} ' + 
-            'else if (substr($1,1,1) == "@") {print}}\' | \\\n' + 
-            '\t{} view -Su - | \\\n'.format(samtools_path) + 
-            '\t{} intersect -v -ubam -abam stdin -b {} | \\\n'.format(
-                bedtools_path, blacklist_bed) + 
-            '\t{} view -h - | \\\n'.format(samtools_path) + 
-            '\tawk \'{if (substr($1,1,1) == "@") {print} ' + 
-            'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' | \\\n' +
-            '\t{} view -Sb - > {}\n\n'.format(samtools_path, out_bam)
+            '{} view -h -q 255 {} \\\n\t| '.format(samtools_path, bam) + 
+            'awk \'{if ($3 != "chrM") {print} ' + 
+            'else if (substr($1,1,1) == "@") {print}}\' \\\n\t| ' + 
+            '{} view -Su - \\\n\t| '.format(samtools_path) + 
+            '{} intersect -v -ubam -abam stdin -b {} \\\n\t| '.format(
+                bedtools_path, encode_blacklist) + 
+            '{} view -h - \\\n\t| '.format(samtools_path) + 
+            'awk \'{if (substr($1,1,1) == "@") {print} ' + 
+            'else if ($1 == c1) {print prev; print}  prev=$0; c1=$1}\' ' +
+            '\\\n\t| {} view -Sb - \\\n\t> {}\n\n'.format(samtools_path, out_bam)
         )
+        with open(self.filename, "a") as f:
+            f.write(lines)
         return out_bam
 
     def count_unique_mt_reads(
@@ -198,12 +202,15 @@ class ATACJobScript(JobScript):
         if bg:
             lines += ' &'
         lines += '\n\n'
+        with open(self.filename, "a") as f:
+            f.write(lines)
         return out
     
     def bigwig_from_bedgraph(
         self,
         bedgraph,
         scale=False,
+        tlen_max=None,
         web_available=True,
         write_to_outdir=False,
         bedGraphToBigWig_path='bedGraphToBigWig',
@@ -219,6 +226,9 @@ class ATACJobScript(JobScript):
         
         scale : bool
             If True, add note to trackline that data is scaled.
+
+        tlen_max : int
+            Add info about tlen filtering.
 
         web_available : bool
             If True, write trackline to self.links_tracklines, make softlink to
@@ -257,8 +267,11 @@ class ATACJobScript(JobScript):
         with open(self.filename, "a") as f:
             f.write(lines)
         if web_available:
-            name = '{}_rna'.format(self.sample_name)
+            name = '{}_atac'.format(self.sample_name)
             desc = 'ATACseq coverage for {}.'.format(self.sample_name)
+            if tlen_max:
+                name += '_140'
+                desc += ' Fragments <= 140.'
             if scale:
                 name += '_scaled'
                 desc = desc.replace('ATACseq', 'Scaled ATACseq')
@@ -275,7 +288,7 @@ class ATACJobScript(JobScript):
 
         return bigwig
      
-    def add_macs2_trackline(
+    def _add_macs2_trackline(
         self,
         bed, 
     ):
@@ -386,22 +399,24 @@ class ATACJobScript(JobScript):
             out2 = os.path.join(
                 dy, '{}_peaks.gappedPeak'.format(self.sample_name))
 
-        lines += job.add_macs2_trackline(out1)
-        lines += job.add_macs2_trackline(out2)
-
         with open(self.filename, "a") as f:
             f.write(lines)
+
+        out1 = self._add_macs2_trackline(out1)
+        out2 = self._add_macs2_trackline(out2)
 
         # If web_available, make softlinks to bed files and write URLs to file.
         if web_available:
             tf_lines = ''
             link = self.add_softlink(out1)
             url = self.webpath + '/' + os.path.split(out1)[1]
+            tf_lines += url + '\n'
             link = self.add_softlink(out2)
             url = self.webpath + '/' + os.path.split(out2)[1]
+            tf_lines += url + '\n'
 
             with open(self.links_tracklines, "a") as f:
-                f.write(t_lines)
+                f.write(tf_lines)
         return excel, out1, out2
 
 def pipeline(
@@ -425,7 +440,6 @@ def pipeline(
     star_genome_load='LoadAndRemove',
     rgpl='ILLUMINA',
     rgpu='',
-    strand_specific=True, 
     tempdir=None,
     mappability=None,
     expected_unique_pairs=20000000,
@@ -516,9 +530,6 @@ def pipeline(
     rgpu : str
         Read Group platform unit (eg. run barcode). 
 
-    strand_specific : boolean
-        If false, data is not strand specific.
-
     tempdir : str
         Directory to store temporary files.
 
@@ -602,12 +613,10 @@ def pipeline(
     combined_r2 = job.add_output_file(combined_r2)
 
     # Align reads.
-    (star_bam, log_out, log_final_out, log_progress_out, sj_out, 
-     transcriptome_bam) = \
+    (star_bam, log_out, log_final_out, log_progress_out, sj_out) = \
             job.star_align(combined_r1, combined_r2, rgpl, rgpu, star_index,
                             job.threads, genome_load=star_genome_load)
     outdir_star_bam = job.add_output_file(star_bam)
-    transcriptome_bam = job.add_output_file(transcriptome_bam)
     log_final_out = job.add_output_file(log_final_out)
     [job.add_output_file(x) for x in [log_out, log_progress_out, sj_out]]
     job.write_end()
@@ -647,7 +656,7 @@ def pipeline(
     ##### Job 3: Filter, coordinate sort, mark duplicates and index bam. #####
     job = ATACJobScript(
         sample_name, 
-        job_suffix = 'sort_mdup_index',
+        job_suffix = 'sort_rmdup_index',
         outdir=os.path.join(outdir, 'alignment'), 
         threads=4, 
         memory=6,
@@ -659,7 +668,7 @@ def pipeline(
         modules=modules,
         wait_for=[alignment_jobname]
     )
-    sort_mdup_index_jobname = job.jobname
+    sort_rmdup_index_jobname = job.jobname
 
     # Input files.
     star_bam = job.add_input_file(outdir_star_bam)
@@ -704,11 +713,11 @@ def pipeline(
 
     # Index rmdup bam file.
     bam_index = job.sambamba_index(rmdup_bam, sambamba_path)
-    outdir_bam_index = job.add_output_file(bam_index)
-    link = job.add_softlink(outdir_bam_index)
+    outdir_rmdup_bam_index = job.add_output_file(bam_index)
 
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_rmdup_bam)
+    link = job.add_softlink(outdir_rmdup_bam_index)
     name = '{}_atac'.format(job.sample_name)
     desc = 'ATAC-seq alignment for {}.'.format(job.sample_name)
     url = job.webpath + '/' + os.path.split(outdir_rmdup_bam)[1]
@@ -730,21 +739,22 @@ def pipeline(
     outdir_tlen_bam = job.add_output_file(tlen_bam)
 
     # Index sorted bam file.
-    tlen_bam_index = job.sambamba_index(tlen_sorted_bam, sambamba_path)
-    job.add_output_file(tlen_bam_index)
+    tlen_bam_index = job.sambamba_index(tlen_bam, sambamba_path)
+    outdir_tlen_bam_index = job.add_output_file(tlen_bam_index)
 
     # Query name sort.
     query_sorted_bam = job.sambamba_sort(
         tlen_bam, 
         tempdir=job.tempdir,
         queryname=True,
-        root=os.path.splitext(os.path.split(tlen_sorted_bam)[1])[0],
+        root=os.path.splitext(os.path.split(tlen_bam)[1])[0],
         sambamba_path=sambamba_path,
     )
     query_sorted_bam = job.add_output_file(query_sorted_bam)
 
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_tlen_bam)
+    link = job.add_softlink(outdir_tlen_bam_index)
     name = '{}_atac_140'.format(job.sample_name)
     desc = 'ATAC-seq alignment for {}. Fragments <= 140.'.format(job.sample_name)
     url = job.webpath + '/' + os.path.split(outdir_tlen_bam)[1]
@@ -774,7 +784,7 @@ def pipeline(
         queue=queue,
         conda_env=conda_env, 
         modules=modules,
-        wait_for=[sort_mdup_index_jobname],
+        wait_for=[sort_rmdup_index_jobname],
     )
     qc_metrics_jobname = job.jobname
     
@@ -814,7 +824,7 @@ def pipeline(
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[sort_mdup_index_jobname],
+        wait_for=[alignment_jobname],
     )
     md5_jobname = job.jobname
     
@@ -830,7 +840,6 @@ def pipeline(
         submit_commands.append(job.sge_submit_command())
       
     ##### Job 6: Make bigwig files for final bam file. #####
-    # TODO: I need to make a bigwig for the bam file with only small fragments.
     job = ATACJobScript(
         sample_name, 
         job_suffix='bigwig',
@@ -843,7 +852,7 @@ def pipeline(
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[sort_mdup_index_jobname],
+        wait_for=[sort_rmdup_index_jobname],
     )
     bigwig_jobname = job.jobname
         
@@ -865,7 +874,7 @@ def pipeline(
     job.add_output_file(bw)
 
     # Make scaled bigwig file. 
-    scaled_bg = job.scale_bigwig(
+    scaled_bg = job.scale_bedgraph(
         bg,
         log_final_out,
         expected_unique_pairs,
@@ -884,24 +893,28 @@ def pipeline(
         tlen_bam, 
         bedtools_path=bedtools_path,
     )
-    job.add_temp_file(tlen_bg)
+    # tlen_bg will actually overwrite bg.
+    # job.add_temp_file(tlen_bg)
     tlen_bw = job.bigwig_from_bedgraph(
         tlen_bg,
+        tlen_max=140,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
     job.add_output_file(tlen_bw)
 
     # Make scaled bigwig file for tlen filtered bam.
-    scaled_bg = job.scale_bigwig(
+    tlen_scaled_bg = job.scale_bedgraph(
         tlen_bg,
         log_final_out,
         expected_unique_pairs,
     )
-    job.add_temp_file(tlen_scaled_bg)
+    # tlen_scaled_bg will actually overwrite scaled_bg
+    # job.add_temp_file(tlen_scaled_bg)
     tlen_scaled_bw = job.bigwig_from_bedgraph(
         tlen_scaled_bg,
         scale=True,
+        tlen_max=140,
         bedGraphToBigWig_path=bedGraphToBigWig_path,
         bedtools_path=bedtools_path,
     )
@@ -914,8 +927,8 @@ def pipeline(
     ##### Job 7: Peak calling. #####
     job = ATACJobScript(
         sample_name, 
-        job_suffix = 'counts',
-        outdir=os.path.join(outdir, 'counts'), 
+        job_suffix = 'macs2',
+        outdir=os.path.join(outdir, 'macs2'), 
         threads=1, 
         memory=4,
         linkdir=linkdir,
@@ -924,7 +937,7 @@ def pipeline(
         queue=queue, 
         conda_env=conda_env,
         modules=modules,
-        wait_for=[sort_mdup_index_jobname],
+        wait_for=[sort_rmdup_index_jobname],
     )
     macs2_jobname = job.jobname
     
@@ -957,8 +970,8 @@ def pipeline(
     ##### Job 8: Count reads in peaks. #####
     job = ATACJobScript(
         sample_name, 
-        job_suffix = 'rsem',
-        outdir=os.path.join(outdir, 'rsem'),
+        job_suffix = 'counts',
+        outdir=os.path.join(outdir, 'counts'),
         threads=8, 
         memory=16, 
         linkdir=linkdir,
@@ -966,7 +979,7 @@ def pipeline(
         tempdir=tempdir, queue=queue,
         conda_env=conda_env, 
         modules=modules,
-        wait_for=[sort_mdup_index_jobname],
+        wait_for=[macs2_jobname],
     )
     counts_jobname = job.jobname
     
@@ -1002,7 +1015,7 @@ def pipeline(
             queue=queue,
             conda_env=conda_env, 
             modules=modules,
-            wait_for=[sort_mdup_index_jobname],
+            wait_for=[sort_rmdup_index_jobname],
         )
         wasp_allele_swap_jobname = job.jobname
            
@@ -1204,767 +1217,767 @@ def pipeline(
     return submit_fn
 
 
-import os
-
-from general import _bedgraph_to_bigwig
-from general import _bigwig_files
-from general import _combine_fastqs
-from general import _cutadapt_trim
-from general import _fastqc
-from general import JobScript
-from general import _flagstat
-from general import _picard_insert_size_metrics
-from general import _make_softlink
-# from general import _pbs_header
-from general import _picard_coord_sort
-from general import _picard_query_sort
-from general import _picard_mark_duplicates
-from general import _samtools_index
-
-def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
-                threads):
-    """
-    Align paired ATAC-seq fastq files with STAR.
-
-    Parameters
-    ----------
-    r1_fastqs : str
-        Gzipped R1 fastq file(s). If multiple files, each file should be
-        separated by s space and should be ordered the same as the R2 files.
-
-    r2_fastqs : str
-        Gzipped R2 fastq file(s). If multiple files, each file should be
-        separated by s space and should be ordered the same as the R1 files.
-
-    sample : str
-        Sample name.
-
-    rgpl : str
-        Read Group platform (e.g. illumina, solid). 
-
-    rgpu : str
-        Read Group platform unit (eg. run barcode). 
-
-    """
-    # I use threads - 2 for STAR so there are open processors for reading and
-    # writing. The parameters here are set in part based on the discussion here:
-    # https://groups.google.com/forum/#!searchin/rna-star/chip$20seq/rna-star/E_mKqm9jDm0/ZpB6yRcWi60J.
-    # --alignIntronMax 1 disables spliced alignments. --alignEndsType EndToEnd
-    # prohibits soft clipping. I may or may not want to prohibit soft clipping.
-    # Smaller-sized fragments may still have adapter sequence and won't align
-    # without soft clipping. I think that since our reads are long, we should be
-    # ok soft clipping since they should align pretty well. I'm only outputting 
-    # unique alignments right now.
-    line = (' \\\n'.join([star_path, 
-                          '\t--runThreadN {}'.format(threads - 2),
-                          '\t--alignIntronMax 1',
-                          '\t--genomeDir {}'.format(star_index), 
-                          '\t--genomeLoad LoadAndRemove', 
-                          '\t--readFilesCommand zcat',
-                          '\t--readFilesIn {} {}'.format(r1_fastqs, 
-                                                         r2_fastqs),
-                          '\t--outSAMtype BAM Unsorted', 
-                          '\t--outSAMattributes All', 
-                          '\t--outSAMunmapped Within',
-                          ('\t--outSAMattrRGline ID:1 ' + 
-                           'PL:{} '.format(rgpl) + 
-                           'PU:{} '.format(rgpu) + 
-                           'LB:{0} SM:{0}'.format(sample)), 
-                          '\t--outFilterMultimapNmax 20', 
-                          '\t--outFilterMismatchNmax 999',
-                          '\t--outFilterMismatchNoverLmax 0.04',
-                          '\t--seedSearchStartLmax 20']) + '\n\n')
-    return line
-
-def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
-           bedtools_path, bigwig=False):
-    """
-    Make tag directory and call peaks with HOMER. Optionally make bigwig file.
-
-    Parameters
-    ----------
-    bam : str
-        Path to paired-end, coordinate sorted bam file.
-
-    temp_tagdir : str
-        Path to temporary tag directory that HOMER will create.
-
-    final_tagdir : str
-        Path to final tag directory (what the temp_tagdir will be copied to).
-
-    link_dir : str
-        Path to directory where softlinks should be made. HOMER will put the
-        bigwig file in the directory specified when setting up HOMER but a
-        softlink to a bed file with the HOMER peaks will be made here.
-
-    bigwig : bool
-        If True, have HOMER make a bigwig file.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    temp_tagdir = os.path.realpath(temp_tagdir)
-    final_tagdir = os.path.realpath(final_tagdir)
-    name = '{}_atac_homer'.format(sample_name)
-    lines = []
-    lines.append('{}/makeTagDirectory {} {}'.format(homer_path, temp_tagdir,
-                                                    bam))
-    if bigwig:
-        lines.append('{}/makeBigWig.pl {} hg19 -name {}'
-                     ' -url www.fake.com/ -webdir {}'.format(
-                         homer_path, os.path.split(temp_tagdir)[1], name, 
-                         os.path.split(temp_tagdir)[0]))
-        lines.append('mv {}/{}_tags.ucsc.bigWig {}'.format(
-            os.path.split(temp_tagdir)[0], sample_name, temp_tagdir))
-    lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
-                 '-o auto'.format(homer_path, temp_tagdir))
-    # softlink_lines = []
-    posfile = os.path.join(temp_tagdir, 'regions.txt')
-    bed = os.path.join(temp_tagdir, '{}_peaks.bed'.format(name))
-    lines.append(_convert_homer_pos_to_bed(
-        posfile, bed, name, homer_path, bedtools_path))
-    bed = os.path.join(final_tagdir, '{}_peaks.bed'.format(name))
-    # softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
-    #                                                         'peak'))
-    # softlink_lines.append(softlink)
-    
-    lines = '\n'.join(lines) + '\n\n'
-    # softlink_lines = '\n'.join(softlink_lines)
-    # return lines, softlink_lines
-    return lines
-
-def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
-                    homer_path, link_dir, bedtools_path, tracklines_file,
-                    web_path_file, bigwig=False):
-    """
-    Combine tag directories and call peaks with HOMER. Optionally make bigwig
-    file.
-
-    Parameters
-    ----------
-    input_tagdirs : list 
-        A list of paths to the tagdirs to be combined for calling peaks.
-
-    combined_name : str
-        Used for naming output files and directories.
-
-    temp_tagdir : str
-        Path to temporary tag directory that HOMER will create.
-
-    final_tagdir : str
-        Path to final tag directory (what the temp_tagdir will be copied to).
-
-    link_dir : str
-        Path to directory where softlinks should be made. HOMER will put the
-        bigwig file in the directory specified when setting up HOMER but a
-        softlink to a bed file with the HOMER peaks will be made here.
-
-    bigwig : bool
-        If True, have HOMER make a bigwig file.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    with open(web_path_file) as wpf:
-        web_path = wpf.readline().strip()
-    web_path = web_path + '/atac'
-
-    temp_tagdir = os.path.realpath(temp_tagdir)
-    final_tagdir = os.path.realpath(final_tagdir)
-    name = '{}_combined_peak'.format(combined_name)
-    bed = os.path.join(temp_tagdir,
-                       '{}_combined_homer_peaks.bed'.format(combined_name))
-    lines = []
-    tf_lines = []
-    softlink_lines = []
-    lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, temp_tagdir, 
-                                                      ' '.join(input_tagdirs)))
-    if bigwig:
-        lines.append('{}/makeBigWig.pl {} hg19 -name {}'
-                     ' -url www.fake.com/ -webdir {}'.format(
-                         homer_path, os.path.split(temp_tagdir)[1], name, 
-                         os.path.split(temp_tagdir)[0]))
-        lines.append('mv {0}.ucsc.bigWig {0}'.format(temp_tagdir))
-        temp_link_dir = os.path.join(link_dir, 'bigwig')
-        bw = os.path.join(
-            final_tagdir,
-            '{}.ucsc.bigWig'.format(os.path.split(temp_tagdir)[1]))
-        softlink, name = _make_softlink(bw, name, os.path.join(
-            temp_link_dir, 'atac', 'bigwig'))
-        softlink_lines.append(softlink)
-        temp_web_path = web_path + '/bigwig'
-        try:
-            os.makedirs(temp_link_dir)
-        except OSError:
-            pass
-        tf_lines += ('track type=bigWig name="{0}_atac_cov" '
-                     'description="ATAC-seq '
-                     'coverage for {0}" visibility=0 db=hg19 bigDataUrl='
-                     '{1}/{0}.ucsc.bigWig\n'.format(
-                         os.path.split(temp_tagdir)[1], temp_web_path))
-    lines.append('{}/findPeaks {} -style super -size 75 '
-                 ' -o auto'.format(
-                     homer_path, temp_tagdir))
-    lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
-                 '-o auto'.format(homer_path, temp_tagdir))
-   
-    posfile = os.path.join(temp_tagdir, 'regions.txt')
-    name = '{}_combined'.format(combined_name)
-    bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    lines.append(_convert_homer_pos_to_bed(
-        posfile, bed, name, homer_path, bedtools_path))
-    bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
-                                                            'peak'))
-    softlink_lines.append(softlink)
-    temp_web_path = web_path + '/peak'
-    tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
-
-    posfile = os.path.join(temp_tagdir, 'superEnhancers.txt')
-    name = '{}_combined_super_enhancers'.format(combined_name)
-    bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    lines.append(_convert_homer_pos_to_bed(
-        posfile, bed, name, homer_path, bedtools_path))
-    bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
-    softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
-                                                            'peak'))
-    softlink_lines.append(softlink)
-    tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
-    lines = '\n'.join(lines) + '\n\n'
-    softlink_lines = '\n'.join(softlink_lines)
-
-    # Write tracklines and URLs.
-    if os.path.exists(tracklines_file):
-        with open(tracklines_file) as f:
-            existing_lines = f.read()
-    else:
-        existing_lines = ''
-
-    with open(tracklines_file, 'w') as tf:
-        tf.write(existing_lines + ''.join(tf_lines))
-    
-    return lines, softlink_lines
-
-def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
-                              bedtools_path):
-    """
-    Convert HOMER results file to bed file.
-
-    Parameters
-    ----------
-    posfile : str
-        Full path to HOMER results file (i.e. regions.txt or
-        superEnhancers.txt).
-
-    bed : str
-        Name of output bed file.
-
-    sample_name : str
-        Used for naming output files.
-
-    Returns
-    -------
-    lines : str
-        Lines to be printed to shell/PBS script.
-
-    """
-    lines = []
-    tagdir = os.path.split(posfile)[0]
-    lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
-        homer_path, posfile))
-    track_line = ' '.join(['track', 'type=bed',
-                           'name=\\"{}_homer_atac_peaks\\"'.format(
-                               sample_name),
-                           ('description=\\"HOMER ATAC-seq peaks for '
-                            '{}\\"'.format(sample_name)),
-                           'visibility=0',
-                           'db=hg19'])
-    lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
-    lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
-    lines.append('rm temp.bed temp2.bed')
-    return '\n'.join(lines) + '\n'
-
-def combined_homer_peaks(
-    tagdirs, 
-    outdir, 
-    combined_name, 
-    tracklines_file,
-    link_dir,
-    web_path_file,
-    bedtools_path,
-    homer_path,
-    environment,
-    conda_env='',
-    tempdir='/scratch', 
-    threads=6, 
-    shell=False,
-):
-    """
-    Make a PBS or shell script for combining together HOMER tag directories and
-    calling peaks on the combined tags.
-
-    Parameters
-    ----------
-    tagdirs : list 
-        A list of paths to the tagdirs to be combined for calling peaks.
-
-    outdir : str
-        Directory to store PBS/shell file and results.
-
-    combined_name : str
-        Name used for naming files and directories for combined data.
-
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
-    bedtools_path : str
-        Path to bedtools.
-
-    homer_path : str
-        Path to HOMER bin.
-
-    environment : str
-        Bash file with PATH information that can be sourced. This should include
-        the paths to executables HOMER will need like bedGraphToBigWig.
-
-    conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of MACS2 is used.
-
-    tempdir : str
-        Directory to store files as STAR runs.
-
-    threads : int
-        Number of threads to reserve using PBS scheduler. 
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    assert threads >= 3
-
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_combined_peaks'.format(combined_name))
-    outdir = os.path.join(outdir, '{}_combined_peaks'.format(combined_name))
-
-    # I'm going to define some file names used later.
-    local_tagdir = '{}_combined_tags'.format(combined_name)
-    temp_tagdir = os.path.join(tempdir, local_tagdir)
-    final_tagdir = os.path.join(outdir, local_tagdir)
-    
-    # Files to copy to output directory.
-    files_to_copy = [temp_tagdir]
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_combined_peaks.sh'.format(combined_name))
-    else:
-        fn = os.path.join(outdir, '{}_combined_peaks.pbs'.format(combined_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir,
-                           '{}_combined_peaks.out'.format(combined_name))
-        err = os.path.join(outdir,
-                           '{}_combined_peaks.err'.format(combined_name))
-        job_name = '{}_combined_peaks'.format(combined_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-    
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-    f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
-        ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
-
-    # Add executables to path because HOMER expects them there.
-    f.write('source {}\n\n'.format(environment))
-    
-    # Run HOMER.
-    td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
-    lines, softlink_lines = _combined_homer(td, combined_name, temp_tagdir,
-                                            final_tagdir, homer_path, link_dir,
-                                            bedtools_path, tracklines_file,
-                                            web_path_file, bigwig=True)
-    f.write(lines)
-    f.write('wait\n\n')
-
-    if tempdir != outdir:
-        f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-            ' \\\n\t'.join(files_to_copy), outdir))
-
-    if len(files_to_remove) > 0:
-        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-
-    f.write(softlink_lines)
-
-    f.close()
-    return fn
-
-def _nucleoatac(bam, bed, sample_name, fasta, threads):
-    lines = ('nucleoatac run --bed {} \\\n'
-             '\t--bam {} \\\n'
-             '\t--out {} \\\n'
-             '\t--fasta {} \\\n'
-             '\t--cores {}\n\n'.format(bed, bam, sample_name, fasta, threads))
-    return lines
-
-def nucleoatac(
-    bam, 
-    bed, 
-    sample_name, 
-    fasta, 
-    outdir,
-    tracklines_file,
-    link_dir,
-    web_path_file,
-    environment,
-    conda_env='',
-    tempdir='/scratch', 
-    threads=4, 
-    shell=False,
-):
-    """
-    Make a PBS or shell script for estimating nucelosome occupancy using
-    ATAC-seq data.
-
-    Parameters
-    ----------
-    bam : str 
-        Path to bam file with aligned reads to use for estimating occupancy.
-
-    bed : str
-        Path to bed file with positions to estimate occupancy for.
-
-    sample_name : str
-        Name used for naming files and directories.
-
-    fasta : str
-        Path to genome fasta. Must be indexed.
-
-    outdir : str
-        Directory to store directory containing PBS/shell file and results.
-
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
-    environment : str
-        Bash file with PATH information that can be sourced. This should include
-        the paths to executables HOMER will need like bedGraphToBigWig.
-
-    conda_env : str
-        If provided, load conda environment with this name. This will control
-        which version of nucleoatac is used.
-
-    tempdir : str
-        Directory to store files as nucleoatac runs.
-
-    threads : int
-        Number of threads to reserve using PBS scheduler and for nucleoatac to
-        use.
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_nucleoatac'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_nucleoatac'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
-    
-    # Files to copy to output directory.
-    files_to_copy = []
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = [temp_bam]
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_nucleoatac.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_nucleoatac.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir,
-                           '{}_nucleoatac.out'.format(sample_name))
-        err = os.path.join(outdir,
-                           '{}_nucleoatac.err'.format(sample_name))
-        job_name = '{}_nucleoatac'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-    
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-
-    f.write('source {}\n\n'.format(environment))
-    f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
-    
-    # Run nucleoatac.
-    lines = _nucleoatac(temp_bam, bed, sample_name, fasta, threads)
-    f.write(lines)
-    f.write('wait\n\n')
-
-    if tempdir != outdir:
-        if len(files_to_copy) > 0:
-            f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-                ' \\\n\t'.join(files_to_copy), outdir))
-
-    if len(files_to_remove) > 0:
-        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-            f.write('rsync -avz {} {}\n\n'.format(os.path.join(tempdir, '*'),
-                                                  outdir))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-
-    f.close()
-    return fn
-
-def motif_analysis(
-    bed, 
-    sample_name, 
-    outdir,
-    tracklines_file,
-    link_dir,
-    web_path_file,
-    environment,
-    mask=False,
-    conda_env='',
-    tempdir='/scratch', 
-    threads=4, 
-    shell=False,
-):
-    """
-    Make a PBS or shell script for analyzing motifs with HOMER.
-
-    Parameters
-    ----------
-    bed : str 
-        Bed file with positions to analyze.
-
-    sample_name : str
-        Name used for naming files and directories.
-
-    outdir : str
-        Directory to store directory containing PBS/shell file and results.
-
-    tracklines_file : str
-        Path to file for writing tracklines. The tracklines will be added to the
-        file; the contents of the file will not be overwritten. These tracklines
-        can be pasted into the genome browser upload for custom data.
-
-    link_dir : str
-        Path to directory where softlinks for genome browser should be made.
-
-    web_path_file : str
-        File whose first line is the URL that points to link_dir. For example,
-        if we make a link to the file s1_coord_sorted.bam in link_dir and
-        web_path_file has http://site.com/files on its first line, then
-        http://site.com/files/s1_coord_sorted.bam should be available on the
-        web. If the web directory is password protected (it probably should be),
-        then the URL should look like http://username:password@site.com/files.
-        This is a file so you don't have to make the username/password combo
-        public (although I'd recommend not using a sensitive password). You can
-        just put the web_path_file in a directory that isn't tracked by git, 
-        figshare, etc.
-
-    environment : str
-        Bash file with PATH information that can be sourced. This should include
-        the paths to executables HOMER will need like bedGraphToBigWig.
-
-    mask : bool
-        Whether to pass the -mask parameter to HOMER.
-
-    conda_env : str
-        If provided, load conda environment with this name. 
-
-    tempdir : str
-        Directory to store files as motif analysis runs.
-
-    threads : int
-        Number of threads to reserve using PBS scheduler and for HOMER to use.
-
-    shell : boolean
-        If true, make a shell script rather than a PBS script.
-    
-    Returns
-    -------
-    fn : str
-        Path to PBS/shell script.
-
-    """
-    if shell:
-        pbs = False
-    else: 
-        pbs = True
-
-    tempdir = os.path.join(tempdir, '{}_motif'.format(sample_name))
-    outdir = os.path.join(outdir, '{}_motif'.format(sample_name))
-
-    # I'm going to define some file names used later.
-    
-    # Files to copy to output directory.
-    files_to_copy = []
-    # Temporary files that can be deleted at the end of the job. We may not want
-    # to delete the temp directory if the temp and output directory are the
-    # same.
-    files_to_remove = []
-
-    try:
-        os.makedirs(outdir)
-    except OSError:
-        pass
-
-    if shell:
-        fn = os.path.join(outdir, '{}_motif.sh'.format(sample_name))
-    else:
-        fn = os.path.join(outdir, '{}_motif.pbs'.format(sample_name))
-
-    f = open(fn, 'w')
-    f.write('#!/bin/bash\n\n')
-    if pbs:
-        out = os.path.join(outdir,
-                           '{}_motif.out'.format(sample_name))
-        err = os.path.join(outdir,
-                           '{}_motif.err'.format(sample_name))
-        job_name = '{}_motif'.format(sample_name)
-        f.write(_pbs_header(out, err, job_name, threads))
-    
-    if conda_env != '':
-        f.write('source activate {}\n'.format(conda_env))
-    f.write('mkdir -p {}\n'.format(tempdir))
-    f.write('cd {}\n'.format(tempdir))
-
-    f.write('source {}\n\n'.format(environment))
-
-    # Prepare some stuff for making softlinks and web links.
-    link_dir = os.path.join(link_dir, 'atac', 'motif')
-    with open(web_path_file) as wpf:
-        web_path = wpf.readline().strip()
-    web_path = web_path + '/atac/motif'
-    if os.path.exists(tracklines_file):
-        with open(tracklines_file) as tf:
-            tf_lines = tf.read()
-    else:
-        tf_lines = ''
-    try:
-        os.makedirs(link_dir)
-    except OSError:
-        pass
-
-    # Run HOMER motif analysis.
-    if mask:
-        lines = ('findMotifsGenome.pl {} hg19 {} -size given -mask '
-                 '-p {}\n'.format(bed, outdir, threads))
-    else:
-        lines = 'findMotifsGenome.pl {} hg19 {} -size given -p {}\n'.format(
-            bed, outdir, threads)
-    f.write(lines)
-    f.write('wait\n\n')
-
-    new_lines, name = _make_softlink(outdir, sample_name, link_dir)
-    f.write(new_lines)
-    tf_lines += '{}/{}\n'.format(web_path, os.path.split(outdir)[1])
-
-    # Write tracklines and URLs.
-    with open(tracklines_file, 'w') as tf:
-        tf.write(tf_lines)
-    if tempdir != outdir:
-        if len(files_to_copy) > 0:
-            f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
-                ' \\\n\t'.join(files_to_copy), outdir))
-
-    if len(files_to_remove) > 0:
-        f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
-
-    if tempdir != outdir:
-            f.write('rsync -avz {} {}\n\n'.format(os.path.join(tempdir, '*'),
-                                                  outdir))
-
-    if tempdir != outdir:
-        f.write('rm -r {}\n'.format(tempdir))
-
-    f.close()
-    return fn
+# import os
+# 
+# from general import _bedgraph_to_bigwig
+# from general import _bigwig_files
+# from general import _combine_fastqs
+# from general import _cutadapt_trim
+# from general import _fastqc
+# from general import JobScript
+# from general import _flagstat
+# from general import _picard_insert_size_metrics
+# from general import _make_softlink
+# # from general import _pbs_header
+# from general import _picard_coord_sort
+# from general import _picard_query_sort
+# from general import _picard_mark_duplicates
+# from general import _samtools_index
+# 
+# def _star_align(r1_fastqs, r2_fastqs, sample, rgpl, rgpu, star_index, star_path,
+#                 threads):
+#     """
+#     Align paired ATAC-seq fastq files with STAR.
+# 
+#     Parameters
+#     ----------
+#     r1_fastqs : str
+#         Gzipped R1 fastq file(s). If multiple files, each file should be
+#         separated by s space and should be ordered the same as the R2 files.
+# 
+#     r2_fastqs : str
+#         Gzipped R2 fastq file(s). If multiple files, each file should be
+#         separated by s space and should be ordered the same as the R1 files.
+# 
+#     sample : str
+#         Sample name.
+# 
+#     rgpl : str
+#         Read Group platform (e.g. illumina, solid). 
+# 
+#     rgpu : str
+#         Read Group platform unit (eg. run barcode). 
+# 
+#     """
+#     # I use threads - 2 for STAR so there are open processors for reading and
+#     # writing. The parameters here are set in part based on the discussion here:
+#     # https://groups.google.com/forum/#!searchin/rna-star/chip$20seq/rna-star/E_mKqm9jDm0/ZpB6yRcWi60J.
+#     # --alignIntronMax 1 disables spliced alignments. --alignEndsType EndToEnd
+#     # prohibits soft clipping. I may or may not want to prohibit soft clipping.
+#     # Smaller-sized fragments may still have adapter sequence and won't align
+#     # without soft clipping. I think that since our reads are long, we should be
+#     # ok soft clipping since they should align pretty well. I'm only outputting 
+#     # unique alignments right now.
+#     line = (' \\\n'.join([star_path, 
+#                           '\t--runThreadN {}'.format(threads - 2),
+#                           '\t--alignIntronMax 1',
+#                           '\t--genomeDir {}'.format(star_index), 
+#                           '\t--genomeLoad LoadAndRemove', 
+#                           '\t--readFilesCommand zcat',
+#                           '\t--readFilesIn {} {}'.format(r1_fastqs, 
+#                                                          r2_fastqs),
+#                           '\t--outSAMtype BAM Unsorted', 
+#                           '\t--outSAMattributes All', 
+#                           '\t--outSAMunmapped Within',
+#                           ('\t--outSAMattrRGline ID:1 ' + 
+#                            'PL:{} '.format(rgpl) + 
+#                            'PU:{} '.format(rgpu) + 
+#                            'LB:{0} SM:{0}'.format(sample)), 
+#                           '\t--outFilterMultimapNmax 20', 
+#                           '\t--outFilterMismatchNmax 999',
+#                           '\t--outFilterMismatchNoverLmax 0.04',
+#                           '\t--seedSearchStartLmax 20']) + '\n\n')
+#     return line
+# 
+# def _homer(bam, sample_name, temp_tagdir, final_tagdir, homer_path, link_dir,
+#            bedtools_path, bigwig=False):
+#     """
+#     Make tag directory and call peaks with HOMER. Optionally make bigwig file.
+# 
+#     Parameters
+#     ----------
+#     bam : str
+#         Path to paired-end, coordinate sorted bam file.
+# 
+#     temp_tagdir : str
+#         Path to temporary tag directory that HOMER will create.
+# 
+#     final_tagdir : str
+#         Path to final tag directory (what the temp_tagdir will be copied to).
+# 
+#     link_dir : str
+#         Path to directory where softlinks should be made. HOMER will put the
+#         bigwig file in the directory specified when setting up HOMER but a
+#         softlink to a bed file with the HOMER peaks will be made here.
+# 
+#     bigwig : bool
+#         If True, have HOMER make a bigwig file.
+# 
+#     Returns
+#     -------
+#     lines : str
+#         Lines to be printed to shell/PBS script.
+# 
+#     """
+#     temp_tagdir = os.path.realpath(temp_tagdir)
+#     final_tagdir = os.path.realpath(final_tagdir)
+#     name = '{}_atac_homer'.format(sample_name)
+#     lines = []
+#     lines.append('{}/makeTagDirectory {} {}'.format(homer_path, temp_tagdir,
+#                                                     bam))
+#     if bigwig:
+#         lines.append('{}/makeBigWig.pl {} hg19 -name {}'
+#                      ' -url www.fake.com/ -webdir {}'.format(
+#                          homer_path, os.path.split(temp_tagdir)[1], name, 
+#                          os.path.split(temp_tagdir)[0]))
+#         lines.append('mv {}/{}_tags.ucsc.bigWig {}'.format(
+#             os.path.split(temp_tagdir)[0], sample_name, temp_tagdir))
+#     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
+#                  '-o auto'.format(homer_path, temp_tagdir))
+#     # softlink_lines = []
+#     posfile = os.path.join(temp_tagdir, 'regions.txt')
+#     bed = os.path.join(temp_tagdir, '{}_peaks.bed'.format(name))
+#     lines.append(_convert_homer_pos_to_bed(
+#         posfile, bed, name, homer_path, bedtools_path))
+#     bed = os.path.join(final_tagdir, '{}_peaks.bed'.format(name))
+#     # softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+#     #                                                         'peak'))
+#     # softlink_lines.append(softlink)
+#     
+#     lines = '\n'.join(lines) + '\n\n'
+#     # softlink_lines = '\n'.join(softlink_lines)
+#     # return lines, softlink_lines
+#     return lines
+# 
+# def _combined_homer(input_tagdirs, combined_name, temp_tagdir, final_tagdir,
+#                     homer_path, link_dir, bedtools_path, tracklines_file,
+#                     web_path_file, bigwig=False):
+#     """
+#     Combine tag directories and call peaks with HOMER. Optionally make bigwig
+#     file.
+# 
+#     Parameters
+#     ----------
+#     input_tagdirs : list 
+#         A list of paths to the tagdirs to be combined for calling peaks.
+# 
+#     combined_name : str
+#         Used for naming output files and directories.
+# 
+#     temp_tagdir : str
+#         Path to temporary tag directory that HOMER will create.
+# 
+#     final_tagdir : str
+#         Path to final tag directory (what the temp_tagdir will be copied to).
+# 
+#     link_dir : str
+#         Path to directory where softlinks should be made. HOMER will put the
+#         bigwig file in the directory specified when setting up HOMER but a
+#         softlink to a bed file with the HOMER peaks will be made here.
+# 
+#     bigwig : bool
+#         If True, have HOMER make a bigwig file.
+# 
+#     Returns
+#     -------
+#     lines : str
+#         Lines to be printed to shell/PBS script.
+# 
+#     """
+#     with open(web_path_file) as wpf:
+#         web_path = wpf.readline().strip()
+#     web_path = web_path + '/atac'
+# 
+#     temp_tagdir = os.path.realpath(temp_tagdir)
+#     final_tagdir = os.path.realpath(final_tagdir)
+#     name = '{}_combined_peak'.format(combined_name)
+#     bed = os.path.join(temp_tagdir,
+#                        '{}_combined_homer_peaks.bed'.format(combined_name))
+#     lines = []
+#     tf_lines = []
+#     softlink_lines = []
+#     lines.append('{}/makeTagDirectory {} -d {}'.format(homer_path, temp_tagdir, 
+#                                                       ' '.join(input_tagdirs)))
+#     if bigwig:
+#         lines.append('{}/makeBigWig.pl {} hg19 -name {}'
+#                      ' -url www.fake.com/ -webdir {}'.format(
+#                          homer_path, os.path.split(temp_tagdir)[1], name, 
+#                          os.path.split(temp_tagdir)[0]))
+#         lines.append('mv {0}.ucsc.bigWig {0}'.format(temp_tagdir))
+#         temp_link_dir = os.path.join(link_dir, 'bigwig')
+#         bw = os.path.join(
+#             final_tagdir,
+#             '{}.ucsc.bigWig'.format(os.path.split(temp_tagdir)[1]))
+#         softlink, name = _make_softlink(bw, name, os.path.join(
+#             temp_link_dir, 'atac', 'bigwig'))
+#         softlink_lines.append(softlink)
+#         temp_web_path = web_path + '/bigwig'
+#         try:
+#             os.makedirs(temp_link_dir)
+#         except OSError:
+#             pass
+#         tf_lines += ('track type=bigWig name="{0}_atac_cov" '
+#                      'description="ATAC-seq '
+#                      'coverage for {0}" visibility=0 db=hg19 bigDataUrl='
+#                      '{1}/{0}.ucsc.bigWig\n'.format(
+#                          os.path.split(temp_tagdir)[1], temp_web_path))
+#     lines.append('{}/findPeaks {} -style super -size 75 '
+#                  ' -o auto'.format(
+#                      homer_path, temp_tagdir))
+#     lines.append('{}/findPeaks {} -style histone -size 75 -minDist 75 '
+#                  '-o auto'.format(homer_path, temp_tagdir))
+#    
+#     posfile = os.path.join(temp_tagdir, 'regions.txt')
+#     name = '{}_combined'.format(combined_name)
+#     bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+#     lines.append(_convert_homer_pos_to_bed(
+#         posfile, bed, name, homer_path, bedtools_path))
+#     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+#     softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+#                                                             'peak'))
+#     softlink_lines.append(softlink)
+#     temp_web_path = web_path + '/peak'
+#     tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
+# 
+#     posfile = os.path.join(temp_tagdir, 'superEnhancers.txt')
+#     name = '{}_combined_super_enhancers'.format(combined_name)
+#     bed = os.path.join(temp_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+#     lines.append(_convert_homer_pos_to_bed(
+#         posfile, bed, name, homer_path, bedtools_path))
+#     bed = os.path.join(final_tagdir, '{}_homer_atac_peaks.bed'.format(name))
+#     softlink, name = _make_softlink(bed, name, os.path.join(link_dir, 'atac',
+#                                                             'peak'))
+#     softlink_lines.append(softlink)
+#     tf_lines += '{}/{}_homer_atac_peaks.bed\n'.format(temp_web_path, name)
+#     lines = '\n'.join(lines) + '\n\n'
+#     softlink_lines = '\n'.join(softlink_lines)
+# 
+#     # Write tracklines and URLs.
+#     if os.path.exists(tracklines_file):
+#         with open(tracklines_file) as f:
+#             existing_lines = f.read()
+#     else:
+#         existing_lines = ''
+# 
+#     with open(tracklines_file, 'w') as tf:
+#         tf.write(existing_lines + ''.join(tf_lines))
+#     
+#     return lines, softlink_lines
+# 
+# def _convert_homer_pos_to_bed(posfile, bed, sample_name, homer_path,
+#                               bedtools_path):
+#     """
+#     Convert HOMER results file to bed file.
+# 
+#     Parameters
+#     ----------
+#     posfile : str
+#         Full path to HOMER results file (i.e. regions.txt or
+#         superEnhancers.txt).
+# 
+#     bed : str
+#         Name of output bed file.
+# 
+#     sample_name : str
+#         Used for naming output files.
+# 
+#     Returns
+#     -------
+#     lines : str
+#         Lines to be printed to shell/PBS script.
+# 
+#     """
+#     lines = []
+#     tagdir = os.path.split(posfile)[0]
+#     lines.append('{}/pos2bed.pl {} | grep -v \# > temp.bed'.format(
+#         homer_path, posfile))
+#     track_line = ' '.join(['track', 'type=bed',
+#                            'name=\\"{}_homer_atac_peaks\\"'.format(
+#                                sample_name),
+#                            ('description=\\"HOMER ATAC-seq peaks for '
+#                             '{}\\"'.format(sample_name)),
+#                            'visibility=0',
+#                            'db=hg19'])
+#     lines.append('{} sort -i temp.bed > temp2.bed'.format(bedtools_path))
+#     lines.append('cat <(echo {}) temp2.bed > {}'.format(track_line, bed))
+#     lines.append('rm temp.bed temp2.bed')
+#     return '\n'.join(lines) + '\n'
+# 
+# def combined_homer_peaks(
+#     tagdirs, 
+#     outdir, 
+#     combined_name, 
+#     tracklines_file,
+#     link_dir,
+#     web_path_file,
+#     bedtools_path,
+#     homer_path,
+#     environment,
+#     conda_env='',
+#     tempdir='/scratch', 
+#     threads=6, 
+#     shell=False,
+# ):
+#     """
+#     Make a PBS or shell script for combining together HOMER tag directories and
+#     calling peaks on the combined tags.
+# 
+#     Parameters
+#     ----------
+#     tagdirs : list 
+#         A list of paths to the tagdirs to be combined for calling peaks.
+# 
+#     outdir : str
+#         Directory to store PBS/shell file and results.
+# 
+#     combined_name : str
+#         Name used for naming files and directories for combined data.
+# 
+#     tracklines_file : str
+#         Path to file for writing tracklines. The tracklines will be added to the
+#         file; the contents of the file will not be overwritten. These tracklines
+#         can be pasted into the genome browser upload for custom data.
+# 
+#     link_dir : str
+#         Path to directory where softlinks for genome browser should be made.
+# 
+#     web_path_file : str
+#         File whose first line is the URL that points to link_dir. For example,
+#         if we make a link to the file s1_coord_sorted.bam in link_dir and
+#         web_path_file has http://site.com/files on its first line, then
+#         http://site.com/files/s1_coord_sorted.bam should be available on the
+#         web. If the web directory is password protected (it probably should be),
+#         then the URL should look like http://username:password@site.com/files.
+#         This is a file so you don't have to make the username/password combo
+#         public (although I'd recommend not using a sensitive password). You can
+#         just put the web_path_file in a directory that isn't tracked by git, 
+#         figshare, etc.
+# 
+#     bedtools_path : str
+#         Path to bedtools.
+# 
+#     homer_path : str
+#         Path to HOMER bin.
+# 
+#     environment : str
+#         Bash file with PATH information that can be sourced. This should include
+#         the paths to executables HOMER will need like bedGraphToBigWig.
+# 
+#     conda_env : str
+#         If provided, load conda environment with this name. This will control
+#         which version of MACS2 is used.
+# 
+#     tempdir : str
+#         Directory to store files as STAR runs.
+# 
+#     threads : int
+#         Number of threads to reserve using PBS scheduler. 
+# 
+#     shell : boolean
+#         If true, make a shell script rather than a PBS script.
+#     
+#     Returns
+#     -------
+#     fn : str
+#         Path to PBS/shell script.
+# 
+#     """
+#     assert threads >= 3
+# 
+#     if shell:
+#         pbs = False
+#     else: 
+#         pbs = True
+# 
+#     tempdir = os.path.join(tempdir, '{}_combined_peaks'.format(combined_name))
+#     outdir = os.path.join(outdir, '{}_combined_peaks'.format(combined_name))
+# 
+#     # I'm going to define some file names used later.
+#     local_tagdir = '{}_combined_tags'.format(combined_name)
+#     temp_tagdir = os.path.join(tempdir, local_tagdir)
+#     final_tagdir = os.path.join(outdir, local_tagdir)
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = [temp_tagdir]
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     if shell:
+#         fn = os.path.join(outdir, '{}_combined_peaks.sh'.format(combined_name))
+#     else:
+#         fn = os.path.join(outdir, '{}_combined_peaks.pbs'.format(combined_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir,
+#                            '{}_combined_peaks.out'.format(combined_name))
+#         err = os.path.join(outdir,
+#                            '{}_combined_peaks.err'.format(combined_name))
+#         job_name = '{}_combined_peaks'.format(combined_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+#     
+#     if conda_env != '':
+#         f.write('source activate {}\n'.format(conda_env))
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+#     f.write('rsync -avz \\\n{} \\\n\t.\n\n'.format(
+#         ' \\\n'.join(['\t{}'.format(x) for x in tagdirs])))
+# 
+#     # Add executables to path because HOMER expects them there.
+#     f.write('source {}\n\n'.format(environment))
+#     
+#     # Run HOMER.
+#     td = [os.path.split(os.path.realpath(x))[1] for x in tagdirs]
+#     lines, softlink_lines = _combined_homer(td, combined_name, temp_tagdir,
+#                                             final_tagdir, homer_path, link_dir,
+#                                             bedtools_path, tracklines_file,
+#                                             web_path_file, bigwig=True)
+#     f.write(lines)
+#     f.write('wait\n\n')
+# 
+#     if tempdir != outdir:
+#         f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#             ' \\\n\t'.join(files_to_copy), outdir))
+# 
+#     if len(files_to_remove) > 0:
+#         f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if tempdir != outdir:
+#         f.write('rm -r {}\n'.format(tempdir))
+# 
+#     f.write(softlink_lines)
+# 
+#     f.close()
+#     return fn
+# 
+# def _nucleoatac(bam, bed, sample_name, fasta, threads):
+#     lines = ('nucleoatac run --bed {} \\\n'
+#              '\t--bam {} \\\n'
+#              '\t--out {} \\\n'
+#              '\t--fasta {} \\\n'
+#              '\t--cores {}\n\n'.format(bed, bam, sample_name, fasta, threads))
+#     return lines
+# 
+# def nucleoatac(
+#     bam, 
+#     bed, 
+#     sample_name, 
+#     fasta, 
+#     outdir,
+#     tracklines_file,
+#     link_dir,
+#     web_path_file,
+#     environment,
+#     conda_env='',
+#     tempdir='/scratch', 
+#     threads=4, 
+#     shell=False,
+# ):
+#     """
+#     Make a PBS or shell script for estimating nucelosome occupancy using
+#     ATAC-seq data.
+# 
+#     Parameters
+#     ----------
+#     bam : str 
+#         Path to bam file with aligned reads to use for estimating occupancy.
+# 
+#     bed : str
+#         Path to bed file with positions to estimate occupancy for.
+# 
+#     sample_name : str
+#         Name used for naming files and directories.
+# 
+#     fasta : str
+#         Path to genome fasta. Must be indexed.
+# 
+#     outdir : str
+#         Directory to store directory containing PBS/shell file and results.
+# 
+#     tracklines_file : str
+#         Path to file for writing tracklines. The tracklines will be added to the
+#         file; the contents of the file will not be overwritten. These tracklines
+#         can be pasted into the genome browser upload for custom data.
+# 
+#     link_dir : str
+#         Path to directory where softlinks for genome browser should be made.
+# 
+#     web_path_file : str
+#         File whose first line is the URL that points to link_dir. For example,
+#         if we make a link to the file s1_coord_sorted.bam in link_dir and
+#         web_path_file has http://site.com/files on its first line, then
+#         http://site.com/files/s1_coord_sorted.bam should be available on the
+#         web. If the web directory is password protected (it probably should be),
+#         then the URL should look like http://username:password@site.com/files.
+#         This is a file so you don't have to make the username/password combo
+#         public (although I'd recommend not using a sensitive password). You can
+#         just put the web_path_file in a directory that isn't tracked by git, 
+#         figshare, etc.
+# 
+#     environment : str
+#         Bash file with PATH information that can be sourced. This should include
+#         the paths to executables HOMER will need like bedGraphToBigWig.
+# 
+#     conda_env : str
+#         If provided, load conda environment with this name. This will control
+#         which version of nucleoatac is used.
+# 
+#     tempdir : str
+#         Directory to store files as nucleoatac runs.
+# 
+#     threads : int
+#         Number of threads to reserve using PBS scheduler and for nucleoatac to
+#         use.
+# 
+#     shell : boolean
+#         If true, make a shell script rather than a PBS script.
+#     
+#     Returns
+#     -------
+#     fn : str
+#         Path to PBS/shell script.
+# 
+#     """
+#     if shell:
+#         pbs = False
+#     else: 
+#         pbs = True
+# 
+#     tempdir = os.path.join(tempdir, '{}_nucleoatac'.format(sample_name))
+#     outdir = os.path.join(outdir, '{}_nucleoatac'.format(sample_name))
+# 
+#     # I'm going to define some file names used later.
+#     temp_bam = os.path.join(tempdir, os.path.split(bam)[1])
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = []
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = [temp_bam]
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     if shell:
+#         fn = os.path.join(outdir, '{}_nucleoatac.sh'.format(sample_name))
+#     else:
+#         fn = os.path.join(outdir, '{}_nucleoatac.pbs'.format(sample_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir,
+#                            '{}_nucleoatac.out'.format(sample_name))
+#         err = os.path.join(outdir,
+#                            '{}_nucleoatac.err'.format(sample_name))
+#         job_name = '{}_nucleoatac'.format(sample_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+#     
+#     if conda_env != '':
+#         f.write('source activate {}\n'.format(conda_env))
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+# 
+#     f.write('source {}\n\n'.format(environment))
+#     f.write('rsync -avz \\\n\t{} \\\n\t.\n\n'.format(bam))
+#     
+#     # Run nucleoatac.
+#     lines = _nucleoatac(temp_bam, bed, sample_name, fasta, threads)
+#     f.write(lines)
+#     f.write('wait\n\n')
+# 
+#     if tempdir != outdir:
+#         if len(files_to_copy) > 0:
+#             f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#                 ' \\\n\t'.join(files_to_copy), outdir))
+# 
+#     if len(files_to_remove) > 0:
+#         f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if tempdir != outdir:
+#             f.write('rsync -avz {} {}\n\n'.format(os.path.join(tempdir, '*'),
+#                                                   outdir))
+# 
+#     if tempdir != outdir:
+#         f.write('rm -r {}\n'.format(tempdir))
+# 
+#     f.close()
+#     return fn
+# 
+# def motif_analysis(
+#     bed, 
+#     sample_name, 
+#     outdir,
+#     tracklines_file,
+#     link_dir,
+#     web_path_file,
+#     environment,
+#     mask=False,
+#     conda_env='',
+#     tempdir='/scratch', 
+#     threads=4, 
+#     shell=False,
+# ):
+#     """
+#     Make a PBS or shell script for analyzing motifs with HOMER.
+# 
+#     Parameters
+#     ----------
+#     bed : str 
+#         Bed file with positions to analyze.
+# 
+#     sample_name : str
+#         Name used for naming files and directories.
+# 
+#     outdir : str
+#         Directory to store directory containing PBS/shell file and results.
+# 
+#     tracklines_file : str
+#         Path to file for writing tracklines. The tracklines will be added to the
+#         file; the contents of the file will not be overwritten. These tracklines
+#         can be pasted into the genome browser upload for custom data.
+# 
+#     link_dir : str
+#         Path to directory where softlinks for genome browser should be made.
+# 
+#     web_path_file : str
+#         File whose first line is the URL that points to link_dir. For example,
+#         if we make a link to the file s1_coord_sorted.bam in link_dir and
+#         web_path_file has http://site.com/files on its first line, then
+#         http://site.com/files/s1_coord_sorted.bam should be available on the
+#         web. If the web directory is password protected (it probably should be),
+#         then the URL should look like http://username:password@site.com/files.
+#         This is a file so you don't have to make the username/password combo
+#         public (although I'd recommend not using a sensitive password). You can
+#         just put the web_path_file in a directory that isn't tracked by git, 
+#         figshare, etc.
+# 
+#     environment : str
+#         Bash file with PATH information that can be sourced. This should include
+#         the paths to executables HOMER will need like bedGraphToBigWig.
+# 
+#     mask : bool
+#         Whether to pass the -mask parameter to HOMER.
+# 
+#     conda_env : str
+#         If provided, load conda environment with this name. 
+# 
+#     tempdir : str
+#         Directory to store files as motif analysis runs.
+# 
+#     threads : int
+#         Number of threads to reserve using PBS scheduler and for HOMER to use.
+# 
+#     shell : boolean
+#         If true, make a shell script rather than a PBS script.
+#     
+#     Returns
+#     -------
+#     fn : str
+#         Path to PBS/shell script.
+# 
+#     """
+#     if shell:
+#         pbs = False
+#     else: 
+#         pbs = True
+# 
+#     tempdir = os.path.join(tempdir, '{}_motif'.format(sample_name))
+#     outdir = os.path.join(outdir, '{}_motif'.format(sample_name))
+# 
+#     # I'm going to define some file names used later.
+#     
+#     # Files to copy to output directory.
+#     files_to_copy = []
+#     # Temporary files that can be deleted at the end of the job. We may not want
+#     # to delete the temp directory if the temp and output directory are the
+#     # same.
+#     files_to_remove = []
+# 
+#     try:
+#         os.makedirs(outdir)
+#     except OSError:
+#         pass
+# 
+#     if shell:
+#         fn = os.path.join(outdir, '{}_motif.sh'.format(sample_name))
+#     else:
+#         fn = os.path.join(outdir, '{}_motif.pbs'.format(sample_name))
+# 
+#     f = open(fn, 'w')
+#     f.write('#!/bin/bash\n\n')
+#     if pbs:
+#         out = os.path.join(outdir,
+#                            '{}_motif.out'.format(sample_name))
+#         err = os.path.join(outdir,
+#                            '{}_motif.err'.format(sample_name))
+#         job_name = '{}_motif'.format(sample_name)
+#         f.write(_pbs_header(out, err, job_name, threads))
+#     
+#     if conda_env != '':
+#         f.write('source activate {}\n'.format(conda_env))
+#     f.write('mkdir -p {}\n'.format(tempdir))
+#     f.write('cd {}\n'.format(tempdir))
+# 
+#     f.write('source {}\n\n'.format(environment))
+# 
+#     # Prepare some stuff for making softlinks and web links.
+#     link_dir = os.path.join(link_dir, 'atac', 'motif')
+#     with open(web_path_file) as wpf:
+#         web_path = wpf.readline().strip()
+#     web_path = web_path + '/atac/motif'
+#     if os.path.exists(tracklines_file):
+#         with open(tracklines_file) as tf:
+#             tf_lines = tf.read()
+#     else:
+#         tf_lines = ''
+#     try:
+#         os.makedirs(link_dir)
+#     except OSError:
+#         pass
+# 
+#     # Run HOMER motif analysis.
+#     if mask:
+#         lines = ('findMotifsGenome.pl {} hg19 {} -size given -mask '
+#                  '-p {}\n'.format(bed, outdir, threads))
+#     else:
+#         lines = 'findMotifsGenome.pl {} hg19 {} -size given -p {}\n'.format(
+#             bed, outdir, threads)
+#     f.write(lines)
+#     f.write('wait\n\n')
+# 
+#     new_lines, name = _make_softlink(outdir, sample_name, link_dir)
+#     f.write(new_lines)
+#     tf_lines += '{}/{}\n'.format(web_path, os.path.split(outdir)[1])
+# 
+#     # Write tracklines and URLs.
+#     with open(tracklines_file, 'w') as tf:
+#         tf.write(tf_lines)
+#     if tempdir != outdir:
+#         if len(files_to_copy) > 0:
+#             f.write('rsync -avz \\\n\t{} \\\n \t{}\n\n'.format(
+#                 ' \\\n\t'.join(files_to_copy), outdir))
+# 
+#     if len(files_to_remove) > 0:
+#         f.write('rm -r \\\n\t{}\n\n'.format(' \\\n\t'.join(files_to_remove)))
+# 
+#     if tempdir != outdir:
+#             f.write('rsync -avz {} {}\n\n'.format(os.path.join(tempdir, '*'),
+#                                                   outdir))
+# 
+#     if tempdir != outdir:
+#         f.write('rm -r {}\n'.format(tempdir))
+# 
+#     f.close()
+#     return fn

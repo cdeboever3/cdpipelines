@@ -599,6 +599,7 @@ def pipeline(
     bigWigAverageOverBed_path='bigWigAverageOverBed',
     bcftools_path='bcftools',
     bammarkduplicates_path='bammarkduplicates',
+    featureCounts_path='featureCounts',
     dexseq_count_path=None,
 ):
     """
@@ -1129,11 +1130,12 @@ def pipeline(
     mdup_bam = job.add_input_file(mdup_bam)
 
     # Get gene counts.
-    gene_counts, gene_count_stats = job.htseq_count(
-        mdup_bam, 
-        gene_gtf, 
-        strand_specific=strand_specific,
-        samtools_path=samtools_path,
+    gene_counts, gene_count_stats = job.featureCounts_count(
+        gene_gtf,
+        mdup_bam,
+        both=True,
+        strand_specific=2,
+        featureCounts_path=featureCounts_path,
     )
     job.add_output_file(gene_counts)
     job.add_output_file(gene_count_stats)

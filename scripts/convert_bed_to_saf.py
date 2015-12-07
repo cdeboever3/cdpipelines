@@ -1,3 +1,5 @@
+import argparse
+
 def bed_to_saf(bed, out):
     """
     Convert bed file to SAF file and write to out.
@@ -23,10 +25,23 @@ def bed_to_saf(bed, out):
     # coordinates is more typical. I'm also guessing the SAF format is one-based
     # since it takes GTF by default and GTF is one-based end-inclusive.
     import pandas as pd
-    import pybedtools as pbt
+    # import pybedtools as pbt
 
-    bt = pbt.BedTool(bed)
-    df = bt.to_dataframe()
+    # bt = pbt.BedTool(bed)
+    # df = bt.to_dataframe()
+    with open(bed) as f:
+        line = f.readline()
+    if line.split()[0] == 'track':
+        df = pd.read_table(bed, skiprows=1, header=None)
+    else:
+        df = pd.read_table(bed, header=None)
+    if df.shape[1] > 4:
+        df.columns = (['chrom', 'start', 'end', 'name', 'strand'] +
+                      range(df.shape[1] - 5))
+    elif df.shape[1] == 4:
+        df.columns = ['chrom', 'start', 'end', 'name']
+    else:
+        df.columns = ['chrom', 'start', 'end']
     if 'name' not in df.columns:
         df['name'] = (df.chrom + ':' + df.start.astype(str) + '-' +
                       df.end.astype(str))
@@ -39,9 +54,9 @@ def bed_to_saf(bed, out):
     new_df['GeneID'] = df.name
     new_df['Chr'] = df.chrom
     # Make one-based.
-    new_df['Start'] = df.start + 1
+    new_df['Start'] = (df.start + 1).astype(int)
     # No need to add one because this is inclusive.
-    new_df['End'] = df.end
+    new_df['End'] = df.end.astype(int)
     new_df['Strand'] = df.strand
     new_df.to_csv(out, index=False, sep='\t')
 

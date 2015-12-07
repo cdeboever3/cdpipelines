@@ -410,11 +410,11 @@ class JobScript:
             dy = self.outdir
         dy = os.path.join(self.tempdir,
                           '{}_homer_motif'.format(self.sample_name))
-        lines = ('findMotifsGenome.pl {} hg19 {} -size {} -p {}'.format(
-            bed, dy, size, self.threads))
+        lines = ('findMotifsGenome.pl \\\n\t {} \\\n\thg19 \\\n\t{} \\\n\t'
+                 '-size {} \\\n\t-p {}'.format(bed, dy, size, self.threads))
         if mask:
-            lines += ' -mask'
-        lines += ''
+            lines += ' \\\n\t-mask'
+        lines += '\n\n'
         
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -482,8 +482,10 @@ class JobScript:
 
     def featureCounts_count(
         self,
-        bed,
+        features,
         bam,
+        both=False,
+        strand_specific=0,
         featureCounts_path='featureCounts',
     ):
         """
@@ -493,11 +495,21 @@ class JobScript:
     
         Parameters
         ----------
-        bed : str
-            Path to bed file defining regions to count for.
+        features : str
+            Path to bed or gtf file defining regions to count for. The file
+            type is inferred using the extension.
         
         bam : str
             Path to bam file to count reads for.
+
+        both : bool
+            Use featurecounts -B option: count read pairs that have both ends
+            successfully aligned only.
+
+        strand_specific : 0, 1, or 2
+            Passed to featureCounts -s parameter: Perform strand-specific read
+            counting. Possible values:  0 (unstranded), 1 (stranded) and 2
+            (reversely stranded).
     
         Returns
         -------
@@ -508,17 +520,30 @@ class JobScript:
             Path to output counts summary file.
     
         """
-        out = '{}_featureCounts.tsv'.format(self.sample_name)
-        out_summary = '{}.summary'.format(out)
-        saf = self.convert_bed_to_saf(bed)
-        self.add_temp_file(saf)
-        lines = '{} -p -T {} -F SAF -a {} -o {} {}\n\n'.format(
-            featureCounts_path, self.threads, saf, counts, bam)
+        root = os.path.splitext(os.path.split(bam)[1])[0]
+        out = os.path.join(self.tempdir,
+                           '{}_featureCounts.tsv'.format(root))
+        out_summary = os.path.join(self.tempdir, '{}.summary'.format(out))
+        lines = '{} -p -T {} '.format(featureCounts_path, self.threads)
+        if both:
+            lines += '-B '
+        if strand_specific != 0:
+            lines += '-s {} '.format(strand_specific)
+        if os.path.splitext(features)[1] == '.bed':
+            saf = self.convert_bed_to_saf(features)
+            self.add_temp_file(saf)
+            lines += ('\\\n\t-a {} \\\n\t-o {} '
+                      '\\\n\t{}\n\n'.format(saf, out, bam))
+        elif os.path.splitext(features)[1] == '.gtf':
+            lines += '\\\n\t-a {} \\\n\t-o {} \\\n\t{}\n\n'.format(
+                features, out, bam)
+        else:
+            assert True == False
         with open(self.filename, "a") as f:
             f.write(lines)
         return out, out_summary
 
-    def convert_saf_to_bed(
+    def convert_bed_to_saf(
         self,
         bed,
     ):
@@ -536,10 +561,11 @@ class JobScript:
             Path to output saf file.
     
         """
-        saf = os.path.splitext(os.path.split(bed)[1])[0] + '.saf'
+        saf = os.path.join(self.tempdir,
+                           os.path.splitext(os.path.split(bed)[1])[0] + '.saf')
         from __init__ import _scripts
         input_script = os.path.join(_scripts, 'convert_bed_to_saf.py')
-        lines = 'python {} {} {}\n\n'.format(input_script, bed, saf)
+        lines = 'python {} \\\n\t{} \\\n\t{}\n\n'.format(input_script, bed, saf)
         with open(self.filename, "a") as f:
             f.write(lines)
         return saf
@@ -578,7 +604,7 @@ class JobScript:
 
         lines = ('{} genomecov -ibam {} \\\n\t-g {} -split -bg \\\n\t'
                  '-trackline -trackopts \'name="{}"\' '.format(
-                     bedtools_path, bam, genome_file, fn_root))
+                     bedtools_path, bam, genome_file, self.sample_name))
         lines += ' \\\n\t> {}\n\n'.format( bedgraph)
         with open(self.filename, "a") as f:
             f.write(lines)
@@ -903,8 +929,11 @@ class JobScript:
             Path to bam file with removed reads if remove_duplicates == True.
     
         """
+        t = 'mdup'
+        if remove_duplicates:
+            t = 'r' + t
         mdup_bam = os.path.join(
-            self.tempdir, '{}_sorted_mdup.bam'.format(self.sample_name))
+            self.tempdir, '{}_sorted_{}.bam'.format(self.sample_name, t))
         dup_metrics = os.path.join(
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = ('{} markthreads={} \\\n\ttmpfile={} \\\n\tI={} \\\n\t'
