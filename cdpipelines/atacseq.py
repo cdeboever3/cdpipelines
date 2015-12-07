@@ -972,8 +972,8 @@ def pipeline(
         sample_name, 
         job_suffix = 'counts',
         outdir=os.path.join(outdir, 'counts'),
-        threads=8, 
-        memory=16, 
+        threads=4, 
+        memory=8, 
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, queue=queue,
@@ -991,6 +991,7 @@ def pipeline(
     counts, counts_summary = job.featureCounts_count(
         narrow_peak,
         query_sorted_bam,
+        filetype='bed',
         featureCounts_path=featureCounts_path,
     )
     job.add_output_file(counts)

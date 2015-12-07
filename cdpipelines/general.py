@@ -484,6 +484,7 @@ class JobScript:
         self,
         features,
         bam,
+        filetype='gtf',
         both=False,
         strand_specific=0,
         featureCounts_path='featureCounts',
@@ -497,10 +498,14 @@ class JobScript:
         ----------
         features : str
             Path to bed or gtf file defining regions to count for. The file
-            type is inferred using the extension.
+            type is inferred using the extension or using the filetype parameter
+            below.
         
         bam : str
             Path to bam file to count reads for.
+
+        filetype : str
+            File type of the features file. Either gtf or bed.
 
         both : bool
             Use featurecounts -B option: count read pairs that have both ends
@@ -529,12 +534,12 @@ class JobScript:
             lines += '-B '
         if strand_specific != 0:
             lines += '-s {} '.format(strand_specific)
-        if os.path.splitext(features)[1] == '.bed':
+        if os.path.splitext(features)[1] == '.bed' or filetype == 'bed':
             saf = self.convert_bed_to_saf(features)
             self.add_temp_file(saf)
             lines += ('\\\n\t-a {} \\\n\t-o {} '
                       '\\\n\t{}\n\n'.format(saf, out, bam))
-        elif os.path.splitext(features)[1] == '.gtf':
+        elif os.path.splitext(features)[1] == '.gtf' or filetype == 'gtf':
             lines += '\\\n\t-a {} \\\n\t-o {} \\\n\t{}\n\n'.format(
                 features, out, bam)
         else:
