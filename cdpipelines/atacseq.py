@@ -991,6 +991,7 @@ def pipeline(
     counts, counts_summary = job.featureCounts_count(
         narrow_peak,
         query_sorted_bam,
+        sort=False,
         filetype='bed',
         featureCounts_path=featureCounts_path,
     )

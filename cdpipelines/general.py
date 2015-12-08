@@ -484,6 +484,7 @@ class JobScript:
         self,
         features,
         bam,
+        sort=True,
         filetype='gtf',
         both=False,
         strand_specific=0,
@@ -503,6 +504,11 @@ class JobScript:
         
         bam : str
             Path to bam file to count reads for.
+
+        sort : bool
+            If True, featureCounts will sort the bam file so that reads from the
+            same pair are next to each other. If False, featureCounts will
+            assume reads from the same pair are next to each other.
 
         filetype : str
             File type of the features file. Either gtf or bed.
@@ -534,6 +540,8 @@ class JobScript:
             lines += '-B '
         if strand_specific != 0:
             lines += '-s {} '.format(strand_specific)
+        if sort == False:
+            lines += '--donotsort '
         if os.path.splitext(features)[1] == '.bed' or filetype == 'bed':
             saf = self.convert_bed_to_saf(features)
             self.add_temp_file(saf)
