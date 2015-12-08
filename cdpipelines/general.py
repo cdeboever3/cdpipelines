@@ -545,7 +545,7 @@ class JobScript:
         if os.path.splitext(features)[1] == '.bed' or filetype == 'bed':
             saf = self.convert_bed_to_saf(features)
             self.add_temp_file(saf)
-            lines += ('\\\n\t-a {} \\\n\t-o {} '
+            lines += ('-F SAF \\\n\t-a {} \\\n\t-o {} '
                       '\\\n\t{}\n\n'.format(saf, out, bam))
         elif os.path.splitext(features)[1] == '.gtf' or filetype == 'gtf':
             lines += '\\\n\t-a {} \\\n\t-o {} \\\n\t{}\n\n'.format(
