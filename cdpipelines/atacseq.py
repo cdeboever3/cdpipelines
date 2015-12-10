@@ -426,6 +426,9 @@ def pipeline(
     sample_name, 
     star_index,
     encode_blacklist,
+    promoter_bed=None,
+    merged_promoter_bed=None,
+    gene_promoter_bed=None,
     find_intersecting_snps_path=None,
     filter_remapped_reads_path=None,
     gatk_fasta=None,
@@ -482,6 +485,18 @@ def pipeline(
 
     encode_blacklist : str
         Path to ENCODE blacklist bed file.
+
+    promoter_bed : str
+        Bed file with promoters for each transcript. If the bed file has names
+        in the names column, they should be unique.
+
+    merged_promoter_bed : str
+        Bed file with merged promoters. If the bed file has names in the names
+        column, they should be unique.
+
+    gene_promoter_bed : str
+        Bed file with promoters merged by gene. If the bed file has names in the
+        names column, they should be unique.
 
     find_intersecting_snps_path : str
         Path to find_intersecting_snps.py from WASP.
@@ -750,7 +765,7 @@ def pipeline(
         root=os.path.splitext(os.path.split(tlen_bam)[1])[0],
         sambamba_path=sambamba_path,
     )
-    query_sorted_bam = job.add_output_file(query_sorted_bam)
+    outdir_query_sorted_bam = job.add_output_file(query_sorted_bam)
 
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_tlen_bam)
@@ -984,7 +999,7 @@ def pipeline(
     counts_jobname = job.jobname
     
     # Input files.
-    query_sorted_bam = job.add_input_file(query_sorted_bam)
+    query_sorted_bam = job.add_input_file(outdir_query_sorted_bam)
     narrow_peak = job.add_input_file(outdir_narrow_peak)
 
     # Run featureCounts.
@@ -1001,10 +1016,75 @@ def pipeline(
     job.write_end()
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
+  
+    if promoter_bed or merged_promoter_bed or gene_promoter_bed:
+        ##### Job 9: Count reads in promoters. #####
+        job = ATACJobScript(
+            sample_name, 
+            job_suffix = 'promoter_counts',
+            outdir=os.path.join(outdir, 'promoter_counts'),
+            threads=4, 
+            memory=8, 
+            linkdir=linkdir,
+            webpath=webpath,
+            tempdir=tempdir, queue=queue,
+            conda_env=conda_env, 
+            modules=modules,
+            wait_for=[sort_rmdup_index_jobname],
+        )
+        promoter_counts_jobname = job.jobname
+        
+        # Input files.
+        query_sorted_bam = job.add_input_file(outdir_query_sorted_bam)
+        
+        if promoter_bed:
+            # Run featureCounts for transcript promoters.
+            promoter_counts, promoter_counts_summary = job.featureCounts_count(
+                promoter_bed,
+                query_sorted_bam,
+                sort=False,
+                filetype='bed',
+                featureCounts_path=featureCounts_path,
+                root='{}_tlen_leq_140_transcript_promoters'.format(job.sample_name),
+            )
+            job.add_output_file(promoter_counts)
+            job.add_output_file(promoter_counts_summary)
+
+        if merged_promoter_bed:
+            # Run featureCounts for merged promoters.
+            merged_promoter_counts, merged_promoter_counts_summary = \
+                    job.featureCounts_count(
+                        merged_promoter_bed,
+                        query_sorted_bam,
+                        sort=False,
+                        filetype='bed',
+                        featureCounts_path=featureCounts_path,
+                        root='{}_tlen_leq_140_merged_promoters'.format(job.sample_name),
+                    )
+            job.add_output_file(merged_promoter_counts)
+            job.add_output_file(merged_promoter_counts_summary)
+
+        if gene_promoter_bed:
+            # Run featureCounts for merged-by-gene promoters promoters.
+            gene_promoter_counts, gene_promoter_counts_summary = \
+                    job.featureCounts_count(
+                        gene_promoter_bed,
+                        query_sorted_bam,
+                        sort=False,
+                        filetype='bed',
+                        featureCounts_path=featureCounts_path,
+                        root='{}_tlen_leq_140_gene_promoters'.format(job.sample_name),
+                    )
+            job.add_output_file(gene_promoter_counts)
+            job.add_output_file(gene_promoter_counts_summary)
+
+        job.write_end()
+        if not job.delete_sh:
+            submit_commands.append(job.sge_submit_command())
    
     # We'll only go through the allelic bias steps if a VCF was provided.
     if vcf:
-        ##### Job 9: WASP first step. #####
+        ##### Job 10: WASP first step. #####
         job = ATACJobScript(
             sample_name, 
             job_suffix = 'wasp_allele_swap',
@@ -1057,7 +1137,7 @@ def pipeline(
         if not job.delete_sh:
             submit_commands.append(job.sge_submit_command())
         
-        ##### Job 10: WASP second step. #####
+        ##### Job 11: WASP second step. #####
         job = ATACJobScript(
             sample_name, 
             job_suffix='wasp_remap',
@@ -1094,7 +1174,7 @@ def pipeline(
         if not job.delete_sh:
             submit_commands.append(job.sge_submit_command())
         
-        ##### Job 11: WASP third step. #####
+        ##### Job 12: WASP third step. #####
         job = ATACJobScript(
             sample_name, 
             job_suffix = 'wasp_alignment_compare',
@@ -1166,7 +1246,7 @@ def pipeline(
         if not job.delete_sh:
             submit_commands.append(job.sge_submit_command())
         
-        ##### Job 12: Run MBASED for allelic bias. #####
+        ##### Job 13: Run MBASED for allelic bias. #####
         job = ATACJobScript(
             sample_name,
             job_suffix='mbased',

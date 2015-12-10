@@ -489,6 +489,7 @@ class JobScript:
         both=False,
         strand_specific=0,
         featureCounts_path='featureCounts',
+        root=None,
     ):
         """
         Run featureCounts to count the number of fragments that overlap
@@ -522,6 +523,9 @@ class JobScript:
             counting. Possible values:  0 (unstranded), 1 (stranded) and 2
             (reversely stranded).
     
+        root : str
+            If provided, use for naming the featureCounts output file.
+    
         Returns
         -------
         out : str
@@ -531,7 +535,8 @@ class JobScript:
             Path to output counts summary file.
     
         """
-        root = os.path.splitext(os.path.split(bam)[1])[0]
+        if root is None:
+            root = os.path.splitext(os.path.split(bam)[1])[0]
         out = os.path.join(self.tempdir,
                            '{}_featureCounts.tsv'.format(root))
         out_summary = os.path.join(self.tempdir, '{}.summary'.format(out))
