@@ -1109,7 +1109,7 @@ def pipeline(
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
     
-    ##### Job 7: Get HTSeq and DEXSeq counts. #####
+    ##### Job 7: Get featureCounts and DEXSeq counts. #####
     job = RNAJobScript(
         sample_name, 
         job_suffix = 'counts',
