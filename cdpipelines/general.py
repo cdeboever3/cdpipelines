@@ -962,7 +962,7 @@ class JobScript:
             removed_reads = os.path.join(
                 self.tempdir,
                 '{}_removed_duplicates.bam'.format(self.sample_name))
-            lines += ('rmdup=1 \\\n\tD={}'.format(removed_reads))
+            lines += ('\\\n\trmdup=1 \\\n\tD={}'.format(removed_reads))
         lines += '\n\n'
         with open(self.filename, "a") as f:
             f.write(lines)
