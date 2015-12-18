@@ -21,6 +21,10 @@ def main():
         'GATK. The output VCF file will be sorted in the order of this fai '
         'file for compatibility with GATK. Assumed to have associated fai and '
         'dict files.'), default=None)
+    parser.add_argument('-c', metavar='chrom_conv', help=(
+        'File with VCF chromosomes in first column and corresponding RNA-seq '
+        'chromosomes in second column (no header). This is needed if the VCF '
+        'and RNA-seq data have different chromosome naming.'))
     parser.add_argument('-t', metavar='tempdir', help=(
         'Path to temporary directory. Only used when sequence_dict is '
         'provided.'), default='.')
@@ -35,6 +39,7 @@ def main():
     directory = args.snp_directory
     regions = args.regions
     gatk_fai = args.g
+    chrom_conv = args.c
     tempdir = args.t
     bcftools_path = args.b
 
@@ -45,6 +50,7 @@ def main():
         regions,
         vcf_out, 
         gatk_fai=gatk_fai,
+        vcf_chrom_conv=chrom_conv,
         tempdir=tempdir,
         bcftools_path=bcftools_path,
     )

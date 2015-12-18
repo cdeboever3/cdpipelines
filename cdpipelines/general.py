@@ -1617,6 +1617,7 @@ class JobScript:
         bed,
         gatk_fai=None,
         vcf_sample_name=None, 
+        vcf_chrom_conv=None,
         samtools_path='samtools',
         bcftools_path='bcftools',
     ):
@@ -1638,6 +1639,17 @@ class JobScript:
             Path to bed file defining regions to look for variants in. This file
             will be merged to make sure there are no overlapping regions.
        
+        vcf_sample_name : str
+            Sample name of this sample in the VCF file (if different than
+            sample_name). For instance, the sample name in the VCF file may be
+            the sample name for WGS data which may differ from the RNA-seq
+            sample name.
+
+        vcf_chrom_conv : str
+            File with VCF chromosomes in first column and corresponding RNA-seq
+            chromosomes in second column (no header). This is needed if the VCF
+            and RNA-seq data have different chromosome naming.
+
         gatk_fai : str
             Path to karyotypically sorted fasta index (fai) file that works with
             GATK.  The output VCF file will be sorted in the order of this fai
@@ -1652,6 +1664,9 @@ class JobScript:
         -------
         snp_directory : str
             Path to WASP input SNP directory.
+        
+        vcf_out : str
+            Path to VCF file with heterozygous variants for this subject.
 
         keep_bam : str
             Path to WASP bam file of reads that do not overlap heterozygous
@@ -1704,7 +1719,10 @@ class JobScript:
             '-g {}'.format(gatk_fai),
             '-b {}'.format(bcftools_path),
             '-t {}'.format(self.tempdir),
-        ]) + '\n\n'
+        ]) 
+        if vcf_chrom_conv:
+            lines += ' \\\n\t-c {}'.format(vcf_chrom_conv)
+        lines += '\n\n'
         lines += ('{} view -b -q 255 -F 1024 \\\n\t{} '
                   '\\\n\t> {}\n\n'.format(
                     samtools_path, bam, uniq_bam))
@@ -1905,6 +1923,7 @@ def _wasp_snp_directory(
     regions, 
     vcf_out,
     gatk_fai=None, 
+    vcf_chrom_conv=None,
     tempdir='.', 
     bcftools_path='bcftools',
 ):
@@ -1926,7 +1945,7 @@ def _wasp_snp_directory(
 
     regions : str
         Path to bed file to define regions of interests (e.g. exons, peaks,
-        etc.). These regions should be non-overlapping.
+        etc.). 
 
     vcf_out : str
         Path to output vcf file that contains heterozygous variants for this
@@ -1937,6 +1956,11 @@ def _wasp_snp_directory(
         GATK.  The output VCF file will be sorted in the order of this fai file
         for compatibility with GATK. Assumed to have associated fai and dict
         files.
+
+    vcf_chrom_conv : str
+        File with VCF chromosomes in first column and corresponding RNA-seq
+        chromosomes in second column (no header). This is needed if the VCF
+        and RNA-seq data have different chromosome naming.
 
     tempdir : str
         Path to temporary directory. Only used when gatk_fai is provided.
@@ -1949,16 +1973,38 @@ def _wasp_snp_directory(
     # Collapse bed file.
     bt = pbt.BedTool(regions)
     bt = bt.merge()
+    # If a vcf_chrom_conv file is provided, we should check to see which
+    # chromosome naming scheme was used for this bed file. If it's not the
+    # correct naming scheme for the VCF, we'll convert.
+    if vcf_chrom_conv:
+        import pandas as pd
+        conv = pd.read_table(vcf_chrom_conv, header=None, index_col=1,
+                             squeeze=True)
+        df = bt.to_dataframe()
+        # Check to see whether any chromosomes hvae RNA-seq naming convention.
+        # If so, we'll assume the bed file is in the RNA-seq naming convention.
+        # Any chromosomes not in our conversion index will be dropped from the
+        # bed file.
+        if len(set(df.chrom) & set(conv.index)) > 0:
+            df = df[df.chrom.apply(lambda x: x in conv.index)]
+            df['chrom'] = df.chrom.apply(lambda x: conv[x])
+            df = df.astype(str)
+            s = '\n'.join(df.apply(lambda x: '\t'.join(x), axis=1)) + '\n'
+            bt = pbt.BedTool(s, from_string=True)
 
     # Extract all heterozygous variants for this sample.
     if not os.path.exists(directory):
         os.makedirs(directory)
 
     c = ('{} view -O u -m2 -M2 \\\n\t-R {} \\\n\t-s {} \\\n\t{} \\\n\t'
-         '| {} view -g het \\\n\t| tee {} \\\n\t| grep -v ^\\# \\\n\t'
-         '| cut -f1,2,4,5 \\\n\t| '
+         '| {} view -g het '.format(
+             bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path))
+    if vcf_chrom_conv:
+        c += '-Ou \\\n\t| {} annotate --rename-chrs {} '.format(bcftools_path,
+                                                                vcf_chrom_conv)
+         
+    c += ('\\\n\t| tee {} \\\n\t| grep -v ^\\# \\\n\t| cut -f1,2,4,5 \\\n\t| '
          'awk \'{{print $2"\\t"$3"\\t"$4 >> ("{}/"$1".snps.txt")}}\''.format(
-             bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path,
              vcf_out, directory))
     subprocess.check_call(c, shell=True)
 

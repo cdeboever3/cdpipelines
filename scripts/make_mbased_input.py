@@ -63,7 +63,13 @@ def _binomial_test(counts):
     counts['binomialPValue'] = pvals
     return counts
 
-def _vcf_filter(counts, vcf, sample_name, min_dist=10):
+def _vcf_filter(
+    counts, 
+    vcf, 
+    sample_name, 
+    chrom_conv=None, 
+    min_dist=10,
+):
     """
     Remove heterozygous variants that are within min_dist of another variant
     for which the sample is heterozygous or homozygous alternative. The idea
@@ -92,12 +98,16 @@ def _vcf_filter(counts, vcf, sample_name, min_dist=10):
 
     """
     import vcf as pyvcf
+    if chrom_conv:
+        conv = pd.read_table(chrom_conv, header=None, index_col=1, squeeze=True)
     reader = pyvcf.Reader(open(vcf), compressed=True)
     remove = []
     for i in counts.index:
         chrom, pos = counts.ix[i, ['contig', 'position']]
         start = int(pos) - 10
         end = int(pos) + 10
+        if chrom_conv:
+            chrom = conv[chrom]
         res = reader.fetch(chrom, start, end)
         count = 0
         while True:
@@ -148,7 +158,7 @@ def _mappability_filter(counts, mappability, bigWigAverageOverBed_path):
     tdf = counts[['contig', 'position']]
     tdf['start'] = tdf.position - 1
     tdf['name'] = tdf.contig + ':' + tdf.position.astype(str)
-    tdf = tdf.sort(columns=['contig', 'start'])
+    tdf = tdf.sort_values(by=['contig', 'start'])
     tdf[['contig', 'start', 'position', 'name']].to_csv(temp_bed.name,
                                                         index=None, header=None,
                                                         sep='\t')
@@ -262,8 +272,16 @@ def _assign_features(counts, bed):
     counts.ix[se.index, 'feature'] = se
     return counts
 
-def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
-                      mappability=None, bigWigAverageOverBed_path=None):
+def make_mbased_input(
+    counts, 
+    out, 
+    bed, 
+    vcf=None, 
+    chrom_conv=None,
+    sample_name=None,
+    mappability=None, 
+    bigWigAverageOverBed_path='bigWigAverageOverBed',
+):
     """
     Make MBASED input file based on ASEReadCounter output. Also output file like
     ASEReadCounter file but only containing filtered sites and binomial test
@@ -324,7 +342,8 @@ def make_mbased_input(counts, out, bed, vcf=None, sample_name=None,
     if vcf:
         # Remove SNVs that are within 10 bp of other variants to avoid mapping
         # biases. MBASED filter.
-        counts = _vcf_filter(counts, vcf, sample_name, min_dist=10)
+        counts = _vcf_filter(counts, vcf, sample_name, chrom_conv=chrom_conv,
+                             min_dist=10)
     # Assign SNVs to features.
     counts = _assign_features(counts, bed)
     # Add expected reference frequency for each ref->alt substitution.
@@ -349,6 +368,10 @@ def main():
     h = ('VCF file with all variant calls. Heterozygous SNVs within 10 bp of '
          'another variant will be removed to avoid mapping bias.')
     parser.add_argument('-v', metavar='vcf', default=None, help=h)
+    parser.add_argument('-c', metavar='chrom_conv', help=(
+        'File with VCF chromosomes in first column and corresponding RNA-seq '
+        'chromosomes in second column (no header). This is needed if the VCF '
+        'and RNA-seq data have different chromosome naming.'))
     parser.add_argument('-s', metavar='sample_name', default=None, 
                         help=('If -v is provided, this is the sample name for '
                               'this sample in the VCF file. Required with -v.'))
@@ -364,12 +387,20 @@ def main():
     out = args.out
     bed = args.bed
     vcf = args.v
+    chrom_conv = args.c
     sample_name = args.s
     mappability = args.m
     bigWigAverageOverBed_path = args.p
 
-    make_mbased_input(counts, out, bed, vcf, sample_name, mappability,
-                      bigWigAverageOverBed_path)
+    make_mbased_input(
+        counts, 
+        out, 
+        bed, 
+        vcf=vcf, 
+        chrom_conv=chrom_conv,
+        sample_name=sample_name, 
+        mappability=mappability,
+        bigWigAverageOverBed_path=bigWigAverageOverBed_path)
 
 if __name__ == '__main__':
     main()

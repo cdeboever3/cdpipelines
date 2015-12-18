@@ -576,6 +576,7 @@ def pipeline(
     webpath_file=None,
     vcf=None,
     vcf_sample_name=None,
+    vcf_chrom_conv=None,
     is_phased=False,
     conda_env=None,
     modules=None,
@@ -683,6 +684,11 @@ def pipeline(
         Sample name of this sample in the VCF file (if different than
         sample_name). For instance, the sample name in the VCF file may be the
         sample name for WGS data which may differ from the RNA-seq sample name.
+
+    vcf_chrom_conv : str
+        File with VCF chromosomes in first column and corresponding RNA-seq
+        chromosomes in second column (no header). This is needed if the VCF and
+        RNA-seq data have different chromosome naming.
 
     conda_env : str
         Conda environment to load at the beginning of the script.
@@ -1228,6 +1234,7 @@ def pipeline(
              exon_bed,
              gatk_fai=gatk_fasta + '.fai',
              vcf_sample_name=vcf_sample_name, 
+             vcf_chrom_conv=vcf_chrom_conv,
              samtools_path=samtools_path,
              bcftools_path=bcftools_path,
         )
