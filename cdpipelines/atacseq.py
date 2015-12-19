@@ -1082,13 +1082,14 @@ def pipeline(
         if not job.delete_sh:
             submit_commands.append(job.sge_submit_command())
    
-    # We'll only go through the allelic bias steps if a VCF was provided.
+    # We'll count the allele coverage for heterozygous alleles to perform an
+    # identity check. We'll only do this if a VCF was provided.
     if vcf:
-        ##### Job 10: WASP first step. #####
+        ##### Job 10: Heterozygous allele counts. #####
         job = ATACJobScript(
             sample_name, 
-            job_suffix = 'wasp_allele_swap',
-            outdir=os.path.join(outdir, 'wasp'),
+            job_suffix = 'het_counts',
+            outdir=os.path.join(outdir, 'het_counts'),
             threads=1, 
             memory=4, 
             linkdir=linkdir,
@@ -1099,127 +1100,18 @@ def pipeline(
             modules=modules,
             wait_for=[sort_rmdup_index_jobname],
         )
-        wasp_allele_swap_jobname = job.jobname
+        het_counts_jobname = job.jobname
            
         # Input files.
-        rmdup_bam = job.add_input_file(rmdup_bam)
+        rmdup_bam = job.add_input_file(outdir_rmdup_bam)
         # The VCF might be large so we probably don't want to copy it ever.
         vcf = job.add_input_file(vcf, copy=False)
         # The exon bed file is small so we don't need to copy it ever.
         exon_bed = job.add_input_file(exon_bed, copy=False)
 
-        # Run WASP allele swap.
-        if not vcf_sample_name:
-            vcf_sample_name = sample_name
-        (snp_directory, hets_vcf, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
-         to_remap_bam, to_remap_num) = job.wasp_allele_swap(
-             rmdup_bam, 
-             find_intersecting_snps_path, 
-             vcf, 
-             exon_bed,
-             gatk_fai=gatk_fasta + '.fai',
-             vcf_sample_name=vcf_sample_name, 
-             samtools_path=samtools_path,
-             bcftools_path=bcftools_path,
-        )
-        # WASP outputs a file (keep_bam) that has reads that don't overlap
-        # variants. I'm going to discard that file. I'll discard the WASP SNP
-        # directory as well since I have the hets in a VCF file.
-        job.add_temp_file(keep_bam)
-        snp_directory = job.add_temp_file(snp_directory)
-        hets_vcf = job.add_output_file(hets_vcf)
-        wasp_r1_fastq = job.add_output_file(wasp_r1_fastq)
-        wasp_r2_fastq = job.add_output_file(wasp_r2_fastq)
-        to_remap_bam = job.add_output_file(to_remap_bam)
-        to_remap_num = job.add_output_file(to_remap_num)
-
-        job.write_end()
-        if not job.delete_sh:
-            submit_commands.append(job.sge_submit_command())
-        
-        ##### Job 11: WASP second step. #####
-        job = ATACJobScript(
-            sample_name, 
-            job_suffix='wasp_remap',
-            outdir=os.path.join(outdir, 'wasp'),
-            threads=8, 
-            memory=32, 
-            linkdir=linkdir,
-            webpath=webpath,
-            tempdir=tempdir,
-            queue=queue, 
-            conda_env=conda_env, 
-            modules=modules,
-            wait_for=[wasp_allele_swap_jobname],
-        )
-        wasp_remap_jobname = job.jobname
-        
-        # Input files.
-        wasp_r1_fastq = job.add_input_file(wasp_r1_fastq, delete_original=True)
-        wasp_r2_fastq = job.add_input_file(wasp_r2_fastq, delete_original=True)
-
-        # Realign allele-swapped fastqs.
-        remapped_bam, log_out, log_final_out, log_progress_out, sj_out = \
-                job.star_align(wasp_r1_fastq, wasp_r2_fastq, rgpl, rgpu,
-                               star_index, job.threads,
-                               genome_load=star_genome_load,
-                               transcriptome_align=False)
-        job.add_output_file(remapped_bam)
-        job.add_output_file(log_out)
-        job.add_output_file(log_final_out)
-        job.add_output_file(log_progress_out)
-        job.add_temp_file(sj_out)
-
-        job.write_end()
-        if not job.delete_sh:
-            submit_commands.append(job.sge_submit_command())
-        
-        ##### Job 12: WASP third step. #####
-        job = ATACJobScript(
-            sample_name, 
-            job_suffix = 'wasp_alignment_compare',
-            outdir=os.path.join(outdir, 'wasp'),
-            threads=1, 
-            memory=5, 
-            linkdir=linkdir,
-            webpath=webpath,
-            tempdir=tempdir, 
-            queue=queue,
-            conda_env=conda_env, 
-            modules=modules,
-            wait_for=[wasp_remap_jobname],
-        )
-        wasp_alignment_compare_jobname = job.jobname
-
-        # Input files.
-        to_remap_bam = job.add_input_file(to_remap_bam, delete_original=True)
-        to_remap_num = job.add_input_file(to_remap_num, delete_original=True)
-        remapped_bam = job.add_input_file(remapped_bam, delete_original=True)
-
-        # Compare alignments.
-        temp_filtered_bam = job.wasp_alignment_compare(
-            to_remap_bam, 
-            to_remap_num,
-            remapped_bam, 
-            filter_remapped_reads_path,
-        )
-        job.add_temp_file(temp_filtered_bam)
-            
-        # Coordinate sort and index filtered bam file.
-        wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
-            temp_filtered_bam, 
-            index=True,
-            picard_path=picard_path,
-        )
-        # I'll keep this bam file and its index as a record of which reads were
-        # used to calculate allelic bias. It might be useful for visualization.
-        # The bam file is pretty small anyway.
-        job.add_output_file(wasp_filtered_bam)
-        job.add_output_file(wasp_bam_index)
-
         # Reorder bam file so it will work with GATK.
         reordered_bam = job.picard_reorder(
-            wasp_filtered_bam, 
+            rmdup_bam, 
             fasta=gatk_fasta,
             picard_path=picard_path,
         )
@@ -1233,6 +1125,7 @@ def pipeline(
         )
         job.add_temp_file(reordered_index)
 
+        # TODO: I need to create the hets_vcf file.
         # Get allele counts.
         allele_counts = job.count_allele_coverage(
             reordered_bam, 
@@ -1246,44 +1139,6 @@ def pipeline(
         if not job.delete_sh:
             submit_commands.append(job.sge_submit_command())
         
-        ##### Job 13: Run MBASED for allelic bias. #####
-        job = ATACJobScript(
-            sample_name,
-            job_suffix='mbased',
-            outdir=os.path.join(outdir, 'mbased'),
-            threads=8, 
-            memory=16, 
-            linkdir=linkdir,
-            webpath=webpath,
-            tempdir=tempdir, 
-            queue=queue,
-            conda_env=conda_env, 
-            modules=modules,
-            wait_for=[wasp_alignment_compare_jobname],
-        )
-        mbased_jobname = job.jobname
-    
-        # Input files.
-        allele_counts = job.add_input_file(allele_counts)
-
-        mbased_infile, locus_outfile, snv_outfile = job.mbased(
-            allele_counts, 
-            gene_bed, 
-            is_phased=is_phased, 
-            num_sim=1000000, 
-            vcf=vcf,
-            vcf_sample_name=vcf_sample_name, 
-            mappability=mappability,
-            bigWigAverageOverBed_path=bigWigAverageOverBed_path,
-        )
-        job.add_output_file(mbased_infile)
-        job.add_output_file(locus_outfile)
-        job.add_output_file(snv_outfile)
-
-        job.write_end()
-        if not job.delete_sh:
-            submit_commands.append(job.sge_submit_command())
-
     ##### Submission script #####
     # Now we'll make a submission script that submits the jobs with the
     # appropriate dependencies.

@@ -360,6 +360,60 @@ class JobScript:
         if self.delete_sh:
             os.remove(self.filename)
 
+    def heterozygous_variants(
+        vcf, 
+        regions, 
+        vcf_out,
+        vcf_sample_name=None,
+        gatk_fai=None, 
+        vcf_chrom_conv=None,
+        bcftools_path='bcftools',
+    ):
+        """
+        Extract all biallelic heterozygous variants for this sample.
+    
+        Parameters:
+        -----------
+        vcf : str
+            Path to VCF file.
+    
+        regions : str
+            Path to bed file to define regions of interests (e.g. exons, peaks,
+            etc.). 
+    
+        vcf_out : str
+            Path to output vcf file that contains heterozygous variants for this
+            sample. 
+    
+        vcf_sample_name : str
+            Use this sample name to get heterozygous SNPs from VCF file.
+    
+        gatk_fai : str
+            Path to karyotypically sorted fasta index (fai) file that works with
+            GATK.  The output VCF file will be sorted in the order of this fai
+            file for compatibility with GATK. Assumed to have associated fai and
+            dict files.
+    
+        vcf_chrom_conv : str
+            File with VCF chromosomes in first column and corresponding RNA-seq
+            chromosomes in second column (no header). This is needed if the VCF
+            and RNA-seq data have different chromosome naming.
+    
+        """
+        # TODO: test this, make regions optional?
+        vcf_out = os.path.join(self.tempdir,
+                               '{}_hets.vcf'.format(self.sample_name))
+        lines = ('{} view -O u -m2 -M2 \\\n\t-R {} \\\n\t-s {} \\\n\t{} \\\n\t'
+                 '| {} view -g het '.format(
+                     bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path))
+        if vcf_chrom_conv:
+            lines += '-Ou \\\n\t| {} annotate --rename-chrs {} '.format(
+                bcftools_path, vcf_chrom_conv)
+        lines += '> {}'.format(vcf_out)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return vcf_out
+
     def make_md5sum(
         self,
         fn):
@@ -1992,7 +2046,8 @@ def _wasp_snp_directory(
             s = '\n'.join(df.apply(lambda x: '\t'.join(x), axis=1)) + '\n'
             bt = pbt.BedTool(s, from_string=True)
 
-    # Extract all heterozygous variants for this sample.
+    # Extract all heterozygous variants for this sample. We'll write the files
+    # needed for WASP as well as a VCF with just the hets for this sample.
     if not os.path.exists(directory):
         os.makedirs(directory)
 
