@@ -436,6 +436,7 @@ def pipeline(
     webpath_file=None,
     vcf=None,
     vcf_sample_name=None,
+    vcf_chrom_conv=None,
     is_phased=False,
     conda_env=None,
     modules=None,
@@ -532,6 +533,11 @@ def pipeline(
         Sample name of this sample in the VCF file (if different than
         sample_name). For instance, the sample name in the VCF file may be the
         sample name for WGS data which may differ from the ATAC-seq sample name.
+
+    vcf_chrom_conv : str
+        File with VCF chromosomes in first column and corresponding ATAC-seq
+        chromosomes in second column (no header). This is needed if the VCF and
+        ATAC-seq data have different chromosome naming.
 
     conda_env : str
         Conda environment to load at the beginning of the script.
@@ -1106,8 +1112,8 @@ def pipeline(
         rmdup_bam = job.add_input_file(outdir_rmdup_bam)
         # The VCF might be large so we probably don't want to copy it ever.
         vcf = job.add_input_file(vcf, copy=False)
-        # The exon bed file is small so we don't need to copy it ever.
-        exon_bed = job.add_input_file(exon_bed, copy=False)
+        # The peak bed file is small so we don't need to copy it ever.
+        narrow_peak = job.add_input_file(outdir_narrow_peak, copy=False)
 
         # Reorder bam file so it will work with GATK.
         reordered_bam = job.picard_reorder(
@@ -1125,7 +1131,24 @@ def pipeline(
         )
         job.add_temp_file(reordered_index)
 
-        # TODO: I need to create the hets_vcf file.
+        # Merge peak file.
+        merged_peak = job.merge_bed(
+            bed,
+            bedtools_path=bedtools_path,
+        )
+        job.add_tempfile(merged_peak)
+
+        # Create a file with het variants.
+        hets_vcf = job.make_het_vcf(
+            vcf, 
+            merged_peak, 
+            vcf_sample_name=vcf_sample_name,
+            gatk_fai=gatk_fai,
+            vcf_chrom_conv=vcf_chrom_conv,
+            bcftools_path=bcftools_path,
+        )
+        job.add_output_file(hets_vcf)
+
         # Get allele counts.
         allele_counts = job.count_allele_coverage(
             reordered_bam, 

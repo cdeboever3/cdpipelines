@@ -574,7 +574,7 @@ def pipeline(
     gatk_fasta=None,
     linkdir=None,
     webpath_file=None,
-    vcf=None,
+    vcfs=None,
     vcf_sample_name=None,
     vcf_chrom_conv=None,
     is_phased=False,
@@ -677,11 +677,13 @@ def pipeline(
         just put the webpath_file in a directory that isn't tracked by git, 
         figshare, etc.
 
-    vcf : str
-        VCF file containing exonic variants used for ASE.
+    vcfs : list
+        List of VCF files containing exonic variants used for ASE. The VCF files
+        will be concatenated so they shouldn't overlap in sites (e.g. they
+        should be different chromosomes, genomic regions, etc.).
     
     vcf_sample_name : str
-        Sample name of this sample in the VCF file (if different than
+        Sample name of this sample in the VCF files (if different than
         sample_name). For instance, the sample name in the VCF file may be the
         sample name for WGS data which may differ from the RNA-seq sample name.
 
@@ -1218,8 +1220,10 @@ def pipeline(
            
         # Input files.
         mdup_bam = job.add_input_file(mdup_bam)
-        # The VCF might be large so we probably don't want to copy it ever.
-        vcf = job.add_input_file(vcf, copy=False)
+        # The VCFs might be large so we probably don't want to copy it ever.
+        vcfs = []
+        for vcf in vcfs:
+            vcfs.append(job.add_input_file(vcf, copy=False))
         # The exon bed file is small so we don't need to copy it ever.
         exon_bed = job.add_input_file(exon_bed, copy=False)
 
@@ -1230,7 +1234,7 @@ def pipeline(
          to_remap_bam, to_remap_num) = job.wasp_allele_swap(
              mdup_bam, 
              find_intersecting_snps_path, 
-             vcf, 
+             vcfs, 
              exon_bed,
              gatk_fai=gatk_fasta + '.fai',
              vcf_sample_name=vcf_sample_name, 
@@ -1389,6 +1393,7 @@ def pipeline(
             num_sim=1000000, 
             vcf=vcf,
             vcf_sample_name=vcf_sample_name, 
+            vcf_chrom_conv=vcf_chrom_conv,
             mappability=mappability,
             bigWigAverageOverBed_path=bigWigAverageOverBed_path,
         )

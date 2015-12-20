@@ -360,10 +360,9 @@ class JobScript:
         if self.delete_sh:
             os.remove(self.filename)
 
-    def heterozygous_variants(
+    def make_het_vcf(
         vcf, 
-        regions, 
-        vcf_out,
+        regions=None,
         vcf_sample_name=None,
         gatk_fai=None, 
         vcf_chrom_conv=None,
@@ -381,10 +380,6 @@ class JobScript:
             Path to bed file to define regions of interests (e.g. exons, peaks,
             etc.). 
     
-        vcf_out : str
-            Path to output vcf file that contains heterozygous variants for this
-            sample. 
-    
         vcf_sample_name : str
             Use this sample name to get heterozygous SNPs from VCF file.
     
@@ -400,12 +395,15 @@ class JobScript:
             and RNA-seq data have different chromosome naming.
     
         """
-        # TODO: test this, make regions optional?
         vcf_out = os.path.join(self.tempdir,
                                '{}_hets.vcf'.format(self.sample_name))
-        lines = ('{} view -O u -m2 -M2 \\\n\t-R {} \\\n\t-s {} \\\n\t{} \\\n\t'
-                 '| {} view -g het '.format(
-                     bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path))
+        if regions:
+            r = '\\\n\t-R {} '.format(regions)
+        else:
+            r = ''
+        lines = ('{0} view -O u -m2 -M2 {1}\\\n\t-s {2} \\\n\t{3} \\\n\t'
+                 '| {0} view -g het '.format(
+                     bcftools_path, regions, vcf_sample_name, vcf))
         if vcf_chrom_conv:
             lines += '-Ou \\\n\t| {} annotate --rename-chrs {} '.format(
                 bcftools_path, vcf_chrom_conv)
@@ -422,6 +420,19 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write(lines)
         return fn + '.md5'
+
+    def merge_bed(
+        bed, 
+        bedtools_path='bedtools',
+    ):
+        """Merge a bed file using bedtools."""
+        root = os.path.splitext(os.path.split(bed)[1])[0]
+        out_bed = os.path.join(self.tempdir, '{}_merged.bed'.format(root))
+        lines = '{0} sort -i {1} | {0} merge -i stdin > {2}'.format(
+            bedtools_path, bed, out_bed)
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out_bed
 
     def homer_motif_analysis(
         self,
@@ -1667,7 +1678,7 @@ class JobScript:
         self,
         bam, 
         find_intersecting_snps_path, 
-        vcf, 
+        vcfs, 
         bed,
         gatk_fai=None,
         vcf_sample_name=None, 
@@ -1686,8 +1697,8 @@ class JobScript:
         find_intersecting_snps_path : str
             Path to find_intersecting_snps.py script.
 
-        vcf : str
-            VCF file containing exonic SNPs.
+        vcf : list
+            List of VCF files to extract heterozygous variants from.
 
         bed : str
             Path to bed file defining regions to look for variants in. This file
@@ -1765,7 +1776,7 @@ class JobScript:
         snp_directory = os.path.join(self.tempdir, 'snps')
         lines = ' \\\n\t'.join([
             'python {}'.format(input_script),
-            vcf,
+            vcfs,
             vcf_out,
             vcf_sample_name,
             snp_directory,
@@ -1892,6 +1903,7 @@ class JobScript:
         num_sim=1000000, 
         vcf=None,
         vcf_sample_name=None, 
+        vcf_chrom_conv=None,
         mappability=None,
         bigWigAverageOverBed_path='bigWigAverageOverBed',
     ):
@@ -1924,6 +1936,11 @@ class JobScript:
             If vcf is provided, this must be provided to specify the sample name
             of this sample in the VCF file. Required if vcf is provided.
     
+        vcf_chrom_conv : str
+            File with VCF chromosomes in first column and corresponding RNA-seq
+            chromosomes in second column (no header). This is needed if the VCF
+            and RNA-seq data have different chromosome naming.
+    
         mappability : str
             Path to bigwig file with mappability scores. A score of one should
             mean uniquely mapping.
@@ -1955,10 +1972,12 @@ class JobScript:
         lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
             script, allele_counts, mbased_infile, feature_bed)
         if vcf:
-            lines += ' \\\n\t-v {} -s {}'.format(vcf, vcf_sample_name)
+            lines += ' \\\n\t-v {} \\\n\t-s {}'.format(vcf, vcf_sample_name)
         if mappability:
-            lines += ' \\\n\t-m {} -p {}'.format(mappability,
-                                                 bigWigAverageOverBed_path)
+            lines += ' \\\n\t-m {} \\\n\t-p {}'.format(
+                mappability, bigWigAverageOverBed_path)
+        if vcf_chrom_conv:
+            lines += ' \\\n\t-c {}'.format(vcf_chrom_conv)
         lines += '\n\n'
         script = os.path.join(_scripts, 'mbased.R')
         lines += 'Rscript '
@@ -1971,7 +1990,7 @@ class JobScript:
         return mbased_infile, locus_outfile, snv_outfile
 
 def _wasp_snp_directory(
-    vcf, 
+    vcfs, 
     directory, 
     vcf_sample_name, 
     regions, 
@@ -1982,13 +2001,13 @@ def _wasp_snp_directory(
     bcftools_path='bcftools',
 ):
     """
-    Convert VCF file into input files directory and files needed for WASP. Only
+    Convert VCF files into input files directory and files needed for WASP. Only
     bi-allelic heterozygous sites are used. Both SNPs and indels are included.
 
     Parameters:
     -----------
-    vcf : str
-        Path to VCF file.
+    vcfs : list
+        List of path to VCF files.
 
     directory : str
         Output directory. A directory snps will be output in this directory with
@@ -2023,6 +2042,7 @@ def _wasp_snp_directory(
     import glob
     import pybedtools as pbt
     from __init__ import _scripts
+    # TODO: implement for multiple VCFs below.
     
     # Collapse bed file.
     bt = pbt.BedTool(regions)

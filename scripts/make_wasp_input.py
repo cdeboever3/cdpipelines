@@ -6,7 +6,6 @@ def main():
     parser = argparse.ArgumentParser(description=(
         'This script takes a VCF and sample name and makes the '
         'SNP directory needed for the mapping part of WASP.'))
-    parser.add_argument('vcf', help='VCF file with variants.')
     parser.add_argument('vcf_out', help=(
         'Output VCF file with heterozygous variants for this sample.'))
     parser.add_argument('sample_name', help=('Sample name in VCF file.'))
@@ -16,6 +15,17 @@ def main():
     parser.add_argument('regions', help=(
         'Path to bed file to define regions of interests (e.g. exons, peaks, '
         'etc.).'))
+    parser.add_argument(
+        '-v', 
+        metavar='vcfs', 
+        required=True, 
+        action='append', 
+        help=(
+            'VCF files with variants. Multiple -v VCFs can be provided (-v '
+            'chr1.vcf.gz -v chr2.vcf.gz) but they shouldn\'t overlap in '
+            'genomic coordinates (e.g. they should be for separate chromosomes '
+            'etc.).'),
+    )
     parser.add_argument('-g', metavar='gatk_fasta', help=(
         'Path to karyotypically sorted fasta index (fai) file that works with '
         'GATK. The output VCF file will be sorted in the order of this fai '
@@ -33,7 +43,7 @@ def main():
         default='bcftools')
         
     args = parser.parse_args()
-    vcf = args.vcf
+    vcfs = args.vcfs
     vcf_out = args.vcf_out
     sample_name = args.sample_name
     directory = args.snp_directory
@@ -44,7 +54,7 @@ def main():
     bcftools_path = args.b
 
     ps.general._wasp_snp_directory(
-        vcf, 
+        vcfs, 
         directory, 
         sample_name, 
         regions,
