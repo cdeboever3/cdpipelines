@@ -1776,11 +1776,11 @@ class JobScript:
         snp_directory = os.path.join(self.tempdir, 'snps')
         lines = ' \\\n\t'.join([
             'python {}'.format(input_script),
-            vcfs,
             vcf_out,
             vcf_sample_name,
             snp_directory,
             bed,
+            '-v ' + ' \\\n\t-v '.join(vcfs),
             '-g {}'.format(gatk_fai),
             '-b {}'.format(bcftools_path),
             '-t {}'.format(self.tempdir),
@@ -1901,7 +1901,7 @@ class JobScript:
         feature_bed, 
         is_phased=False, 
         num_sim=1000000, 
-        vcf=None,
+        vcfs=None,
         vcf_sample_name=None, 
         vcf_chrom_conv=None,
         mappability=None,
@@ -1926,11 +1926,11 @@ class JobScript:
         num_sim : int
             Number of simulations for MBASED to perform.
     
-        vcf : str
-            Path to gzipped, indexed VCF file with all variant calls (not just
-            heterozygous calls). This will be used to filter out heterozygous
-            variants that are near other heterzygous or homozygous alternate
-            variants that may cause mapping problems.
+        vcfs : str
+            List of paths to gzipped, indexed VCF file with all variant calls
+            (not just heterozygous calls). These will be used to filter out
+            heterozygous variants that are near other heterzygous or homozygous
+            alternate variants that may cause mapping problems.
     
         vcf_sample_name : str
             If vcf is provided, this must be provided to specify the sample name
@@ -1971,8 +1971,9 @@ class JobScript:
         script = os.path.join(_scripts, 'make_mbased_input.py')
         lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
             script, allele_counts, mbased_infile, feature_bed)
-        if vcf:
-            lines += ' \\\n\t-v {} \\\n\t-s {}'.format(vcf, vcf_sample_name)
+        if vcfs:
+            lines += ' \\\n\t-v {} \\\n\t-s {}'.format(' \\\n\t-v '.join(vcfs), 
+                                                       vcf_sample_name)
         if mappability:
             lines += ' \\\n\t-m {} \\\n\t-p {}'.format(
                 mappability, bigWigAverageOverBed_path)
@@ -1988,128 +1989,6 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write(lines)
         return mbased_infile, locus_outfile, snv_outfile
-
-def _wasp_snp_directory(
-    vcfs, 
-    directory, 
-    vcf_sample_name, 
-    regions, 
-    vcf_out,
-    gatk_fai=None, 
-    vcf_chrom_conv=None,
-    tempdir='.', 
-    bcftools_path='bcftools',
-):
-    """
-    Convert VCF files into input files directory and files needed for WASP. Only
-    bi-allelic heterozygous sites are used. Both SNPs and indels are included.
-
-    Parameters:
-    -----------
-    vcfs : list
-        List of path to VCF files.
-
-    directory : str
-        Output directory. A directory snps will be output in this directory with
-        the variants for WASP.
-
-    vcf_sample_name : str
-        Use this sample name to get heterozygous SNPs from VCF file.
-
-    regions : str
-        Path to bed file to define regions of interests (e.g. exons, peaks,
-        etc.). 
-
-    vcf_out : str
-        Path to output vcf file that contains heterozygous variants for this
-        sample. 
-
-    gatk_fai : str
-        Path to karyotypically sorted fasta index (fai) file that works with
-        GATK.  The output VCF file will be sorted in the order of this fai file
-        for compatibility with GATK. Assumed to have associated fai and dict
-        files.
-
-    vcf_chrom_conv : str
-        File with VCF chromosomes in first column and corresponding RNA-seq
-        chromosomes in second column (no header). This is needed if the VCF
-        and RNA-seq data have different chromosome naming.
-
-    tempdir : str
-        Path to temporary directory. Only used when gatk_fai is provided.
-
-    """
-    import glob
-    import pybedtools as pbt
-    from __init__ import _scripts
-    # TODO: implement for multiple VCFs below.
-    
-    # Collapse bed file.
-    bt = pbt.BedTool(regions)
-    bt = bt.merge()
-    # If a vcf_chrom_conv file is provided, we should check to see which
-    # chromosome naming scheme was used for this bed file. If it's not the
-    # correct naming scheme for the VCF, we'll convert.
-    if vcf_chrom_conv:
-        import pandas as pd
-        conv = pd.read_table(vcf_chrom_conv, header=None, index_col=1,
-                             squeeze=True)
-        df = bt.to_dataframe()
-        # Check to see whether any chromosomes hvae RNA-seq naming convention.
-        # If so, we'll assume the bed file is in the RNA-seq naming convention.
-        # Any chromosomes not in our conversion index will be dropped from the
-        # bed file.
-        if len(set(df.chrom) & set(conv.index)) > 0:
-            df = df[df.chrom.apply(lambda x: x in conv.index)]
-            df['chrom'] = df.chrom.apply(lambda x: conv[x])
-            df = df.astype(str)
-            s = '\n'.join(df.apply(lambda x: '\t'.join(x), axis=1)) + '\n'
-            bt = pbt.BedTool(s, from_string=True)
-
-    # Extract all heterozygous variants for this sample. We'll write the files
-    # needed for WASP as well as a VCF with just the hets for this sample.
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    c = ('{} view -O u -m2 -M2 \\\n\t-R {} \\\n\t-s {} \\\n\t{} \\\n\t'
-         '| {} view -g het '.format(
-             bcftools_path, bt.fn, vcf_sample_name, vcf, bcftools_path))
-    if vcf_chrom_conv:
-        c += '-Ou \\\n\t| {} annotate --rename-chrs {} '.format(bcftools_path,
-                                                                vcf_chrom_conv)
-         
-    c += ('\\\n\t| tee {} \\\n\t| grep -v ^\\# \\\n\t| cut -f1,2,4,5 \\\n\t| '
-         'awk \'{{print $2"\\t"$3"\\t"$4 >> ("{}/"$1".snps.txt")}}\''.format(
-             vcf_out, directory))
-    subprocess.check_call(c, shell=True)
-
-    # Now we gzip the files.
-    fns = glob.glob(os.path.join(directory, '*.snps.txt'))
-    for fn in fns:
-        subprocess.check_call('gzip {}'.format(fn), shell=True)
-
-    # If a gatk_fai file is provided, we need to reorder the VCF to match
-    # the fai.
-    if gatk_fai:
-        vcf_sorted = os.path.join(tempdir,
-                                  '{}_sorted.vcf'.format(vcf_sample_name))
-        sortByRef_path = os.path.join(_scripts, 'sortByRef.pl')
-        c = 'perl {} {} {} > {}'.format(sortByRef_path, vcf_out, gatk_fai,
-                                           vcf_sorted)
-        subprocess.check_call(c, shell=True)
-        vcf_header = os.path.join(tempdir,
-                                  '{}_header.vcf'.format(vcf_sample_name))
-        c = 'grep ^\\# {} > {}'.format(vcf_sorted, vcf_header)
-        subprocess.check_call(c, shell=True)
-        vcf_body = os.path.join(tempdir,
-                                  '{}_body.vcf'.format(vcf_sample_name))
-        c = 'grep -v ^\\# {} > {}'.format(vcf_sorted, vcf_body)
-        subprocess.check_call(c, shell=True)
-        c = 'cat {} {} > {}'.format(vcf_header, vcf_body, vcf_out)
-        subprocess.check_call(c, shell=True)
-        os.remove(vcf_sorted)
-        os.remove(vcf_header)
-        os.remove(vcf_body)
 
 # The method below needs to be updated for SGE and JobScript. I've done a little
 # already.

@@ -1200,7 +1200,7 @@ def pipeline(
         submit_commands.append(job.sge_submit_command())
    
     # We'll only go through the ASE steps if a VCF was provided.
-    if vcf:
+    if vcfs:
         ##### Job 9: WASP first step. #####
         job = RNAJobScript(
             sample_name, 
@@ -1221,9 +1221,9 @@ def pipeline(
         # Input files.
         mdup_bam = job.add_input_file(mdup_bam)
         # The VCFs might be large so we probably don't want to copy it ever.
-        vcfs = []
+        input_vcfs = []
         for vcf in vcfs:
-            vcfs.append(job.add_input_file(vcf, copy=False))
+            input_vcfs.append(job.add_input_file(vcf, copy=False))
         # The exon bed file is small so we don't need to copy it ever.
         exon_bed = job.add_input_file(exon_bed, copy=False)
 
@@ -1234,7 +1234,7 @@ def pipeline(
          to_remap_bam, to_remap_num) = job.wasp_allele_swap(
              mdup_bam, 
              find_intersecting_snps_path, 
-             vcfs, 
+             input_vcfs, 
              exon_bed,
              gatk_fai=gatk_fasta + '.fai',
              vcf_sample_name=vcf_sample_name, 
@@ -1391,7 +1391,7 @@ def pipeline(
             gene_bed, 
             is_phased=is_phased, 
             num_sim=1000000, 
-            vcf=vcf,
+            vcfs=input_vcfs,
             vcf_sample_name=vcf_sample_name, 
             vcf_chrom_conv=vcf_chrom_conv,
             mappability=mappability,

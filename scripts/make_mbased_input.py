@@ -65,7 +65,7 @@ def _binomial_test(counts):
 
 def _vcf_filter(
     counts, 
-    vcf, 
+    vcfs, 
     sample_name, 
     chrom_conv=None, 
     min_dist=10,
@@ -81,8 +81,8 @@ def _vcf_filter(
     counts : pandas.DataFrame
         ASEReadCounter results as a dataframe.
 
-    vcf : str
-        Path to gzipped, indexed VCF file with all variant calls.
+    vcfs : list
+        List of paths to gzipped, indexed VCF file with all variant calls.
 
     sample_name : str
         Sample name for this sample in the VCF file.
@@ -100,28 +100,32 @@ def _vcf_filter(
     import vcf as pyvcf
     if chrom_conv:
         conv = pd.read_table(chrom_conv, header=None, index_col=1, squeeze=True)
-    reader = pyvcf.Reader(open(vcf), compressed=True)
+    readers = [pyvcf.Reader(open(vcf), compressed=True) for vcf in vcfs]
     remove = []
     for i in counts.index:
-        chrom, pos = counts.ix[i, ['contig', 'position']]
-        start = int(pos) - 10
-        end = int(pos) + 10
-        if chrom_conv:
-            chrom = conv[chrom]
-        res = reader.fetch(chrom, start, end)
-        count = 0
-        while True:
+        for reader in readers:
+            chrom, pos = counts.ix[i, ['contig', 'position']]
+            start = int(pos) - 10
+            end = int(pos) + 10
+            if chrom_conv:
+                chrom = conv[chrom]
             try:
-                r = res.next()
-                hets = [x.sample for x in r.get_hets()]
-                hom_alts = [x.sample for x in r.get_hom_alts()]
-                if (r.CHROM == chrom and r.POS < end and 
-                    (sample_name in hets or sample_name in hom_alts)):
-                    count += 1
-                else:
-                    break
-            except StopIteration:
-                break
+                res = reader.fetch(chrom, start, end)
+                count = 0
+                while True:
+                    try:
+                        r = res.next()
+                        hets = [x.sample for x in r.get_hets()]
+                        hom_alts = [x.sample for x in r.get_hom_alts()]
+                        if (r.CHROM == chrom and r.POS < end and 
+                            (sample_name in hets or sample_name in hom_alts)):
+                            count += 1
+                        else:
+                            break
+                    except StopIteration:
+                        break
+            except ValueError:
+                continue
         if count > 1:
             remove.append(i)
     counts = counts.drop(remove)
@@ -276,7 +280,7 @@ def make_mbased_input(
     counts, 
     out, 
     bed, 
-    vcf=None, 
+    vcfs=None, 
     chrom_conv=None,
     sample_name=None,
     mappability=None, 
@@ -295,9 +299,9 @@ def make_mbased_input(
     out : str
         Output tsv file for MBASED.
 
-    vcf : str
-        Path to gzipped, indexed VCF file with all variant calls (not just
-        heterozygous calls).
+    vcfs : str
+        List of paths to gzipped, indexed VCF files with all variant calls (not
+        just heterozygous calls).
 
     sample_name : str
         If vcf is provided, this must be provided to specify the sample name of
@@ -311,7 +315,7 @@ def make_mbased_input(
         Path to bigWigAverageOverBed. Required if mappability is provided.
 
     """
-    if vcf is not None:
+    if vcfs is not None:
         assert sample_name is not None
     if type(counts) == str:
         counts = pd.read_table(counts)
@@ -339,10 +343,10 @@ def make_mbased_input(
         # Remove SNVs with non-unique mappability. GTEx filter.
         counts = _mappability_filter(counts, mappability,
                                      bigWigAverageOverBed_path)
-    if vcf:
+    if vcfs:
         # Remove SNVs that are within 10 bp of other variants to avoid mapping
         # biases. MBASED filter.
-        counts = _vcf_filter(counts, vcf, sample_name, chrom_conv=chrom_conv,
+        counts = _vcf_filter(counts, vcfs, sample_name, chrom_conv=chrom_conv,
                              min_dist=10)
     # Assign SNVs to features.
     counts = _assign_features(counts, bed)
@@ -365,9 +369,19 @@ def main():
     h = ('Bed file for assigning SNVs to features. If a SNV overlaps more than '
          'one feature, it will be removed.')
     parser.add_argument('bed', help=h)
-    h = ('VCF file with all variant calls. Heterozygous SNVs within 10 bp of '
-         'another variant will be removed to avoid mapping bias.')
-    parser.add_argument('-v', metavar='vcf', default=None, help=h)
+    parser.add_argument(
+        '-v', 
+        metavar='vcfs', 
+        required=True, 
+        action='append', 
+        help=(
+            'VCF files with all variant calls. Heterozygous SNVs within 10 bp '
+            'of another variant will be removed to avoid mapping bias. '
+            'Multiple -v VCFs can be provided (-v '
+            'chr1.vcf.gz -v chr2.vcf.gz) but they shouldn\'t overlap in '
+            'genomic coordinates (e.g. they should be for separate chromosomes '
+            'etc.).'),
+    )
     parser.add_argument('-c', metavar='chrom_conv', help=(
         'File with VCF chromosomes in first column and corresponding RNA-seq '
         'chromosomes in second column (no header). This is needed if the VCF '
@@ -386,7 +400,7 @@ def main():
     counts = args.counts
     out = args.out
     bed = args.bed
-    vcf = args.v
+    vcfs = args.v
     chrom_conv = args.c
     sample_name = args.s
     mappability = args.m
@@ -396,7 +410,7 @@ def main():
         counts, 
         out, 
         bed, 
-        vcf=vcf, 
+        vcfs=vcfs,
         chrom_conv=chrom_conv,
         sample_name=sample_name, 
         mappability=mappability,
