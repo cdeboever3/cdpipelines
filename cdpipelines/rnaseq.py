@@ -580,7 +580,7 @@ def pipeline(
     is_phased=False,
     conda_env=None,
     modules=None,
-    queue=None,
+    queue='frazer',
     star_genome_load='LoadAndRemove',
     rgpl='ILLUMINA',
     rgpu='',
@@ -698,6 +698,11 @@ def pipeline(
     modules : str
         Comma-separated list of modules to load at the beginning of the script.
 
+    queue : str
+        Name of queue to submit jobs to. The default value of "frazer" will
+        submit different jobs to the different queues on the Frazer lab cluster
+        in an optimal way.
+
     rgpl : str
         Read Group platform (e.g. illumina, solid). 
 
@@ -756,6 +761,14 @@ def pipeline(
     # Bash commands to submit jobs. I'll collect these as I make the jobs and
     # then write them to a file at the end.
     submit_commands = []
+
+    # Set default queue for Frazer lab settings. None will just go to the
+    # default queue. For jobs that need a specific queue, I'll set the queue
+    # below.
+    if queue == 'frazer':
+        default_queue = None
+    else:
+        default_queue = queue
     
     ##### Job 1: Combine fastqs and align with STAR. #####
     job = RNAJobScript(
@@ -767,7 +780,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules,
     )
@@ -816,7 +829,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules, 
         wait_for=[alignment_jobname]
@@ -846,7 +859,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules,
         wait_for=[alignment_jobname]
@@ -912,7 +925,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue,
+        queue=default_queue,
         conda_env=conda_env, 
         modules=modules,
         wait_for=[sort_mdup_index_jobname],
@@ -966,7 +979,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules,
         wait_for=[sort_mdup_index_jobname],
@@ -994,7 +1007,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules,
         wait_for=[sort_mdup_index_jobname],
@@ -1127,7 +1140,7 @@ def pipeline(
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
-        queue=queue, 
+        queue=default_queue, 
         conda_env=conda_env,
         modules=modules,
         wait_for=[sort_mdup_index_jobname],
@@ -1172,7 +1185,7 @@ def pipeline(
         memory=32, 
         linkdir=linkdir,
         webpath=webpath,
-        tempdir=tempdir, queue=queue,
+        tempdir=tempdir, queue=default_queue,
         conda_env=conda_env, 
         modules=modules,
         wait_for=[sort_mdup_index_jobname],
@@ -1211,7 +1224,7 @@ def pipeline(
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir, 
-            queue=queue,
+            queue=default_queue,
             conda_env=conda_env, 
             modules=modules,
             wait_for=[sort_mdup_index_jobname],
@@ -1267,7 +1280,7 @@ def pipeline(
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir,
-            queue=queue, 
+            queue=default_queue, 
             conda_env=conda_env, 
             modules=modules,
             wait_for=[wasp_allele_swap_jobname],
@@ -1304,7 +1317,7 @@ def pipeline(
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir, 
-            queue=queue,
+            queue=default_queue,
             conda_env=conda_env, 
             modules=modules,
             wait_for=[wasp_remap_jobname],
@@ -1367,16 +1380,20 @@ def pipeline(
             submit_commands.append(job.sge_submit_command())
         
         ##### Job 12: Run MBASED for ASE. #####
+        if queue == 'frazer':
+            q = 'opt'
+        else:
+            q = queue
         job = RNAJobScript(
             sample_name,
             job_suffix='mbased',
             outdir=os.path.join(outdir, 'mbased'),
-            threads=8, 
-            memory=16, 
+            threads=16, 
+            memory=32, 
             linkdir=linkdir,
             webpath=webpath,
             tempdir=tempdir, 
-            queue=queue,
+            queue=q,
             conda_env=conda_env, 
             modules=modules,
             wait_for=[wasp_alignment_compare_jobname],

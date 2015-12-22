@@ -176,7 +176,7 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write('#!/bin/bash\n\n')
             if self.queue:
-                f.write('#$ -q {}\n'.format(self.queue))
+                f.write('#$ -l {}\n'.format(self.queue))
             f.write('#$ -N {}\n'.format(self.jobname))
             f.write('#$ -l h_vmem={}G\n'.format(
                 self.memory / float(self.threads)))
