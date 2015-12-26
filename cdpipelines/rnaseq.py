@@ -1430,8 +1430,10 @@ def pipeline(
     now = now.replace('-', '_').replace(' ', '_').replace(':', '_').replace('.', '_')
     submit_fn = os.path.join(outdir, 'sh', '{}_submit_{}.sh'.format(
         sample_name, now))
-    with open(submit_fn, 'w') as f:
-        f.write('#!/bin/bash\n\n')
-        f.write('\n'.join(submit_commands))
-
-    return submit_fn
+    if len(submit_commands) > 0:
+        with open(submit_fn, 'w') as f:
+            f.write('#!/bin/bash\n\n')
+            f.write('\n'.join(submit_commands))
+        return submit_fn
+    else:
+        return None
