@@ -569,6 +569,7 @@ def pipeline(
     gene_bed,
     exon_bed,
     rsem_reference,
+    sra_files=None,
     find_intersecting_snps_path=None,
     filter_remapped_reads_path=None,
     gatk_fasta=None,
@@ -588,6 +589,7 @@ def pipeline(
     tempdir=None,
     mappability=None,
     expected_unique_pairs=20000000,
+    dexseq_count_path=None,
     star_path='STAR',
     picard_path='$picard',
     bedtools_path='bedtools',
@@ -601,7 +603,7 @@ def pipeline(
     bcftools_path='bcftools',
     bammarkduplicates_path='bammarkduplicates',
     featureCounts_path='featureCounts',
-    dexseq_count_path=None,
+    fastq_dump_path='fastq-dump',
 ):
     """
     Make SGE/shell scripts for running the entire RNA-seq pipeline. The defaults
@@ -611,11 +613,13 @@ def pipeline(
     ----------
     r1_fastqs : list or str
         Either a list of paths to gzipped fastq files with R1 reads or path to a
-        single gzipped fastq file with R1 reads.
+        single gzipped fastq file with R1 reads. If you want to process SRA
+        files, pass None here.
 
     r2_fastqs : list or str
         Either a list of paths to gzipped fastq files with R2 reads or path to a
-        single gzipped fastq file with R2 reads.
+        single gzipped fastq file with R2 reads. If you want to process SRA
+        files, pass None here.
 
     outdir : str
         Directory to store shell scripts, stdout/stderr logs, and output files
@@ -649,6 +653,11 @@ def pipeline(
 
     rsem_reference : str
         Directory with RSEM reference.
+
+    sra_files : list
+        List of SRA file paths or URLs. If r1_fastqs and r2_fastqs are None, the
+        pipeline will run for these SRA files (concatenating all files into one
+        sample).
 
     find_intersecting_snps_path : str
         Path to find_intersecting_snps.py from WASP.
@@ -769,7 +778,7 @@ def pipeline(
         default_queue = None
     else:
         default_queue = queue
-    
+
     ##### Job 1: Combine fastqs and align with STAR. #####
     job = RNAJobScript(
         sample_name, 
@@ -785,6 +794,15 @@ def pipeline(
         modules=modules,
     )
     alignment_jobname = job.jobname
+    
+    # If needed, convert SRA files to fastq files. 
+    # TODO: Eventually, I can also take bam files as input and convert them to
+    # fastq if needed.
+    if r1_fastqs is None and r1_fastqs is None and sra_files:
+        r1,r2 = job.convert_sra_to_fastq(sra_files,
+                                         fastq_dump_path=fastq_dump_path)
+        r1_fastqs = [r1]
+        r2_fastqs = [r2]
     
     # Input files.
     for fq in r1_fastqs + r2_fastqs:
@@ -1151,11 +1169,15 @@ def pipeline(
     mdup_bam = job.add_input_file(mdup_bam)
 
     # Get gene counts.
+    if strand_specific:
+        ss = 2
+    else:
+        ss = 0
     gene_counts, gene_count_stats = job.featureCounts_count(
         gene_gtf,
         mdup_bam,
         both=True,
-        strand_specific=2,
+        strand_specific=ss,
         featureCounts_path=featureCounts_path,
     )
     job.add_output_file(gene_counts)
