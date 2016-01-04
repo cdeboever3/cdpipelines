@@ -62,7 +62,7 @@ def num_reads(fn, sambamba_path='sambamba'):
     c = ('{} view -c -F "not (unmapped or mate_is_unmapped) and '
          'mapping_quality >= 255" {}'.format(sambamba_path, fn))
     count = subprocess.check_output(c, shell=True)
-    return count / 2
+    return int(count.strip()) / 2
 
 def main():
     parser = argparse.ArgumentParser(description=(
