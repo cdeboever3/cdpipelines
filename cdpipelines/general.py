@@ -580,7 +580,7 @@ class JobScript:
     def scale_bedgraph(
         self,
         bg,
-        log_final_out,
+        bam,
         expected_num,
     ):
         """
@@ -593,8 +593,8 @@ class JobScript:
         bg : str 
             Path to input bedgraph file.
     
-        log_final_out : str 
-            Path to STAR Log.final.out file.
+        bam : str 
+            Path to bam file used to make bedgraph file.
     
         expected_num : int
             Number of expected reads (pairs). This only needs to be a rough
@@ -621,11 +621,11 @@ class JobScript:
         
         """
         from __init__ import _scripts
-        script = os.path.join(_scripts, 'scale_bedgraph_by_star.py')
+        script = os.path.join(_scripts, 'scale_bedgraph.py')
         root = os.path.splitext(os.path.split(bg)[1])[0]
         out_bg = os.path.join(self.tempdir, '{}_scaled.bg'.format(root))
         lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
-            script, bg, out_bg, log_final_out, expected_num)
+            script, bg, bam, out_bg, expected_num)
         with open(self.filename, "a") as f:
             f.write(lines)
         return out_bg

@@ -1094,7 +1094,7 @@ def pipeline(
     # Both strands scaled.
     scaled_bg = job.scale_bedgraph(
         bg,
-        log_final_out,
+        mdup_bam,
         expected_unique_pairs,
     )
     job.add_temp_file(scaled_bg)
@@ -1109,7 +1109,7 @@ def pipeline(
     # Plus strand scaled.
     plus_scaled_bg = job.scale_bedgraph(
         plus_bg,
-        log_final_out,
+        mdup_bam,
         expected_unique_pairs / 2,
     )
     job.add_temp_file(plus_scaled_bg)
@@ -1125,7 +1125,7 @@ def pipeline(
     # Minus strand scaled.
     minus_scaled_bg = job.scale_bedgraph(
         minus_bg,
-        log_final_out,
+        mdup_bam,
         expected_unique_pairs / 2,
     )
     job.add_temp_file(minus_scaled_bg)

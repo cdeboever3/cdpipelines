@@ -894,12 +894,10 @@ def pipeline(
     )
     job.add_output_file(bw)
 
-    # TODO: I need to update the scale_bedgraph function to actually count the
-    # number of reads in the bam file and scale to that. 
     # Make scaled bigwig file. 
     scaled_bg = job.scale_bedgraph(
         bg,
-        log_final_out,
+        rmdup_bam,
         expected_unique_pairs,
     )
     job.add_temp_file(scaled_bg)
@@ -926,12 +924,10 @@ def pipeline(
     )
     job.add_output_file(tlen_bw)
 
-    # TODO: I need to update the scale_bedgraph function to actually count the
-    # number of reads in the bam file and scale to that. 
     # Make scaled bigwig file for tlen filtered bam.
     tlen_scaled_bg = job.scale_bedgraph(
         tlen_bg,
-        log_final_out,
+        tlen_bam,
         expected_unique_pairs,
     )
     # tlen_scaled_bg will actually overwrite scaled_bg
@@ -1338,61 +1334,59 @@ def merge_samples(
     if not job.delete_sh:
         submit_commands.append(job.sge_submit_command())
 
-    # TODO: I need to update the scale_bedgraph function to actually count the
-    # number of reads in the bam file and scale to that. 
-    # ##### Job 2: Make bigwig files for merged bam file. #####
-    # job = ATACJobScript(
-    #     sample_name, 
-    #     job_suffix='bigwig',
-    #     outdir=os.path.join(outdir, 'alignment'), 
-    #     threads=1, 
-    #     memory=4,
-    #     linkdir=linkdir,
-    #     webpath=webpath,
-    #     tempdir=tempdir, 
-    #     queue=queue, 
-    #     conda_env=conda_env,
-    #     modules=modules,
-    #     wait_for=[merge_jobname],
-    # )
-    # bigwig_jobname = job.jobname
-    #     
-    # # Input files.
-    # merged_bam = job.add_input_file(outdir_merged_bam)
+    ##### Job 2: Make bigwig files for merged bam file. #####
+    job = ATACJobScript(
+        sample_name, 
+        job_suffix='bigwig',
+        outdir=os.path.join(outdir, 'alignment'), 
+        threads=1, 
+        memory=4,
+        linkdir=linkdir,
+        webpath=webpath,
+        tempdir=tempdir, 
+        queue=queue, 
+        conda_env=conda_env,
+        modules=modules,
+        wait_for=[merge_jobname],
+    )
+    bigwig_jobname = job.jobname
+        
+    # Input files.
+    merged_bam = job.add_input_file(outdir_merged_bam)
 
-    # # Make bigwig for merged bam.
-    # merged_bg = job.bedgraph_from_bam(
-    #     merged_bam, 
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.add_temp_file(merged_bg)
-    # merged_bw = job.bigwig_from_bedgraph(
-    #     merged_bg,
-    #     tlen_max=140,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.add_output_file(merged_bw)
+    # Make bigwig for merged bam.
+    merged_bg = job.bedgraph_from_bam(
+        merged_bam, 
+        bedtools_path=bedtools_path,
+    )
+    job.add_temp_file(merged_bg)
+    merged_bw = job.bigwig_from_bedgraph(
+        merged_bg,
+        tlen_max=140,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(merged_bw)
 
-    # # Make scaled bigwig file for merged filtered bam.
-    # merged_scaled_bg = job.scale_bedgraph(
-    #     merged_bg,
-    #     log_final_out,
-    #     expected_unique_pairs,
-    # )
-    # job.add_temp_file(merged_scaled_bg)
-    # merged_scaled_bw = job.bigwig_from_bedgraph(
-    #     merged_scaled_bg,
-    #     scale=True,
-    #     tlen_max=140,
-    #     bedGraphToBigWig_path=bedGraphToBigWig_path,
-    #     bedtools_path=bedtools_path,
-    # )
-    # job.add_output_file(merged_scaled_bw)
+    # Make scaled bigwig file for merged filtered bam.
+    merged_scaled_bg = job.scale_bedgraph(
+        merged_bg,
+        merged_bam,
+        expected_unique_pairs,
+    )
+    job.add_temp_file(merged_scaled_bg)
+    merged_scaled_bw = job.bigwig_from_bedgraph(
+        merged_scaled_bg,
+        scale=True,
+        tlen_max=140,
+        bedGraphToBigWig_path=bedGraphToBigWig_path,
+        bedtools_path=bedtools_path,
+    )
+    job.add_output_file(merged_scaled_bw)
 
-    # job.write_end()
-    # if not job.delete_sh:
-    #     submit_commands.append(job.sge_submit_command())
+    job.write_end()
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
     
     ##### Job 3: Peak calling. #####
     job = ATACJobScript(

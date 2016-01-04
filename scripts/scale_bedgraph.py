@@ -62,6 +62,14 @@ def unique_mapped_num(fn):
         lines = f.readlines()
     return int(lines[8].strip().split('\t')[1])
 
+def num_reads(fn, sambamba_path='sambamba'):
+    """Get the number of read pairs in a bam file. The total number of reads is
+    divided by 2 to return read pairs."""
+    import subprocess
+    c = '{} view -c {}'.format(sambamba_path)
+    count = subprocess.checkout_output(c, shell=True)
+    return count / 2
+
 def main():
     parser = argparse.ArgumentParser(description=(
         'This script takes a bedgraph file and scales the coverage by '
@@ -69,9 +77,8 @@ def main():
         'to be able to roughly compare different samples with different '
         'library depths.'))
     parser.add_argument('bg', help='Input bedgraph file.')
+    parser.add_argument('bam', help='Bam file used to create bedgraph file.')
     parser.add_argument('out_bg', help='Output bedgraph file.')
-    parser.add_argument('star_log', help=(
-        'Log.final.out file from STAR.'))
     parser.add_argument('expected_num', type=float, help=(
         'Number of expected mapped READ PAIRS. This only needs to be a rough '
         'estimate. You should keep this number constant for all samples across '
@@ -89,16 +96,20 @@ def main():
         'expected_num=20M and a sample has only 10M input read PAIRS, it will '
         'be normalized so that it looks like it had 20M input read pairs (i.e. '
         'all coverages will be multiplied by 2).'))
+    parser.add_argument('-s', metavar='sambamba_path',
+                        default='sambamba',
+                        help=('Path to sambamba.'))
 
     import os
 
     args = parser.parse_args()
     bg = os.path.realpath(args.bg)
+    bam = os.path.realpath(args.bam)
     out_bg = os.path.realpath(args.out_bg)
-    log_final_out = os.path.realpath(args.star_log)
     expected_num = args.expected_num
+    sambamba_path = args.s
     
-    actual_num = unique_mapped_num(log_final_out)
+    actual_num = unique_mapped_num(bam, sambamba_path)
     scale_bedgraph(bg, out_bg, actual_num, expected_num)
 
 if __name__ == '__main__':
