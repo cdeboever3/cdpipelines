@@ -348,22 +348,27 @@ class RNAJobScript(JobScript):
 
         if strand == '+':
             lines = (
-                '{} view -f bam -F "(first_of_pair and mate_is_reverse_strand) '
-                'or (second_of_pair and reverse_strand)" \\\n\t{} \\\n\t| {} '
+                '{} view -f bam -F "((first_of_pair and mate_is_reverse_strand) '
+                'or (second_of_pair and reverse_strand)) and mapping_quality >= '
+                '255" \\\n\t{} \\\n\t| {} '
                 'genomecov -ibam stdin -g {} \\\n\t-split -bg -trackline '
                 '-trackopts \'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         elif strand == '-':
             lines = (
-                '{} view -f bam -F "(second_of_pair and mate_is_reverse_strand) '
-                'or (first_of_pair and reverse_strand)" \\\n\t{} \\\n\t| {} genomecov '
+                '{} view -f bam -F "((second_of_pair and mate_is_reverse_strand) '
+                'or (first_of_pair and reverse_strand)) and mapping_quality >= '
+                '255" \\\n\t{} \\\n\t| {} genomecov '
                 '-ibam stdin -g {} \\\n\t-split -bg -trackline -trackopts '
                 '\'name="{}"\' '.format(
                     sambamba_path, bam, bedtools_path, genome_file, fn_root))
         else:
-            lines = ('{} genomecov -ibam {} \\\n\t-g {} -split -bg \\\n\t'
+            lines = ('{} view -f bam -F "not (unmapped or mate_is_unmapped) and '
+                     'mapping_quality >= 255" \\\n\t{} \\\n\t| '
+                     '{} genomecov -ibam stdin \\\n\t-g {} -split -bg \\\n\t'
                      '-trackline -trackopts \'name="{}"\' '.format(
-                         bedtools_path, bam, genome_file, fn_root))
+                         sambamba_path, bam, bedtools_path, genome_file,
+                         self.sample_name))
 
         if scale:
             lines += ' -scale {}'.format(scale)
@@ -1106,7 +1111,8 @@ def pipeline(
     )
     job.add_output_file(scaled_bw)
 
-    # Plus strand scaled.
+    # Plus strand scaled. Note that I divide by two because we expected about
+    # half of the reads to map to each strand.
     plus_scaled_bg = job.scale_bedgraph(
         plus_bg,
         mdup_bam,
@@ -1122,7 +1128,8 @@ def pipeline(
     )
     plus_scaled_bw = job.add_output_file(plus_scaled_bw)
 
-    # Minus strand scaled.
+    # Minus strand scaled. Note that I divide by two because we expected about
+    # half of the reads to map to each strand.
     minus_scaled_bg = job.scale_bedgraph(
         minus_bg,
         mdup_bam,

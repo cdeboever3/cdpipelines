@@ -55,19 +55,13 @@ def scale_bedgraph(bg, out_bg, actual_num, expected_num):
          '{{print $0}}\' > {}'.format(bg, factor, out_bg))
     subprocess.check_call(c, shell=True)
 
-def unique_mapped_num(fn):
-    """Get the number of uniquely mapped reads from the STAR Log.final.out
-    file."""
-    with open(fn) as f:
-        lines = f.readlines()
-    return int(lines[8].strip().split('\t')[1])
-
 def num_reads(fn, sambamba_path='sambamba'):
     """Get the number of read pairs in a bam file. The total number of reads is
     divided by 2 to return read pairs."""
     import subprocess
-    c = '{} view -c {}'.format(sambamba_path)
-    count = subprocess.checkout_output(c, shell=True)
+    c = ('{} view -c -F "not (unmapped or mate_is_unmapped) and '
+         'mapping_quality >= 255" {}'.format(sambamba_path, fn))
+    count = subprocess.check_output(c, shell=True)
     return count / 2
 
 def main():
@@ -109,7 +103,7 @@ def main():
     expected_num = args.expected_num
     sambamba_path = args.s
     
-    actual_num = unique_mapped_num(bam, sambamba_path)
+    actual_num = num_reads(bam, sambamba_path)
     scale_bedgraph(bg, out_bg, actual_num, expected_num)
 
 if __name__ == '__main__':

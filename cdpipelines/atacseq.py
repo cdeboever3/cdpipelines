@@ -885,6 +885,7 @@ def pipeline(
     bg = job.bedgraph_from_bam(
         rmdup_bam, 
         bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
     )
     job.add_temp_file(bg)
     bw = job.bigwig_from_bedgraph(
@@ -913,6 +914,7 @@ def pipeline(
     tlen_bg = job.bedgraph_from_bam(
         tlen_bam, 
         bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
     )
     # tlen_bg will actually overwrite bg.
     # job.add_temp_file(tlen_bg)
@@ -1338,7 +1340,7 @@ def merge_samples(
     job = ATACJobScript(
         sample_name, 
         job_suffix='bigwig',
-        outdir=os.path.join(outdir, 'alignment'), 
+        outdir=os.path.join(outdir, 'bigwig'), 
         threads=1, 
         memory=4,
         linkdir=linkdir,
@@ -1358,6 +1360,7 @@ def merge_samples(
     merged_bg = job.bedgraph_from_bam(
         merged_bam, 
         bedtools_path=bedtools_path,
+        sambamba_path=sambamba_path,
     )
     job.add_temp_file(merged_bg)
     merged_bw = job.bigwig_from_bedgraph(

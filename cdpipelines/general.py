@@ -742,9 +742,12 @@ class JobScript:
         self,
         bam, 
         bedtools_path='bedtools',
+        sambamba_path='sambamba',
     ):
         """
-        Make lines that create a coverage bedgraph file.
+        Create a coverage bedgraph file from a bam file. Only uniquely mapped
+        read pairs are used (quality score greater than 255 which is uniquely
+        mapped for STAR).
     
         Parameters
         ----------
@@ -770,10 +773,13 @@ class JobScript:
                 os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
                 'human.hg19.genome')
 
-        lines = ('{} genomecov -ibam {} \\\n\t-g {} -split -bg \\\n\t'
+        lines = ('{} view -f bam -F "not (unmapped or mate_is_unmapped) and '
+                 'mapping_quality >= 255" \\\n\t{} \\\n\t| '
+                 '{} genomecov -ibam stdin \\\n\t-g {} -split -bg \\\n\t'
                  '-trackline -trackopts \'name="{}"\' '.format(
-                     bedtools_path, bam, genome_file, self.sample_name))
-        lines += ' \\\n\t> {}\n\n'.format( bedgraph)
+                     sambamba_path, bam, bedtools_path, genome_file,
+                     self.sample_name))
+        lines += ' \\\n\t> {}\n\n'.format(bedgraph)
         with open(self.filename, "a") as f:
             f.write(lines)
         return bedgraph
