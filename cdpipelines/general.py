@@ -920,9 +920,6 @@ class JobScript:
         in_bam : str
             Path to file input bam file.
     
-        index : str
-            Path to index file for input bam file.
-    
         bg : boolean
             Whether to run the process in the background.
     
@@ -938,6 +935,35 @@ class JobScript:
         with open(self.filename, "a") as f:
             f.write(lines)
         return index
+    
+    def sambamba_merge(
+        self,
+        bams, 
+        sambamba_path='sambamba',
+    ):
+        """
+        Merge bam files using sambamba.
+    
+        Parameters
+        ----------
+        bams : list
+            List of paths to bam files to merge.
+    
+        bg : boolean
+            Whether to run the process in the background.
+    
+        Returns
+        -------
+        out : str
+            Path to output merged bam file.
+    
+        """
+        out = os.path.join(self.tempdir, '{}.bam'.format(self.sample_name))
+        lines = '{} merge -t {} \\\n\t{} \\\n\t{}\n\n'.format(
+            sambamba_path, self.threads, out, ' \\\n\t'.join(bams))
+        with open(self.filename, "a") as f:
+            f.write(lines)
+        return out
     
     def picard_index(
         self,
