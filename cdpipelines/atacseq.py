@@ -1448,6 +1448,376 @@ def merge_samples(
 
     return submit_fn
 
+def peak_analysis(
+    bam, 
+    bed,
+    outdir, 
+    sample_name,
+    star_index,
+    rgpl='ILLUMINA',
+    rgpu='',
+    star_genome_load='LoadAndKeep',
+    linkdir=None,
+    webpath_file=None,
+    conda_env=None,
+    modules=None,
+    queue='frazer',
+    tempdir=None,
+    gatk_fasta=None,
+    vcfs=None,
+    vcf_sample_name=None,
+    vcf_chrom_conv=None,
+    is_phased=False,
+    mappability=None,
+    find_intersecting_snps_path=None,
+    filter_remapped_reads_path=None,
+    star_path='STAR',
+    picard_path='$picard',
+    bedtools_path='bedtools',
+    bedGraphToBigWig_path='bedGraphToBigWig',
+    sambamba_path='sambamba',
+    samtools_path='samtools',
+    featureCounts_path='featureCounts',
+    bcftools_path='bcftools',
+    gatk_path='$GATK',
+    bigWigAverageOverBed_path='bigWigAverageOverBed',
+):
+    """
+    Make SGE/shell scripts for counting reads in peaks and calculating allelic
+    bias given a bam file and a bed file of regions.
+
+    Parameters
+    ----------
+    bam : str
+        Path to input bam file.
+
+    bed : str
+        Path to input bed file.
+
+    sample_name : list
+        List of sample names in the same order as the bams input list.
+
+    outdir : str
+        Directory to store shell scripts, stdout/stderr logs, and output files
+        and directories.
+
+    sample_name : str
+        Sample name for merged data; used for naming files etc.
+
+    linkdir : str
+        Path to directory where softlinks should be made. Some pipeline parts
+        may make softlinks output files here for display on the web.
+
+    webpath_file : str
+        File whose first line is the URL that points to linkdir. For example,
+        if we make a link to the file s1_coord_sorted.bam in linkdir and
+        webpath_file has http://site.com/files on its first line, then
+        http://site.com/files/s1_coord_sorted.bam should be available on the
+        web. If the web directory is password protected (it probably should be),
+        then the URL should look like http://username:password@site.com/files.
+        This is a file so you don't have to make the username/password combo
+        public (although I'd recommend not using a sensitive password). You can
+        just put the webpath_file in a directory that isn't tracked by git, 
+        figshare, etc.
+
+    conda_env : str
+        Conda environment to load at the beginning of the script.
+
+    modules : str
+        Comma-separated list of modules to load at the beginning of the script.
+
+    queue : str
+        Name of queue to submit jobs to. The default value of "frazer" will
+        submit different jobs to the different queues on the Frazer lab cluster
+        in an optimal way.
+
+    tempdir : str
+        Directory to store temporary files.
+
+    picard_path : str
+        Path to Picard tools.
+
+    bedtools_path : str
+        Path to bedtools.
+
+    bedGraphToBigWig_path : str
+        Path bedGraphToBigWig executable.
+
+    Returns
+    -------
+    fn : str
+        Path to submission shell script.
+
+    """
+    with open(webpath_file) as wpf:
+        webpath = wpf.readline().strip()
+
+    # Bash commands to submit jobs. I'll collect these as I make the jobs and
+    # then write them to a file at the end.
+    submit_commands = []
+    
+    # Set default queue for Frazer lab settings. None will just go to the
+    # default queue. For jobs that need a specific queue, I'll set the queue
+    # below.
+    if queue == 'frazer':
+        default_queue = None
+    else:
+        default_queue = queue
+
+    ##### Job 1: Count reads in peaks. #####
+    job = ATACJobScript(
+        sample_name, 
+        job_suffix = 'peak_counts',
+        outdir=os.path.join(outdir, 'counts'),
+        threads=1, 
+        memory=4, 
+        linkdir=linkdir,
+        webpath=webpath,
+        tempdir=tempdir, 
+        queue=default_queue,
+        conda_env=conda_env, 
+        modules=modules,
+        wait_for=None,
+    )
+    peak_counts_jobname = job.jobname
+       
+    # Run featureCounts.
+    counts, counts_summary = job.featureCounts_count(
+        bed,
+        bam,
+        filetype='bed',
+        featureCounts_path=featureCounts_path,
+    )
+    job.add_output_file(counts)
+    job.add_output_file(counts_summary)
+
+    job.write_end()
+    if not job.delete_sh:
+        submit_commands.append(job.sge_submit_command())
+    
+    # ##### Job 2: WASP first step. #####
+    # job = ATACJobScript(
+    #     sample_name, 
+    #     job_suffix = 'wasp_allele_swap',
+    #     outdir=os.path.join(outdir, 'wasp'),
+    #     threads=1, 
+    #     memory=4, 
+    #     linkdir=linkdir,
+    #     webpath=webpath,
+    #     tempdir=tempdir, 
+    #     queue=default_queue,
+    #     conda_env=conda_env, 
+    #     modules=modules,
+    #     wait_for=None,
+    # )
+    # wasp_allele_swap_jobname = job.jobname
+    #    
+    # # Input files.
+    # bam = job.add_input_file(bam)
+    # # The VCFs might be large so we probably don't want to copy it ever.
+    # input_vcfs = []
+    # for vcf in vcfs:
+    #     input_vcfs.append(job.add_input_file(vcf, copy=False))
+    # # The bed file is small so we don't need to copy it ever.
+    # bed = job.add_input_file(bed, copy=False)
+
+    # # Run WASP allele swap.
+    # if not vcf_sample_name:
+    #     vcf_sample_name = sample_name
+    # (snp_directory, hets_vcf, keep_bam, wasp_r1_fastq, wasp_r2_fastq,
+    #  to_remap_bam, to_remap_num) = job.wasp_allele_swap(
+    #      bam, 
+    #      find_intersecting_snps_path, 
+    #      input_vcfs, 
+    #      bed,
+    #      gatk_fai=gatk_fasta + '.fai',
+    #      vcf_sample_name=vcf_sample_name, 
+    #      vcf_chrom_conv=vcf_chrom_conv,
+    #      samtools_path=samtools_path,
+    #      bcftools_path=bcftools_path,
+    # )
+    # # WASP outputs a file (keep_bam) that has reads that don't overlap
+    # # variants. I'm going to discard that file. I'll discard the WASP SNP
+    # # directory as well since I have the hets in a VCF file.
+    # job.add_temp_file(keep_bam)
+    # snp_directory = job.add_temp_file(snp_directory)
+    # hets_vcf = job.add_output_file(hets_vcf)
+    # wasp_r1_fastq = job.add_output_file(wasp_r1_fastq)
+    # wasp_r2_fastq = job.add_output_file(wasp_r2_fastq)
+    # to_remap_bam = job.add_output_file(to_remap_bam)
+    # to_remap_num = job.add_output_file(to_remap_num)
+
+    # job.write_end()
+    # if not job.delete_sh:
+    #     submit_commands.append(job.sge_submit_command())
+    # 
+    # ##### Job 3: WASP second step. #####
+    # job = ATACJobScript(
+    #     sample_name, 
+    #     job_suffix='wasp_remap',
+    #     outdir=os.path.join(outdir, 'wasp'),
+    #     threads=8, 
+    #     memory=32, 
+    #     linkdir=linkdir,
+    #     webpath=webpath,
+    #     tempdir=tempdir,
+    #     queue=default_queue, 
+    #     conda_env=conda_env, 
+    #     modules=modules,
+    #     wait_for=[wasp_allele_swap_jobname],
+    # )
+    # wasp_remap_jobname = job.jobname
+    # 
+    # # Input files.
+    # wasp_r1_fastq = job.add_input_file(wasp_r1_fastq, delete_original=True)
+    # wasp_r2_fastq = job.add_input_file(wasp_r2_fastq, delete_original=True)
+
+    # # Realign allele-swapped fastqs.
+    # remapped_bam, log_out, log_final_out, log_progress_out, sj_out = \
+    #         job.star_align(wasp_r1_fastq, wasp_r2_fastq, rgpl, rgpu,
+    #                        star_index, job.threads,
+    #                        genome_load=star_genome_load)
+    # job.add_output_file(remapped_bam)
+    # job.add_output_file(log_out)
+    # job.add_output_file(log_final_out)
+    # job.add_output_file(log_progress_out)
+    # job.add_temp_file(sj_out)
+
+    # job.write_end()
+    # if not job.delete_sh:
+    #     submit_commands.append(job.sge_submit_command())
+
+    # ##### Job 4: WASP third step. #####
+    # job = ATACJobScript(
+    #     sample_name, 
+    #     job_suffix = 'wasp_alignment_compare',
+    #     outdir=os.path.join(outdir, 'wasp'),
+    #     threads=1, 
+    #     memory=5, 
+    #     linkdir=linkdir,
+    #     webpath=webpath,
+    #     tempdir=tempdir, 
+    #     queue=default_queue,
+    #     conda_env=conda_env, 
+    #     modules=modules,
+    #     wait_for=[wasp_remap_jobname],
+    # )
+    # wasp_alignment_compare_jobname = job.jobname
+
+    # # Input files.
+    # to_remap_bam = job.add_input_file(to_remap_bam, delete_original=True)
+    # to_remap_num = job.add_input_file(to_remap_num, delete_original=True)
+    # remapped_bam = job.add_input_file(remapped_bam, delete_original=True)
+
+    # # Compare alignments.
+    # temp_filtered_bam = job.wasp_alignment_compare(
+    #     to_remap_bam, 
+    #     to_remap_num,
+    #     remapped_bam, 
+    #     filter_remapped_reads_path,
+    # )
+    # job.add_temp_file(temp_filtered_bam)
+    #     
+    # # Coordinate sort and index filtered bam file.
+    # wasp_filtered_bam, wasp_bam_index = job.picard_coord_sort(
+    #     temp_filtered_bam, 
+    #     index=True,
+    #     picard_path=picard_path,
+    # )
+    # # I'll keep this bam file and its index as a record of which reads were
+    # # used to calculate ASE. It might be useful for visualization. The bam
+    # # file is pretty small anyway.
+    # job.add_output_file(wasp_filtered_bam)
+    # job.add_output_file(wasp_bam_index)
+
+    # # Reorder bam file so it will work with GATK.
+    # reordered_bam = job.picard_reorder(
+    #     wasp_filtered_bam, 
+    #     fasta=gatk_fasta,
+    #     picard_path=picard_path,
+    # )
+    # job.add_temp_file(reordered_bam)
+
+    # # Index reordered bam.
+    # reordered_index = job.picard_index(
+    #     reordered_bam, 
+    #     picard_path=picard_path,
+    #     bg=False,
+    # )
+    # job.add_temp_file(reordered_index)
+
+    # # Get allele counts.
+    # allele_counts = job.count_allele_coverage(
+    #     reordered_bam, 
+    #     hets_vcf,
+    #     gatk_fasta, 
+    #     gatk_path=gatk_path,
+    # )
+    # job.add_output_file(allele_counts)
+
+    # job.write_end()
+    # if not job.delete_sh:
+    #     submit_commands.append(job.sge_submit_command())
+    # 
+    # ##### Job 5: Run MBASED for ASE. #####
+    # if queue == 'frazer':
+    #     q = 'opt'
+    # else:
+    #     q = queue
+    # job = ATACJobScript(
+    #     sample_name,
+    #     job_suffix='mbased',
+    #     outdir=os.path.join(outdir, 'mbased'),
+    #     threads=16, 
+    #     memory=32, 
+    #     linkdir=linkdir,
+    #     webpath=webpath,
+    #     tempdir=tempdir, 
+    #     queue=q,
+    #     conda_env=conda_env, 
+    #     modules=modules,
+    #     wait_for=[wasp_alignment_compare_jobname],
+    # )
+    # mbased_jobname = job.jobname
+    # 
+    # # Input files.
+    # allele_counts = job.add_input_file(allele_counts)
+
+    # mbased_infile, locus_outfile, snv_outfile = job.mbased(
+    #     allele_counts, 
+    #     bed, 
+    #     is_phased=is_phased, 
+    #     num_sim=1000000, 
+    #     vcfs=input_vcfs,
+    #     vcf_sample_name=vcf_sample_name, 
+    #     vcf_chrom_conv=vcf_chrom_conv,
+    #     mappability=mappability,
+    #     bigWigAverageOverBed_path=bigWigAverageOverBed_path,
+    # )
+    # job.add_output_file(mbased_infile)
+    # job.add_output_file(locus_outfile)
+    # job.add_output_file(snv_outfile)
+
+    # job.write_end()
+    # if not job.delete_sh:
+    #     submit_commands.append(job.sge_submit_command())
+
+    ##### Submission script #####
+    # Now we'll make a submission script that submits the jobs with the
+    # appropriate dependencies.
+    import datetime as dt
+    now = str(dt.datetime.now())
+    now = now.replace('-', '_').replace(' ', '_').replace(':', '_').replace('.', '_')
+    submit_fn = os.path.join(outdir, 'sh', '{}_submit_{}.sh'.format(
+        sample_name, now))
+    if len(submit_commands) > 0:
+        with open(submit_fn, 'w') as f:
+            f.write('#!/bin/bash\n\n')
+            f.write('\n'.join(submit_commands))
+        return submit_fn
+    else:
+        return None
+
 # def nucleoatac(
 #     bam, 
 #     bed, 
