@@ -944,7 +944,7 @@ def pipeline(
         job_suffix='picard_metrics',
         outdir=os.path.join(outdir, 'qc'),
         threads=1, 
-        memory=5, 
+        memory=7, 
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 
