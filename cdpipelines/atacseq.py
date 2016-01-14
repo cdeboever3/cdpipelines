@@ -261,6 +261,8 @@ class ATACJobScript(JobScript):
                 os.path.split(os.path.split(bedtools_path)[0])[0], 'genomes',
                 'human.hg19.genome')
         root = os.path.splitext(os.path.split(bedgraph)[1])[0]
+        if tlen_max:
+            root += '_{}'.format(tlen_max)
         bigwig = os.path.join(dy, '{}.bw'.format(root))
         lines = '{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
             bedGraphToBigWig_path, bedgraph, genome_file, bigwig)
@@ -270,8 +272,8 @@ class ATACJobScript(JobScript):
             name = '{}_atac'.format(self.sample_name)
             desc = 'ATACseq coverage for {}.'.format(self.sample_name)
             if tlen_max:
-                name += '_140'
-                desc += ' Fragments <= 140.'
+                name += '_{}'.format(tlen_max)
+                desc += ' Fragments <= {}.'.format(tlen_max)
             if scale:
                 name += '_scaled'
                 desc = desc.replace('ATACseq', 'Scaled ATACseq')
