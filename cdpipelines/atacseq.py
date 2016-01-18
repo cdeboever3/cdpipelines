@@ -428,6 +428,7 @@ def pipeline(
     sample_name, 
     star_index,
     encode_blacklist,
+    sra_files=None,
     promoter_bed=None,
     merged_promoter_bed=None,
     gene_promoter_bed=None,
@@ -461,6 +462,7 @@ def pipeline(
     bcftools_path='bcftools',
     bammarkduplicates_path='bammarkduplicates',
     featureCounts_path='featureCounts',
+    fastq_dump_path='fastq-dump',
 ):
     """
     Make a SGE/shell scripts for running the entire ATAC-seq pipeline. The
@@ -488,6 +490,11 @@ def pipeline(
 
     encode_blacklist : str
         Path to ENCODE blacklist bed file.
+
+    sra_files : list
+        List of SRA file paths or URLs. If r1_fastqs and r2_fastqs are None, the
+        pipeline will run for these SRA files (concatenating all files into one
+        sample).
 
     promoter_bed : str
         Bed file with promoters for each transcript. If the bed file has names
@@ -614,6 +621,15 @@ def pipeline(
         modules=modules,
     )
     alignment_jobname = job.jobname
+    
+    # If needed, convert SRA files to fastq files. 
+    # TODO: Eventually, I can also take bam files as input and convert them to
+    # fastq if needed.
+    if r1_fastqs is None and r1_fastqs is None and sra_files:
+        r1,r2 = job.convert_sra_to_fastq(sra_files,
+                                         fastq_dump_path=fastq_dump_path)
+        r1_fastqs = [r1]
+        r2_fastqs = [r2]
     
     # Input files.
     for fq in r1_fastqs + r2_fastqs:
@@ -767,13 +783,23 @@ def pipeline(
 
     # Query name sort.
     query_sorted_bam = job.sambamba_sort(
+        rmdup_bam, 
+        tempdir=job.tempdir,
+        queryname=True,
+        root=os.path.splitext(os.path.split(rmdup_bam)[1])[0],
+        sambamba_path=sambamba_path,
+    )
+    outdir_query_sorted_bam = job.add_output_file(query_sorted_bam)
+
+    # Query name sort tlen 140 bam.
+    tlen_140_query_sorted_bam = job.sambamba_sort(
         tlen_bam, 
         tempdir=job.tempdir,
         queryname=True,
         root=os.path.splitext(os.path.split(tlen_bam)[1])[0],
         sambamba_path=sambamba_path,
     )
-    outdir_query_sorted_bam = job.add_output_file(query_sorted_bam)
+    outdir_tlen_140_query_sorted_bam = job.add_output_file(tlen_140_query_sorted_bam)
 
     # Add softlink to bam file in outdir and write URL and trackline.
     link = job.add_softlink(outdir_tlen_bam)
@@ -1010,6 +1036,7 @@ def pipeline(
     
     # Input files.
     query_sorted_bam = job.add_input_file(outdir_query_sorted_bam)
+    tlen_140_query_sorted_bam = job.add_input_file(outdir_tlen_140_query_sorted_bam)
     narrow_peak = job.add_input_file(outdir_narrow_peak)
 
     # Run featureCounts.
@@ -1022,6 +1049,16 @@ def pipeline(
     )
     job.add_output_file(counts)
     job.add_output_file(counts_summary)
+
+    counts_tlen_140, counts_summary_tlen_140 = job.featureCounts_count(
+        narrow_peak,
+        tlen_140_query_sorted_bam,
+        sort=False,
+        filetype='bed',
+        featureCounts_path=featureCounts_path,
+    )
+    job.add_output_file(counts_tlen_140)
+    job.add_output_file(counts_summary_tlen_140)
 
     job.write_end()
     if not job.delete_sh:
@@ -1046,6 +1083,7 @@ def pipeline(
         
         # Input files.
         query_sorted_bam = job.add_input_file(outdir_query_sorted_bam)
+        tlen_140_query_sorted_bam = job.add_input_file(outdir_tlen_140_query_sorted_bam)
         
         if promoter_bed:
             # Run featureCounts for transcript promoters.
@@ -1055,10 +1093,21 @@ def pipeline(
                 sort=False,
                 filetype='bed',
                 featureCounts_path=featureCounts_path,
-                root='{}_tlen_leq_140_transcript_promoters'.format(job.sample_name),
+                root='{}_transcript_promoters'.format(job.sample_name),
             )
             job.add_output_file(promoter_counts)
             job.add_output_file(promoter_counts_summary)
+
+            promoter_counts_tlen_140, promoter_counts_summary_tlen_140 = job.featureCounts_count(
+                promoter_bed,
+                tlen_140_query_sorted_bam,
+                sort=False,
+                filetype='bed',
+                featureCounts_path=featureCounts_path,
+                root='{}_tlen_leq_140_transcript_promoters'.format(job.sample_name),
+            )
+            job.add_output_file(promoter_counts_tlen_140)
+            job.add_output_file(promoter_counts_summary_tlen_140)
 
         if merged_promoter_bed:
             # Run featureCounts for merged promoters.
@@ -1066,6 +1115,18 @@ def pipeline(
                     job.featureCounts_count(
                         merged_promoter_bed,
                         query_sorted_bam,
+                        sort=False,
+                        filetype='bed',
+                        featureCounts_path=featureCounts_path,
+                        root='{}_merged_promoters'.format(job.sample_name),
+                    )
+            job.add_output_file(merged_promoter_counts)
+            job.add_output_file(merged_promoter_counts_summary)
+
+            merged_promoter_counts_tlen_140, merged_promoter_counts_summary_tlen_140 = \
+                    job.featureCounts_count(
+                        merged_promoter_bed,
+                        tlen_140_query_sorted_bam,
                         sort=False,
                         filetype='bed',
                         featureCounts_path=featureCounts_path,
@@ -1083,10 +1144,22 @@ def pipeline(
                         sort=False,
                         filetype='bed',
                         featureCounts_path=featureCounts_path,
-                        root='{}_tlen_leq_140_gene_promoters'.format(job.sample_name),
+                        root='{}_gene_promoters'.format(job.sample_name),
                     )
             job.add_output_file(gene_promoter_counts)
             job.add_output_file(gene_promoter_counts_summary)
+
+            gene_promoter_counts_tlen_140, gene_promoter_counts_summary_tlen_140 = \
+                    job.featureCounts_count(
+                        gene_promoter_bed,
+                        tlen_140_query_sorted_bam,
+                        sort=False,
+                        filetype='bed',
+                        featureCounts_path=featureCounts_path,
+                        root='{}_tlen_leq_140_gene_promoters'.format(job.sample_name),
+                    )
+            job.add_output_file(gene_promoter_counts_tlen_140)
+            job.add_output_file(gene_promoter_counts_summary_tlen_140)
 
         job.write_end()
         if not job.delete_sh:
