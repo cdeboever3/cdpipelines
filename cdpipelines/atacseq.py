@@ -826,7 +826,7 @@ def pipeline(
         job_suffix='qc_metrics',
         outdir=os.path.join(outdir, 'qc'),
         threads=1, 
-        memory=5, 
+        memory=10, 
         linkdir=linkdir,
         webpath=webpath,
         tempdir=tempdir, 

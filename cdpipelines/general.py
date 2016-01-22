@@ -833,7 +833,7 @@ class JobScript:
         else:
             ss = 'NONE'
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectRnaSeqMetrics'.format(picard_path),
@@ -886,7 +886,7 @@ class JobScript:
     
         """
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectMultipleMetrics'.format(picard_path),
@@ -1003,7 +1003,7 @@ class JobScript:
         """
         index = os.path.join(self.tempdir, os.path.split(in_bam)[1] + '.bai')
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar'.format(self.memory - 1),
+            'java -Xmx{}g -jar'.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} BuildBamIndex'.format(picard_path),
@@ -1047,7 +1047,7 @@ class JobScript:
     
         """
         merge_in = ''.join(['\tI={} \\\n'.format(x) for x in bams])
-        lines = ['java -Xmx{}g -jar'.format(self.memory - 1),
+        lines = ['java -Xmx{}g -jar'.format(self.memory * 0.8),
                  '\t-XX:ParallelGCThreads=1',
                  '\t-Djava.io.tmpdir={}'.format(self.tempdir), 
                  '\t-jar {} MergeSamFiles'.format(picard_path),
@@ -1185,7 +1185,7 @@ class JobScript:
         dup_metrics = os.path.join(
             self.tempdir, '{}_duplicate_metrics.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} MarkDuplicates'.format(picard_path),
@@ -1243,7 +1243,7 @@ class JobScript:
         out = os.path.join(self.tempdir,
                            '{}_gc_bias_metrics_out.txt'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectGcBiasMetrics'.format(picard_path),
@@ -1296,7 +1296,7 @@ class JobScript:
         err = os.path.join(self.outdir,
                            '{}_index_stats.err'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} BamIndexStats'.format(picard_path),
@@ -1348,7 +1348,7 @@ class JobScript:
         hist = os.path.join(self.tempdir,
                             '{}_insert_size.pdf'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} CollectInsertSizeMetrics'.format(picard_path),
@@ -1394,7 +1394,7 @@ class JobScript:
         out_bam = os.path.join(self.tempdir,
                                '{}_qsorted.bam'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} SortSam'.format(picard_path),
@@ -1499,7 +1499,7 @@ class JobScript:
         if index:
             out_index = os.path.join(out_bam + '.bai')
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} SortSam'.format(picard_path),
@@ -1547,7 +1547,7 @@ class JobScript:
         out_bam = os.path.join(self.tempdir,
                                '{}_reordered.bam'.format(self.sample_name))
         lines = (' \\\n\t'.join([
-            'java -Xmx{}g -jar '.format(self.memory - 1),
+            'java -Xmx{}g -jar '.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {} ReorderSam'.format(picard_path),
@@ -1995,7 +1995,7 @@ class JobScript:
         counts = os.path.join(
             self.tempdir, '{}_allele_counts.tsv'.format(self.sample_name))
         lines = ' \\\n\t'.join([
-            'java -Xmx{}g -jar'.format(self.memory - 2),
+            'java -Xmx{}g -jar'.format(self.memory * 0.8),
             '-XX:ParallelGCThreads=1',
             '-Djava.io.tmpdir={}'.format(self.tempdir), 
             '-jar {}'.format(gatk_path),
