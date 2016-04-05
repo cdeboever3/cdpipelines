@@ -263,10 +263,14 @@ def _assign_features(counts, bed):
     bt = bt.sort()
     res = bt.intersect(features, wo=True, sorted=True)
     
+    has_name = len(features[0].fields) > 3
     snv_to_feature = dict()
     for r in res:
         snv = r.fields[3]
-        feature = r.fields[-4]
+        if has_name:
+            feature = r.fields[7]
+        else:
+            feature = r.fields[4] + ':' + r.fields[5] + '-' + r.fields[6]
         snv_to_feature[snv] = snv_to_feature.get(r, []) + [feature]
         
     se = pd.Series(snv_to_feature)
