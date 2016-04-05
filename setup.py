@@ -8,7 +8,7 @@ except(IOError, ImportError):
     long_description = open('README.md').read()
 
 # I need to add a download_url before pushing to pypi:
-# download_url = 'https://github.com/cdeboever3/cdpybio/tarball/0.0.6',
+# 
 setup(
     name = 'cdpipelines',
     packages=['cdpipelines'],
@@ -19,6 +19,7 @@ setup(
     license = 'MIT',
     keywords = ['bioinformatics'],
     url = 'https://github.com/cdeboever3/cdpipelines',
+    download_url = 'https://github.com/cdeboever3/cdpipelines/tarball/0.0.1',
     long_description=long_description,
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
