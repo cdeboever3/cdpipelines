@@ -7,11 +7,18 @@ try:
 except(IOError, ImportError):
     long_description = open('README.md').read()
 
-# I need to add a download_url before pushing to pypi:
-# download_url = 'https://github.com/cdeboever3/cdpybio/tarball/0.0.6',
+ep = {
+    'console_scripts': ['convert_bed_to_saf = cdpipelines.convert_bed_to_saf:main'],
+    'console_scripts': ['count_alleles = cdpipelines.count_alleles:main'],
+    'console_scripts': ['make_mbased_input = cdpipelines.make_mbased_input:main'],
+    'console_scripts': ['make_wasp_input = cdpipelines.make_wasp_input:main'],
+    'console_scripts': ['scale_bedgraph = cdpipelines.scale_bedgraph:main'],
+}
+
 setup(
     name = 'cdpipelines',
     packages=['cdpipelines'],
+    entry_points=ep,
     version = '0.0.1',
     author = 'Christopher DeBoever',
     author_email = 'cdeboever3@gmail.com',
@@ -19,6 +26,7 @@ setup(
     license = 'MIT',
     keywords = ['bioinformatics'],
     url = 'https://github.com/cdeboever3/cdpipelines',
+    download_url = 'https://github.com/cdeboever3/cdpipelines/tarball/0.0.1',
     long_description=long_description,
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
