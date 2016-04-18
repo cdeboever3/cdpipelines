@@ -620,12 +620,10 @@ class JobScript:
             Path to output scaled bedgraph file.
         
         """
-        from __init__ import _scripts
-        script = os.path.join(_scripts, 'scale_bedgraph.py')
         root = os.path.splitext(os.path.split(bg)[1])[0]
         out_bg = os.path.join(self.tempdir, '{}_scaled.bg'.format(root))
-        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
-            script, bg, bam, out_bg, expected_num)
+        lines = 'scale_bedgraph \\\n\t{} \\\n\t{} \\\n\t{} \\\n\t{}\n\n'.format(
+            bg, bam, out_bg, expected_num)
         with open(self.filename, "a") as f:
             f.write(lines)
         return out_bg
@@ -731,9 +729,7 @@ class JobScript:
         """
         saf = os.path.join(self.tempdir,
                            os.path.splitext(os.path.split(bed)[1])[0] + '.saf')
-        from __init__ import _scripts
-        input_script = os.path.join(_scripts, 'convert_bed_to_saf.py')
-        lines = 'python {} \\\n\t{} \\\n\t{}\n\n'.format(input_script, bed, saf)
+        lines = 'convert_bed_to_saf \\\n\t{} \\\n\t{}\n\n'.format(bed, saf)
         with open(self.filename, "a") as f:
             f.write(lines)
         return saf
@@ -1886,13 +1882,10 @@ class JobScript:
         vcf_out = os.path.join(self.tempdir,
                                '{}_hets.vcf'.format(vcf_sample_name))
 
-        from __init__ import _scripts
-        input_script = os.path.join(_scripts, 'make_wasp_input.py')
-
         # Make SNP directory needed for WASP.
         snp_directory = os.path.join(self.tempdir, 'snps')
         lines = ' \\\n\t'.join([
-            'python {}'.format(input_script),
+            'make_wasp_input',
             vcf_out,
             vcf_sample_name,
             snp_directory,
@@ -2077,7 +2070,6 @@ class JobScript:
             Path to file to store SNV-level results.
     
         """
-        from __init__ import _scripts
         mbased_infile = os.path.join(
             self.tempdir, '{}_mbased_input.tsv'.format(self.sample_name))
         locus_outfile = os.path.join(
@@ -2085,9 +2077,8 @@ class JobScript:
         snv_outfile = os.path.join(
             self.outdir, '{}_snv.tsv'.format(self.sample_name))
         is_phased = str(is_phased).upper()
-        script = os.path.join(_scripts, 'make_mbased_input.py')
-        lines = 'python {} \\\n\t{} \\\n\t{} \\\n\t{}'.format(
-            script, allele_counts, mbased_infile, feature_bed)
+        lines = 'make_mbased_input \\\n\t{} \\\n\t{} \\\n\t{}'.format(
+            allele_counts, mbased_infile, feature_bed)
         if vcfs:
             lines += ' \\\n\t-v {} \\\n\t-s {}'.format(' \\\n\t-v '.join(vcfs), 
                                                        vcf_sample_name)
@@ -2097,6 +2088,7 @@ class JobScript:
         if vcf_chrom_conv:
             lines += ' \\\n\t-c {}'.format(vcf_chrom_conv)
         lines += '\n\n'
+        from __init__ import _scripts
         script = os.path.join(_scripts, 'mbased.R')
         lines += 'Rscript '
         lines += ' \\\n\t'.join([script, mbased_infile, locus_outfile,

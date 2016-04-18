@@ -9,7 +9,6 @@ except(IOError, ImportError):
 
 ep = {
     'console_scripts': ['convert_bed_to_saf = cdpipelines.convert_bed_to_saf:main'],
-    'console_scripts': ['count_alleles = cdpipelines.count_alleles:main'],
     'console_scripts': ['make_mbased_input = cdpipelines.make_mbased_input:main'],
     'console_scripts': ['make_wasp_input = cdpipelines.make_wasp_input:main'],
     'console_scripts': ['scale_bedgraph = cdpipelines.scale_bedgraph:main'],
