@@ -1,2 +1,4 @@
 include README.md
 include LICENSE.txt
+include cdpipelines/scripts/mbased.R
+include cdpipelines/scripts/sortByRef.pl
