@@ -212,7 +212,7 @@ class JobScript:
                 ]
             with open(self.filename, "a") as f:
                 f.write('rm -r \\\n\t{}\n\n'.format(
-                    ' \\\n\t'.join(self._temp_files_to_delete)))
+                    ' \\\n\t'.join(list(set(self._temp_files_to_delete)))))
 
     def _delete_tempdir(self):
         if self.tempdir and (os.path.realpath(self.tempdir) !=
