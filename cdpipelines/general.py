@@ -473,9 +473,11 @@ class JobScript:
         r2 = os.path.join(self.tempdir,
                           '{}.R2.fastq.gz'.format(self.sample_name))
         temp_files += ['{}_1.fastq'.format(
-            os.path.join(self.tempdir, os.path.split(x)[1])) for x in sra_files]
+            os.path.join(self.tempdir, os.path.split(x)[1].split('.')[0])) for x
+            in sra_files]
         temp_files += ['{}_2.fastq'.format(
-            os.path.join(self.tempdir, os.path.split(x)[1])) for x in sra_files]
+            os.path.join(self.tempdir, os.path.split(x)[1].split('.')[0])) for x
+            in sra_files]
 
         # If any of the input are URLs, download the SRA file. We'll delete it
         # when we're done converting it.
