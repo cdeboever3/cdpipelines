@@ -184,7 +184,6 @@ class JobScript:
             f.write('#$ -S /bin/bash\n')
             f.write('#$ -o {}\n'.format(self.out))
             f.write('#$ -e {}\n\n'.format(self.err))
-            f.write('# Git repository version:\n# {}\n\n'.format(_git_info()))
             if self.modules:
                 for module in self.modules:
                     f.write('module load {}\n\n'.format(module))
