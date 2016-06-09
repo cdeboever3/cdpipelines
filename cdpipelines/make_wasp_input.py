@@ -132,8 +132,8 @@ def _wasp_snp_directory(
     if gatk_fai:
         vcf_sorted = os.path.join(tempdir,
                                   '{}_sorted.vcf'.format(vcf_sample_name))
-        s = os.path.split(__file__)[0]
-        sortByRef_path = os.path.join(s, 'sortByRef.pl')
+        from __init__ import _scripts
+        sortByRef_path = os.path.join(_scripts, 'sortByRef.pl')
         c = 'perl {} {} {} > {}'.format(sortByRef_path, vcf_out, gatk_fai,
                                            vcf_sorted)
         subprocess.check_call(c, shell=True)
