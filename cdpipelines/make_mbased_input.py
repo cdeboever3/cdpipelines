@@ -288,12 +288,18 @@ def make_mbased_input(
     chrom_conv=None,
     sample_name=None,
     mappability=None, 
+    min_cov=8,
+    min_ref_percent=0.02,
+    max_ref_percent=0.98,
+    min_near_dist=10,
     bigWigAverageOverBed_path='bigWigAverageOverBed',
 ):
     """
     Make MBASED input file based on ASEReadCounter output. Also output file like
     ASEReadCounter file but only containing filtered sites and binomial test
-    results for all sites that pass filtering.
+    results for all sites that pass filtering. The default parameters for this
+    script are based on the GTEx and MBASED papers (10.1038/nature12531,
+    10.1126/science.1262110, 10.1186/s13059-014-0405-3).
 
     Parameters
     ----------
@@ -315,6 +321,21 @@ def make_mbased_input(
         Path to bigwig file with mappability scores. A score of one should mean
         uniquely mapping.
 
+    min_cov : int
+        Sites with coverage less than this amount will be filtered out.   
+
+    min_ref_percent : float
+        Sites where the percentage of reads covering the reference allele is
+        less than this amount will be filtered out. 
+
+    max_ref_percent : float
+        Sites where the percentage of reads covering the reference allele is
+        greater than this amount will be filtered out.
+
+    min_near_dist : int
+        SNVs that are within min_near_dist of other variants will be removed to
+        avoid mapping biases.
+
     bigWigAverageOverBed_path : str
         Path to bigWigAverageOverBed. Required if mappability is provided.
 
@@ -333,11 +354,11 @@ def make_mbased_input(
 
     counts.index = counts.contig + ':' + counts.position.astype(str)
     # Only keep SNVs with 8 or more counts. GTEx filter.
-    counts = counts[counts.totalCount >= 8]
+    counts = counts[counts.totalCount >= min_cov]
     # Only keep SNVs where the percentage of reads that are reference is between
     # 2% and 98%. GTEx filter.
-    counts = counts[(0.02 <= counts.refCount / counts.totalCount) &
-                    (0.98 >= counts.refCount / counts.totalCount)]
+    counts = counts[(min_ref_percent <= counts.refCount / counts.totalCount) &
+                    (max_ref_percent >= counts.refCount / counts.totalCount)]
     # Remove SNVs that are too close to each other to avoid double-counting read
     # pairs. Necessary for using MBASED since it assumes counts at different
     # variants are independent.
@@ -351,7 +372,7 @@ def make_mbased_input(
         # Remove SNVs that are within 10 bp of other variants to avoid mapping
         # biases. MBASED filter.
         counts = _vcf_filter(counts, vcfs, sample_name, chrom_conv=chrom_conv,
-                             min_dist=10)
+                             min_dist=min_near_dist)
     # Assign SNVs to features.
     counts = _assign_features(counts, bed)
     # Add expected reference frequency for each ref->alt substitution.
