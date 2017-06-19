@@ -422,17 +422,21 @@ def main():
                         help=('Path to bigWigAverageOverBed. Only needed if -m '
                               'provided. Default: bigWigAverageOverBed.'))
     parser.add_argument('-mc', metavar='min_cov', default=8, 
+                        type=int,
                         help=('Sites with coverage less than this amount will '
                               'be filtered out. Default: 8.'))
     parser.add_argument('-mirp', metavar='min_ref_percent', default=0.02,
+                        type=float,
                         help=('Sites where the percentage of reads covering '
                               'the reference allele is less than this '
                               'amount will be filtered out. Default: 0.02.'))
     parser.add_argument('-marp', metavar='max_ref_percent', default=0.98,
+                        type=float,
                         help=('Sites where the percentage of reads covering '
                               'the reference allele is greater than this '
                               'amount will be filtered out. Default: 0.98.'))
     parser.add_argument('-mnd', metavar='min_near_dist', default=10,
+                        type=int,
                         help=('SNVs that are within min_near_dist of other '
                               'variants will be removed to avoid mapping '
                               'biases. Default: 10.'))
